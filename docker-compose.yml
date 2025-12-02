@@ -1,0 +1,51 @@
+services:
+  app:
+    image: php:8.2-fpm
+    container_name: starttoo_app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+    networks:
+      - starttoo_network
+    depends_on:
+      - mysql
+
+  nginx:
+    image: nginx:alpine
+    container_name: starttoo_nginx
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    volumes:
+      - ./:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - starttoo_network
+    depends_on:
+      - app
+
+  mysql:
+    image: mysql:8.0
+    container_name: starttoo_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: starttoo
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_PASSWORD: root
+      MYSQL_USER: starttoo
+      
+    ports:
+      - "3306:3306"
+    volumes:
+      - starttoo_mysql_data:/var/lib/mysql
+    networks:
+      - starttoo_network
+
+networks:
+  starttoo_network:
+    driver: bridge
+
+volumes:
+  starttoo_mysql_data:
+    driver: local
