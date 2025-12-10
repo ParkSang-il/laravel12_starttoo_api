@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -12,27 +13,28 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->string('email')->unique();
-            $table->timestamp('email_verified_at')->nullable();
-            $table->string('password')->nullable(); // 소셜 로그인 사용자는 비밀번호 없을 수 있음
-            $table->string('username')->nullable()->unique();
-            $table->string('profile_image')->nullable();
-            $table->text('bio')->nullable();
-            $table->boolean('is_verified')->default(false);
-            
-            // 소셜 로그인 필드
-            $table->string('provider')->nullable()->comment('소셜 로그인 제공자 (google, kakao, instagram)');
-            $table->string('provider_id')->nullable()->comment('소셜 로그인 제공자의 사용자 ID');
-            $table->string('avatar')->nullable()->comment('소셜 로그인 프로필 이미지 URL');
-            
+            $table->id()->comment('기본 키');
+            $table->tinyInteger('user_type')->unsigned()->comment('회원 유형 (1:일반 회원, 2:사업자)');
+            $table->string('phone', 20)->unique()->comment('휴대폰 번호 (인증 필수)');
+            $table->timestamp('phone_verified_at')->nullable()->comment('휴대폰 인증일시');
+            $table->string('username', 50)->unique()->comment('닉네임/사용자명 (필수)');
+            $table->string('profile_image', 255)->nullable()->comment('프로필 이미지 URL');
+
             $table->timestamps();
             $table->softDeletes();
-            
-            // provider와 provider_id의 복합 인덱스
-            $table->index(['provider', 'provider_id']);
+
+            // 개별 인덱스
+            $table->index('user_type', 'idx_users_user_type');
+            $table->index('phone', 'idx_users_phone');
+            $table->index('username', 'idx_users_username');
+            $table->index('created_at', 'idx_users_created_at');
+
+            // 결합 인덱스
+            $table->index(['phone', 'username', 'user_type'], 'idx_users_phone_username_user_type');
         });
+
+        // 테이블 코멘트 추가
+        DB::statement("ALTER TABLE users COMMENT = '사용자 테이블 (일반 회원 및 사업자)'");
     }
 
     /**

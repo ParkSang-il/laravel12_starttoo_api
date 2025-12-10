@@ -42,10 +42,44 @@ services:
     networks:
       - starttoo_network
 
+  redis:
+    image: redis:7-alpine
+    container_name: starttoo_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - starttoo_redis_data:/data
+    networks:
+      - starttoo_network
+    command: redis-server --appendonly yes
+
+  # Node.js 채팅 서버 (선택사항 - Laravel Broadcasting 대신 사용 가능)
+  # nodejs:
+  #   build:
+  #     context: ./docker/nodejs
+  #     dockerfile: Dockerfile
+  #   container_name: starttoo_nodejs
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - ./chat-server:/app
+  #   networks:
+  #     - starttoo_network
+  #   depends_on:
+  #     - redis
+  #   environment:
+  #     - REDIS_HOST=redis
+  #     - REDIS_PORT=6379
+  #     - JWT_SECRET=${JWT_SECRET}
+
 networks:
   starttoo_network:
     driver: bridge
 
 volumes:
   starttoo_mysql_data:
+    driver: local
+  starttoo_redis_data:
     driver: local

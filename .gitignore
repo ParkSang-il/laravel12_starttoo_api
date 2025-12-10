@@ -43,5 +43,9 @@ Homestead.yaml
 *.sqlite
 *.sqlite-journal
 
+#curser
+*.md
+*.ps1
+
 # Docker
 docker-compose.override.yml

@@ -1,0 +1,198 @@
+### GET request to example server
+GET http://localhost:8000/api/auth/register
+Accept: application/json
+cache-control: no-cache
+#Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjM3ODBhYTU1NDI2MDQ0MGZjZmMyZmJkNjFhNTZlM2U1MTE0MjA0MjhkMmRjNjA3NTAyNjQ0OGNmZDMwOTg1N2M5YjdhNjA4NWQ1YzU5NmJiIn0.eyJhdWQiOiI2IiwianRpIjoiMzc4MGFhNTU0MjYwNDQwZmNmYzJmYmQ2MWE1NmUzZTUxMTQyMDQyOGQyZGM2MDc1MDI2NDQ4Y2ZkMzA5ODU3YzliN2E2MDg1ZDVjNTk2YmIiLCJpYXQiOjE2MTk1MDEyNjUsIm5iZiI6MTYxOTUwMTI2NSwiZXhwIjoyNTY2MTg2MDY0LCJzdWIiOiI4Iiwic2NvcGVzIjpbXX0.R6Affj0YPMg9yJVdrlol1jSkUn8Uzhk5svZJML-zV72__Zv5nzDxp0PIH0iXBtDT8h7sDENRpa7mFV6qAUznbMkx5DB3tn9ZplpVbVPnMl9SixhvCV5g_WWKoRJGY0Vp2v2Lb1NfIM_s0PoQ2q1weNgifIwF9LfcRJF9vhMTGmdO84Ox_wfWdO5_eqUjUgmQbV6FQoasFAgoF4yIPJLvMcOm3TWC7fJ7M3Xqfp6bd5VkLejxE1_iXqVwSlmoyOSy9YtiEVwp4LeiswhL0xKQfzlGJsEXF31xSL7OCGDBgOdd29x3I-jdI6vYY0GC_k3aYYICw7exVTr-6Q2NS1kjgMTIQhnW5HoEhPD6G_0zOqA252AkbjD0u7lFfj60w9YRGTjnYRjMkHo1YEmKddccyXTACgthWvuJDVOqDSMkFXnzgxHNS8vnvh9MeEKr-fj_3_4V38_-vekYOEPKFk6EGWlNoM1iTmet7rlvCj9hMganS20UgD25rViG-zhMgdnltmudenvQ4iS37OKtBBUnK0ft_UsCpBLGJUymQUqQrvxyWHSXTcw0gyIScM2VNcgDxEHf446Jz5I76Mb72uCz-_jjDKDnNtSGnVktaEu20qHqzQBFuwz6gTxO47LZli3AlvuuRyV-4DvqyHNJetP_AD3_sBEc7u7XY_75ef4A4bI
+#X-CSRF-TOKEN: qTt4q5P9dPeoMygTDxbZ0G27X6QYfyPN6qchtWXk
+Content-Type: application/json
+
+{
+    "name": "John Doe",
+    "email": "pju2251@nate.com",
+    "password": "!!teamgod00"
+}
+
+###
+
+
+### GET request to example server
+### 인증번호 발송
+POST http://localhost:8000/api/auth/phone/send
+Accept: application/json
+cache-control: no-cache
+#Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjM3ODBhYTU1NDI2MDQ0MGZjZmMyZmJkNjFhNTZlM2U1MTE0MjA0MjhkMmRjNjA3NTAyNjQ0OGNmZDMwOTg1N2M5YjdhNjA4NWQ1YzU5NmJiIn0.eyJhdWQiOiI2IiwianRpIjoiMzc4MGFhNTU0MjYwNDQwZmNmYzJmYmQ2MWE1NmUzZTUxMTQyMDQyOGQyZGM2MDc1MDI2NDQ4Y2ZkMzA5ODU3YzliN2E2MDg1ZDVjNTk2YmIiLCJpYXQiOjE2MTk1MDEyNjUsIm5iZiI6MTYxOTUwMTI2NSwiZXhwIjoyNTY2MTg2MDY0LCJzdWIiOiI4Iiwic2NvcGVzIjpbXX0.R6Affj0YPMg9yJVdrlol1jSkUn8Uzhk5svZJML-zV72__Zv5nzDxp0PIH0iXBtDT8h7sDENRpa7mFV6qAUznbMkx5DB3tn9ZplpVbVPnMl9SixhvCV5g_WWKoRJGY0Vp2v2Lb1NfIM_s0PoQ2q1weNgifIwF9LfcRJF9vhMTGmdO84Ox_wfWdO5_eqUjUgmQbV6FQoasFAgoF4yIPJLvMcOm3TWC7fJ7M3Xqfp6bd5VkLejxE1_iXqVwSlmoyOSy9YtiEVwp4LeiswhL0xKQfzlGJsEXF31xSL7OCGDBgOdd29x3I-jdI6vYY0GC_k3aYYICw7exVTr-6Q2NS1kjgMTIQhnW5HoEhPD6G_0zOqA252AkbjD0u7lFfj60w9YRGTjnYRjMkHo1YEmKddccyXTACgthWvuJDVOqDSMkFXnzgxHNS8vnvh9MeEKr-fj_3_4V38_-vekYOEPKFk6EGWlNoM1iTmet7rlvCj9hMganS20UgD25rViG-zhMgdnltmudenvQ4iS37OKtBBUnK0ft_UsCpBLGJUymQUqQrvxyWHSXTcw0gyIScM2VNcgDxEHf446Jz5I76Mb72uCz-_jjDKDnNtSGnVktaEu20qHqzQBFuwz6gTxO47LZli3AlvuuRyV-4DvqyHNJetP_AD3_sBEc7u7XY_75ef4A4bI
+#X-CSRF-TOKEN: qTt4q5P9dPeoMygTDxbZ0G27X6QYfyPN6qchtWXk
+Content-Type: application/json
+
+{
+    "phone": "01045752251"
+}
+
+###
+### 인증번호 검증
+POST http://localhost:8000/api/auth/phone/verify
+Accept: application/json
+cache-control: no-cache
+#Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjM3ODBhYTU1NDI2MDQ0MGZjZmMyZmJkNjFhNTZlM2U1MTE0MjA0MjhkMmRjNjA3NTAyNjQ0OGNmZDMwOTg1N2M5YjdhNjA4NWQ1YzU5NmJiIn0.eyJhdWQiOiI2IiwianRpIjoiMzc4MGFhNTU0MjYwNDQwZmNmYzJmYmQ2MWE1NmUzZTUxMTQyMDQyOGQyZGM2MDc1MDI2NDQ4Y2ZkMzA5ODU3YzliN2E2MDg1ZDVjNTk2YmIiLCJpYXQiOjE2MTk1MDEyNjUsIm5iZiI6MTYxOTUwMTI2NSwiZXhwIjoyNTY2MTg2MDY0LCJzdWIiOiI4Iiwic2NvcGVzIjpbXX0.R6Affj0YPMg9yJVdrlol1jSkUn8Uzhk5svZJML-zV72__Zv5nzDxp0PIH0iXBtDT8h7sDENRpa7mFV6qAUznbMkx5DB3tn9ZplpVbVPnMl9SixhvCV5g_WWKoRJGY0Vp2v2Lb1NfIM_s0PoQ2q1weNgifIwF9LfcRJF9vhMTGmdO84Ox_wfWdO5_eqUjUgmQbV6FQoasFAgoF4yIPJLvMcOm3TWC7fJ7M3Xqfp6bd5VkLejxE1_iXqVwSlmoyOSy9YtiEVwp4LeiswhL0xKQfzlGJsEXF31xSL7OCGDBgOdd29x3I-jdI6vYY0GC_k3aYYICw7exVTr-6Q2NS1kjgMTIQhnW5HoEhPD6G_0zOqA252AkbjD0u7lFfj60w9YRGTjnYRjMkHo1YEmKddccyXTACgthWvuJDVOqDSMkFXnzgxHNS8vnvh9MeEKr-fj_3_4V38_-vekYOEPKFk6EGWlNoM1iTmet7rlvCj9hMganS20UgD25rViG-zhMgdnltmudenvQ4iS37OKtBBUnK0ft_UsCpBLGJUymQUqQrvxyWHSXTcw0gyIScM2VNcgDxEHf446Jz5I76Mb72uCz-_jjDKDnNtSGnVktaEu20qHqzQBFuwz6gTxO47LZli3AlvuuRyV-4DvqyHNJetP_AD3_sBEc7u7XY_75ef4A4bI
+#X-CSRF-TOKEN: qTt4q5P9dPeoMygTDxbZ0G27X6QYfyPN6qchtWXk
+Content-Type: application/json
+
+{
+    "phone": "01045752251",
+    "verification_code": "111111"
+}
+
+###
+
+###
+### 휴대폰 중복체크
+POST http://localhost:8000/api/auth/phone/check
+Accept: application/json
+cache-control: no-cache
+#Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjM3ODBhYTU1NDI2MDQ0MGZjZmMyZmJkNjFhNTZlM2U1MTE0MjA0MjhkMmRjNjA3NTAyNjQ0OGNmZDMwOTg1N2M5YjdhNjA4NWQ1YzU5NmJiIn0.eyJhdWQiOiI2IiwianRpIjoiMzc4MGFhNTU0MjYwNDQwZmNmYzJmYmQ2MWE1NmUzZTUxMTQyMDQyOGQyZGM2MDc1MDI2NDQ4Y2ZkMzA5ODU3YzliN2E2MDg1ZDVjNTk2YmIiLCJpYXQiOjE2MTk1MDEyNjUsIm5iZiI6MTYxOTUwMTI2NSwiZXhwIjoyNTY2MTg2MDY0LCJzdWIiOiI4Iiwic2NvcGVzIjpbXX0.R6Affj0YPMg9yJVdrlol1jSkUn8Uzhk5svZJML-zV72__Zv5nzDxp0PIH0iXBtDT8h7sDENRpa7mFV6qAUznbMkx5DB3tn9ZplpVbVPnMl9SixhvCV5g_WWKoRJGY0Vp2v2Lb1NfIM_s0PoQ2q1weNgifIwF9LfcRJF9vhMTGmdO84Ox_wfWdO5_eqUjUgmQbV6FQoasFAgoF4yIPJLvMcOm3TWC7fJ7M3Xqfp6bd5VkLejxE1_iXqVwSlmoyOSy9YtiEVwp4LeiswhL0xKQfzlGJsEXF31xSL7OCGDBgOdd29x3I-jdI6vYY0GC_k3aYYICw7exVTr-6Q2NS1kjgMTIQhnW5HoEhPD6G_0zOqA252AkbjD0u7lFfj60w9YRGTjnYRjMkHo1YEmKddccyXTACgthWvuJDVOqDSMkFXnzgxHNS8vnvh9MeEKr-fj_3_4V38_-vekYOEPKFk6EGWlNoM1iTmet7rlvCj9hMganS20UgD25rViG-zhMgdnltmudenvQ4iS37OKtBBUnK0ft_UsCpBLGJUymQUqQrvxyWHSXTcw0gyIScM2VNcgDxEHf446Jz5I76Mb72uCz-_jjDKDnNtSGnVktaEu20qHqzQBFuwz6gTxO47LZli3AlvuuRyV-4DvqyHNJetP_AD3_sBEc7u7XY_75ef4A4bI
+#X-CSRF-TOKEN: qTt4q5P9dPeoMygTDxbZ0G27X6QYfyPN6qchtWXk
+Content-Type: application/json
+
+{
+    "phone": "01045752251"
+}
+
+###
+
+###
+### 인증번호 재전송
+POST http://localhost:8000/api/auth/phone/resend
+Accept: application/json
+cache-control: no-cache
+#Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjM3ODBhYTU1NDI2MDQ0MGZjZmMyZmJkNjFhNTZlM2U1MTE0MjA0MjhkMmRjNjA3NTAyNjQ0OGNmZDMwOTg1N2M5YjdhNjA4NWQ1YzU5NmJiIn0.eyJhdWQiOiI2IiwianRpIjoiMzc4MGFhNTU0MjYwNDQwZmNmYzJmYmQ2MWE1NmUzZTUxMTQyMDQyOGQyZGM2MDc1MDI2NDQ4Y2ZkMzA5ODU3YzliN2E2MDg1ZDVjNTk2YmIiLCJpYXQiOjE2MTk1MDEyNjUsIm5iZiI6MTYxOTUwMTI2NSwiZXhwIjoyNTY2MTg2MDY0LCJzdWIiOiI4Iiwic2NvcGVzIjpbXX0.R6Affj0YPMg9yJVdrlol1jSkUn8Uzhk5svZJML-zV72__Zv5nzDxp0PIH0iXBtDT8h7sDENRpa7mFV6qAUznbMkx5DB3tn9ZplpVbVPnMl9SixhvCV5g_WWKoRJGY0Vp2v2Lb1NfIM_s0PoQ2q1weNgifIwF9LfcRJF9vhMTGmdO84Ox_wfWdO5_eqUjUgmQbV6FQoasFAgoF4yIPJLvMcOm3TWC7fJ7M3Xqfp6bd5VkLejxE1_iXqVwSlmoyOSy9YtiEVwp4LeiswhL0xKQfzlGJsEXF31xSL7OCGDBgOdd29x3I-jdI6vYY0GC_k3aYYICw7exVTr-6Q2NS1kjgMTIQhnW5HoEhPD6G_0zOqA252AkbjD0u7lFfj60w9YRGTjnYRjMkHo1YEmKddccyXTACgthWvuJDVOqDSMkFXnzgxHNS8vnvh9MeEKr-fj_3_4V38_-vekYOEPKFk6EGWlNoM1iTmet7rlvCj9hMganS20UgD25rViG-zhMgdnltmudenvQ4iS37OKtBBUnK0ft_UsCpBLGJUymQUqQrvxyWHSXTcw0gyIScM2VNcgDxEHf446Jz5I76Mb72uCz-_jjDKDnNtSGnVktaEu20qHqzQBFuwz6gTxO47LZli3AlvuuRyV-4DvqyHNJetP_AD3_sBEc7u7XY_75ef4A4bI
+#X-CSRF-TOKEN: qTt4q5P9dPeoMygTDxbZ0G27X6QYfyPN6qchtWXk
+Content-Type: application/json
+
+{
+    "phone": "01045752251"
+}
+
+###
+### 일반 회원가입
+POST http://localhost:8000/api/auth/register
+Accept: application/json
+cache-control: no-cache
+#Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjM3ODBhYTU1NDI2MDQ0MGZjZmMyZmJkNjFhNTZlM2U1MTE0MjA0MjhkMmRjNjA3NTAyNjQ0OGNmZDMwOTg1N2M5YjdhNjA4NWQ1YzU5NmJiIn0.eyJhdWQiOiI2IiwianRpIjoiMzc4MGFhNTU0MjYwNDQwZmNmYzJmYmQ2MWE1NmUzZTUxMTQyMDQyOGQyZGM2MDc1MDI2NDQ4Y2ZkMzA5ODU3YzliN2E2MDg1ZDVjNTk2YmIiLCJpYXQiOjE2MTk1MDEyNjUsIm5iZiI6MTYxOTUwMTI2NSwiZXhwIjoyNTY2MTg2MDY0LCJzdWIiOiI4Iiwic2NvcGVzIjpbXX0.R6Affj0YPMg9yJVdrlol1jSkUn8Uzhk5svZJML-zV72__Zv5nzDxp0PIH0iXBtDT8h7sDENRpa7mFV6qAUznbMkx5DB3tn9ZplpVbVPnMl9SixhvCV5g_WWKoRJGY0Vp2v2Lb1NfIM_s0PoQ2q1weNgifIwF9LfcRJF9vhMTGmdO84Ox_wfWdO5_eqUjUgmQbV6FQoasFAgoF4yIPJLvMcOm3TWC7fJ7M3Xqfp6bd5VkLejxE1_iXqVwSlmoyOSy9YtiEVwp4LeiswhL0xKQfzlGJsEXF31xSL7OCGDBgOdd29x3I-jdI6vYY0GC_k3aYYICw7exVTr-6Q2NS1kjgMTIQhnW5HoEhPD6G_0zOqA252AkbjD0u7lFfj60w9YRGTjnYRjMkHo1YEmKddccyXTACgthWvuJDVOqDSMkFXnzgxHNS8vnvh9MeEKr-fj_3_4V38_-vekYOEPKFk6EGWlNoM1iTmet7rlvCj9hMganS20UgD25rViG-zhMgdnltmudenvQ4iS37OKtBBUnK0ft_UsCpBLGJUymQUqQrvxyWHSXTcw0gyIScM2VNcgDxEHf446Jz5I76Mb72uCz-_jjDKDnNtSGnVktaEu20qHqzQBFuwz6gTxO47LZli3AlvuuRyV-4DvqyHNJetP_AD3_sBEc7u7XY_75ef4A4bI
+#X-CSRF-TOKEN: qTt4q5P9dPeoMygTDxbZ0G27X6QYfyPN6qchtWXk
+Content-Type: application/json
+
+{
+    "phone": "01045752251",
+    "user_type": 1
+}
+
+
+###
+### 내정보 호출
+GET http://localhost:8000/api/auth/me
+Accept: application/json
+cache-control: no-cache
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVnaXN0ZXIiLCJpYXQiOjE3NjUzMzIxNzUsImV4cCI6MTc2NTMzNTc3NSwibmJmIjoxNzY1MzMyMTc1LCJqdGkiOiJXaE5scVVpTXNTZGU5dTkxIiwic3ViIjoiMTEiLCJwcnYiOiIyM2JkNWM4OTQ5ZjYwMGFkYjM5ZTcwMWM0MDA4NzJkYjdhNTk3NmY3In0.6ePRCDrw4oeBeyErwlqCu0vFTCyCTH16yQDUB8bLYHs
+#X-CSRF-TOKEN: qTt4q5P9dPeoMygTDxbZ0G27X6QYfyPN6qchtWXk
+Content-Type: application/json
+
+
+###
+### 로그아웃
+POST http://localhost:8000/api/auth/logout
+Accept: application/json
+cache-control: no-cache
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVnaXN0ZXIiLCJpYXQiOjE3NjUzMzIxNzUsImV4cCI6MTc2NTMzNTc3NSwibmJmIjoxNzY1MzMyMTc1LCJqdGkiOiJXaE5scVVpTXNTZGU5dTkxIiwic3ViIjoiMTEiLCJwcnYiOiIyM2JkNWM4OTQ5ZjYwMGFkYjM5ZTcwMWM0MDA4NzJkYjdhNTk3NmY3In0.6ePRCDrw4oeBeyErwlqCu0vFTCyCTH16yQDUB8bLYHs
+#X-CSRF-TOKEN: qTt4q5P9dPeoMygTDxbZ0G27X6QYfyPN6qchtWXk
+Content-Type: application/json
+
+
+###
+### 로그인
+POST http://localhost:8000/api/auth/login
+Accept: application/json
+cache-control: no-cache
+#Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVnaXN0ZXIiLCJpYXQiOjE3NjUzMzIxNzUsImV4cCI6MTc2NTMzNTc3NSwibmJmIjoxNzY1MzMyMTc1LCJqdGkiOiJXaE5scVVpTXNTZGU5dTkxIiwic3ViIjoiMTEiLCJwcnYiOiIyM2JkNWM4OTQ5ZjYwMGFkYjM5ZTcwMWM0MDA4NzJkYjdhNTk3NmY3In0.6ePRCDrw4oeBeyErwlqCu0vFTCyCTH16yQDUB8bLYHs
+#X-CSRF-TOKEN: qTt4q5P9dPeoMygTDxbZ0G27X6QYfyPN6qchtWXk
+Content-Type: application/json
+
+{
+    "phone": "01045752251"
+}
+
+###
+### 신규 사업자 추가 정보 등록
+POST http://localhost:8000/api/auth/biz_additional_info
+Accept: application/json
+cache-control: no-cache
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVnaXN0ZXIiLCJpYXQiOjE3NjUzNTA5MTAsImV4cCI6MTc2NTM1NDUxMCwibmJmIjoxNzY1MzUwOTEwLCJqdGkiOiJHUE1UOHNEdHJmQldGUmhpIiwic3ViIjoiMTEiLCJwcnYiOiIyM2JkNWM4OTQ5ZjYwMGFkYjM5ZTcwMWM0MDA4NzJkYjdhNTk3NmY3In0.aLVuxft8K0nUumKaaIL6EzEPK4vD8D12z9ryUvqKlp4
+#X-CSRF-TOKEN: qTt4q5P9dPeoMygTDxbZ0G27X6QYfyPN6qchtWXk
+Content-Type: application/json
+
+{
+    "business_name": "타투샵 예시",
+    "business_number": "123-45-67890",
+    "business_certificate": "/uploads/certificates/business_cert_123.pdf",
+    "license_certificate": "/uploads/certificates/license_cert_123.pdf",
+    "safety_education_certificate": "/uploads/certificates/safety_education_123.pdf",
+    "address": "서울특별시 강남구 테헤란로 123",
+    "address_detail": "4층 401호",
+    "contact_phone_public": true,
+    "available_regions": ["서울", "경기", "인천"],
+    "main_styles": ["미니멀", "리얼리스틱", "올드스쿨"]
+}
+
+
+###
+### 신규 사업자 추가 정보 수정
+PUT http://localhost:8000/api/auth/biz_additional_info
+Accept: application/json
+cache-control: no-cache
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2NTM0NTgxMSwiZXhwIjoxNzY1MzQ5NDI2LCJuYmYiOjE3NjUzNDU4MjYsImp0aSI6IkpHS1RJTExLUFBiOExsbUkiLCJzdWIiOiIxMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.hxcH9EN1JKCE64VnQhUFGK5mOQ-ADSvJUNrjWjFnTnA
+#X-CSRF-TOKEN: qTt4q5P9dPeoMygTDxbZ0G27X6QYfyPN6qchtWXk
+Content-Type: application/json
+
+{
+    "business_name": "그레이하우스",
+    "business_number": "123-45-67890",
+    "business_certificate": "/uploads/certificates/business_cert_123.pdf",
+    "license_certificate": "/uploads/certificates/license_cert_123.pdf",
+    "safety_education_certificate": "/uploads/certificates/safety_education_123.pdf",
+    "address": "서울특별시 강남구 테헤란로 123",
+    "address_detail": "4층 401호",
+    "contact_phone_public": true,
+    "available_regions": ["서울", "경기", "인천"],
+    "main_styles": ["미니멀", "리얼리스틱", "올드스쿨"]
+}
+
+
+###
+### 사업자 추가 정보 수정요청(승인된 사업자)
+POST http://localhost:8000/api/auth/biz_edit_info
+Accept: application/json
+cache-control: no-cache
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVnaXN0ZXIiLCJpYXQiOjE3NjUzNTA3MzUsImV4cCI6MTc2NTM1NDMzNSwibmJmIjoxNzY1MzUwNzM1LCJqdGkiOiJRRndEM0xyeEc3UVRza0xpIiwic3ViIjoiMTEiLCJwcnYiOiIyM2JkNWM4OTQ5ZjYwMGFkYjM5ZTcwMWM0MDA4NzJkYjdhNTk3NmY3In0.Etv6Jg-RP4g-Fx4rrLFA2S8Nxopwu5pOOfK_3VVo90U
+#X-CSRF-TOKEN: qTt4q5P9dPeoMygTDxbZ0G27X6QYfyPN6qchtWXk
+Content-Type: application/json
+
+{
+    "business_name": "그레이하우스",
+    "business_number": "123-45-67890",
+    "business_certificate": "/uploads/certificates/business_cert_123.pdf",
+    "license_certificate": "/uploads/certificates/license_cert_123.pdf",
+    "safety_education_certificate": "/uploads/certificates/safety_education_123.pdf",
+    "address": "서울특별시 강남구 테헤란로 123",
+    "address_detail": "4층 401호",
+    "contact_phone_public": true,
+    "available_regions": ["서울", "경기", "인천"],
+    "main_styles": ["미니멀", "리얼리스틱", "올드스쿨"]
+}
+
+###
+### 토큰 리프레시
+POST http://localhost:8000/api/auth/refresh
+Accept: application/json
+cache-control: no-cache
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2NTM0NTgxMSwiZXhwIjoxNzY1MzQ5NDI2LCJuYmYiOjE3NjUzNDU4MjYsImp0aSI6IkpHS1RJTExLUFBiOExsbUkiLCJzdWIiOiIxMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.hxcH9EN1JKCE64VnQhUFGK5mOQ-ADSvJUNrjWjFnTnA
+#X-CSRF-TOKEN: qTt4q5P9dPeoMygTDxbZ0G27X6QYfyPN6qchtWXk
+Content-Type: application/json

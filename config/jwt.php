@@ -234,7 +234,7 @@ return [
         |
         */
 
-        'jwt' => PHPOpenSourceSaver\JWT\Providers\JWT\Lcobucci::class,
+        'jwt' => PHPOpenSourceSaver\JWTAuth\Providers\JWT\Lcobucci::class,
 
         /*
         |--------------------------------------------------------------------------
@@ -245,7 +245,7 @@ return [
         |
         */
 
-        'auth' => PHPOpenSourceSaver\JWT\Providers\Auth\Illuminate::class,
+        'auth' => PHPOpenSourceSaver\JWTAuth\Providers\Auth\Illuminate::class,
 
         /*
         |--------------------------------------------------------------------------
@@ -256,7 +256,7 @@ return [
         |
         */
 
-        'storage' => PHPOpenSourceSaver\JWT\Providers\Storage\Illuminate::class,
+        'storage' => PHPOpenSourceSaver\JWTAuth\Providers\Storage\Illuminate::class,
 
     ],
 

@@ -15,23 +15,18 @@ use Illuminate\Support\Facades\Route;
 
 // 인증 관련 라우트 (인증 불필요)
 Route::prefix('auth')->group(function () {
-    Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/login', [AuthController::class, 'login']);
-    
-    // 소셜 로그인 라우트
-    Route::prefix('social')->group(function () {
-        // 구글
-        Route::get('/google', [\App\Http\Controllers\SocialAuthController::class, 'redirectToGoogle']);
-        Route::get('/google/callback', [\App\Http\Controllers\SocialAuthController::class, 'handleGoogleCallback']);
-        
-        // 카카오
-        Route::get('/kakao', [\App\Http\Controllers\SocialAuthController::class, 'redirectToKakao']);
-        Route::get('/kakao/callback', [\App\Http\Controllers\SocialAuthController::class, 'handleKakaoCallback']);
-        
-        // 인스타그램
-        Route::get('/instagram', [\App\Http\Controllers\SocialAuthController::class, 'redirectToInstagram']);
-        Route::get('/instagram/callback', [\App\Http\Controllers\SocialAuthController::class, 'handleInstagramCallback']);
+    // 휴대폰 인증 관련 라우트
+    Route::prefix('phone')->group(function () {
+        Route::post('/send', [AuthController::class, 'sendVerificationCode']);      // 인증번호 발송
+        Route::post('/resend', [AuthController::class, 'resendVerificationCode']);  // 인증번호 재전송
+        Route::post('/verify', [AuthController::class, 'verifyCode']);               // 인증번호 검증
+        Route::post('/check', [AuthController::class, 'checkPhone']);                 // 휴대폰 번호 중복 체크
+        Route::post('/expire', [AuthController::class, 'expireVerification']);        // 인증번호 만료 처리 (앱에서 만료 감지 후 호출)
     });
+
+    Route::post('/register', [AuthController::class, 'registerType']);                          // 일반회원가입
+    // 휴대폰 번호 로그인 (인증 완료 후)
+    Route::post('/login', [AuthController::class, 'login']);                          // 휴대폰 번호로 로그인
 });
 
 // 인증이 필요한 라우트
@@ -40,6 +35,9 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::post('/refresh', [AuthController::class, 'refresh']);
+        Route::post('/biz_additional_info', [AuthController::class, 'bizAdditionalInfo']); // 사업자 추가정보 등록
+        Route::put('/biz_additional_info', [AuthController::class, 'updateBizAdditionalInfo']); // 사업자 추가정보 수정
+        Route::post('/biz_edit_info', [AuthController::class, 'bizEditInfo']); // 사업자 정보 수정요청(승인된 사업자만 가능)
     });
 
     // 여기에 추가 API 라우트를 등록하세요
