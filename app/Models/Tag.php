@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class PhoneVerification extends Model
+class Tag extends Model
 {
     use HasFactory;
 
@@ -14,7 +14,7 @@ class PhoneVerification extends Model
      *
      * @var string
      */
-    protected $table = 'phone_verifications';
+    protected $table = 'tags';
 
     /**
      * 대량 할당 가능한 속성들
@@ -22,10 +22,8 @@ class PhoneVerification extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'phone',
-        'verification_code',
-        'verified_at',
-        'expires_at',
+        'name',
+        'usage_count',
     ];
 
     /**
@@ -34,10 +32,20 @@ class PhoneVerification extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'verified_at' => 'datetime:Y-m-d H:i:s',
-        'expires_at' => 'datetime:Y-m-d H:i:s',
+        'usage_count' => 'integer',
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
+
+    /**
+     * 포트폴리오 태그 관계 (다대다)
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
+     */
+    public function portfolios()
+    {
+        return $this->belongsToMany(Portfolio::class, 'portfolio_tags')
+            ->withTimestamps();
+    }
 }
 

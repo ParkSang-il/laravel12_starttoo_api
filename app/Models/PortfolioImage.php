@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class PhoneVerification extends Model
+class PortfolioImage extends Model
 {
     use HasFactory;
 
@@ -14,7 +14,7 @@ class PhoneVerification extends Model
      *
      * @var string
      */
-    protected $table = 'phone_verifications';
+    protected $table = 'portfolio_images';
 
     /**
      * 대량 할당 가능한 속성들
@@ -22,10 +22,12 @@ class PhoneVerification extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'phone',
-        'verification_code',
-        'verified_at',
-        'expires_at',
+        'portfolio_id',
+        'image_url',
+        'image_order',
+        'scale',
+        'offset_x',
+        'offset_y',
     ];
 
     /**
@@ -34,10 +36,22 @@ class PhoneVerification extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'verified_at' => 'datetime:Y-m-d H:i:s',
-        'expires_at' => 'datetime:Y-m-d H:i:s',
+        'image_order' => 'integer',
+        'scale' => 'decimal:2',
+        'offset_x' => 'decimal:6',
+        'offset_y' => 'decimal:6',
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
+
+    /**
+     * 포트폴리오 관계
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function portfolio()
+    {
+        return $this->belongsTo(Portfolio::class);
+    }
 }
 

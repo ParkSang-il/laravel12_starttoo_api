@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\BusinessVerification;
 use App\Models\BusinessVerificationRequest;
+use App\Models\ArtistProfile;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class BusinessVerificationService
@@ -100,7 +101,49 @@ class BusinessVerificationService
             'rejected_reason' => null,
         ]);
 
+        // 아티스트 프로필 자동 생성
+        $this->createArtistProfile($verification);
+
         return $verification;
+    }
+
+    /**
+     * 아티스트 프로필 자동 생성 (사업자 승인 시)
+     *
+     * @param BusinessVerification $verification
+     * @return void
+     */
+    private function createArtistProfile(BusinessVerification $verification): void
+    {
+        $user = $verification->user;
+
+        if (!$user) {
+            return;
+        }
+
+        // 이미 아티스트 프로필이 있는지 확인
+        $existingProfile = ArtistProfile::where('user_id', $user->id)->first();
+        if ($existingProfile) {
+            return; // 이미 프로필이 있으면 생성하지 않음
+        }
+
+        // 주소 정보 구성 (address + address_detail)
+        $studioAddress = $verification->address;
+        if ($verification->address_detail) {
+            $studioAddress .= ' ' . $verification->address_detail;
+        }
+
+        // 아티스트 프로필 생성
+        ArtistProfile::create([
+            'user_id' => $user->id,
+            'cover_image' => '/default/cover_image.jpg', // 기본값
+            'artist_name' => $user->username, // 회원 닉네임
+            'studio_address' => $studioAddress, // 주소 정보에서 가져옴
+            'bio' => '안녕하세요. ' . $verification->business_name . '입니다.', // 기본값
+            'email' => null,
+            'instagram' => null,
+            'website' => null,
+        ]);
     }
 
     /**
@@ -163,17 +206,17 @@ class BusinessVerificationService
         // 변경된 필드 확인
         $changedFields = [];
         $originalData = $verification->toArray();
-        
+
         foreach ($data as $key => $value) {
             // 배열 필드는 JSON 비교
             if (in_array($key, ['available_regions', 'main_styles'])) {
                 $originalValue = $originalData[$key] ?? [];
                 $newValue = $value ?? [];
-                
+
                 // 배열을 정렬하여 비교
                 sort($originalValue);
                 sort($newValue);
-                
+
                 if (json_encode($originalValue) !== json_encode($newValue)) {
                     $changedFields[$key] = [
                         'old' => $originalValue,
@@ -182,11 +225,11 @@ class BusinessVerificationService
                 }
             } else {
                 $originalValue = $originalData[$key] ?? null;
-                
+
                 // null과 빈 문자열을 동일하게 처리
                 $originalValue = $originalValue === '' ? null : $originalValue;
                 $newValue = $value === '' ? null : $value;
-                
+
                 if ($originalValue != $newValue) {
                     $changedFields[$key] = [
                         'old' => $originalValue,
@@ -324,7 +367,7 @@ class BusinessVerificationService
 
         // 검색 조건 적용 (여러 조건이 있을 경우 AND 조건)
         $hasSearchParams = false;
-        
+
         // 사용자명 검색
         if (!empty($searchParams['username'])) {
             $query->whereHas('user', function ($userQuery) use ($searchParams) {

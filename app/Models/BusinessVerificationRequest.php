@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class BusinessVerification extends Model
+class BusinessVerificationRequest extends Model
 {
     use HasFactory;
 
@@ -14,7 +14,7 @@ class BusinessVerification extends Model
      *
      * @var string
      */
-    protected $table = 'business_verifications';
+    protected $table = 'business_verification_requests';
 
     /**
      * 대량 할당 가능한 속성들
@@ -22,11 +22,13 @@ class BusinessVerification extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'business_verification_id',
         'user_id',
         'business_name',
         'business_number',
         'business_certificate',
         'license_certificate',
+        'safety_education_certificate',
         'address',
         'address_detail',
         'contact_phone_public',
@@ -35,7 +37,6 @@ class BusinessVerification extends Model
         'status',
         'rejected_reason',
         'approved_at',
-        'safety_education_certificate',
     ];
 
     /**
@@ -60,6 +61,16 @@ class BusinessVerification extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * 사업자 인증 정보 관계
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function businessVerification()
+    {
+        return $this->belongsTo(BusinessVerification::class);
     }
 }
 

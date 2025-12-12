@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class BusinessVerification extends Model
+class PortfolioLike extends Model
 {
     use HasFactory;
 
@@ -14,7 +14,7 @@ class BusinessVerification extends Model
      *
      * @var string
      */
-    protected $table = 'business_verifications';
+    protected $table = 'portfolio_likes';
 
     /**
      * 대량 할당 가능한 속성들
@@ -22,20 +22,9 @@ class BusinessVerification extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'portfolio_id',
         'user_id',
-        'business_name',
-        'business_number',
-        'business_certificate',
-        'license_certificate',
-        'address',
-        'address_detail',
-        'contact_phone_public',
-        'available_regions',
-        'main_styles',
-        'status',
-        'rejected_reason',
-        'approved_at',
-        'safety_education_certificate',
+        'created_at',
     ];
 
     /**
@@ -44,13 +33,25 @@ class BusinessVerification extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'contact_phone_public' => 'boolean',
-        'available_regions' => 'array',
-        'main_styles' => 'array',
-        'approved_at' => 'datetime:Y-m-d H:i:s',
         'created_at' => 'datetime:Y-m-d H:i:s',
-        'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
+
+    /**
+     * updated_at 사용 안 함
+     *
+     * @var bool
+     */
+    public $timestamps = false;
+
+    /**
+     * 포트폴리오 관계
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function portfolio()
+    {
+        return $this->belongsTo(Portfolio::class);
+    }
 
     /**
      * 사용자 관계

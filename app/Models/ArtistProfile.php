@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class PhoneVerification extends Model
+class ArtistProfile extends Model
 {
     use HasFactory;
 
@@ -14,7 +14,7 @@ class PhoneVerification extends Model
      *
      * @var string
      */
-    protected $table = 'phone_verifications';
+    protected $table = 'artist_profiles';
 
     /**
      * 대량 할당 가능한 속성들
@@ -22,10 +22,14 @@ class PhoneVerification extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'phone',
-        'verification_code',
-        'verified_at',
-        'expires_at',
+        'user_id',
+        'cover_image',
+        'artist_name',
+        'email',
+        'instagram',
+        'website',
+        'studio_address',
+        'bio',
     ];
 
     /**
@@ -34,10 +38,18 @@ class PhoneVerification extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'verified_at' => 'datetime:Y-m-d H:i:s',
-        'expires_at' => 'datetime:Y-m-d H:i:s',
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
+
+    /**
+     * 사용자 관계
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 }
 

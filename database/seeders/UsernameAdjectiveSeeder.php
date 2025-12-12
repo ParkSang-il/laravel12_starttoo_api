@@ -76,7 +76,6 @@ class UsernameAdjectiveSeeder extends Seeder
             ['word' => '흩어진',     'tone' => 'extra'],
             ['word' => '남겨진',     'tone' => 'extra'],
             ['word' => '메마른',     'tone' => 'extra'],
-            ['word' => '젖은',       'tone' => 'extra'],
             ['word' => '조각난',     'tone' => 'extra'],
             ['word' => '무너진',     'tone' => 'extra'],
             ['word' => '비틀린',     'tone' => 'extra'],
@@ -126,11 +125,8 @@ class UsernameAdjectiveSeeder extends Seeder
             ['word' => '긁힌',       'tone' => 'edgy'],
             ['word' => '중독된',     'tone' => 'edgy'],
             ['word' => '미친',       'tone' => 'edgy'],
-            ['word' => '타락한',     'tone' => 'edgy'],
-            ['word' => '반항하는',   'tone' => 'edgy'],
             ['word' => '금지된',     'tone' => 'edgy'],
             ['word' => '위험한',     'tone' => 'edgy'],
-            ['word' => '기괴한',     'tone' => 'edgy'],
 
             // --- Soft / Emotional / Delicate (부드럽고 감성적인 느낌) ---
             ['word' => '수줍은',     'tone' => 'soft'],
@@ -177,10 +173,7 @@ class UsernameAdjectiveSeeder extends Seeder
             ['word' => '잃어버린',   'tone' => 'extra'],
             ['word' => '떨어지는',   'tone' => 'extra'],
             ['word' => '부유하는',   'tone' => 'extra'],
-            ['word' => '마지막',     'tone' => 'extra'],
-            ['word' => '처음',       'tone' => 'extra'],
             ['word' => '유일한',     'tone' => 'extra'],
-            ['word' => '미완성',     'tone' => 'extra'],
             ['word' => '완벽한',     'tone' => 'extra'],
         ];
 

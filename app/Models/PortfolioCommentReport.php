@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class BusinessVerification extends Model
+class PortfolioCommentReport extends Model
 {
     use HasFactory;
 
@@ -14,7 +14,7 @@ class BusinessVerification extends Model
      *
      * @var string
      */
-    protected $table = 'business_verifications';
+    protected $table = 'portfolio_comment_reports';
 
     /**
      * 대량 할당 가능한 속성들
@@ -22,20 +22,13 @@ class BusinessVerification extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'comment_id',
         'user_id',
-        'business_name',
-        'business_number',
-        'business_certificate',
-        'license_certificate',
-        'address',
-        'address_detail',
-        'contact_phone_public',
-        'available_regions',
-        'main_styles',
+        'report_type',
+        'reason',
         'status',
-        'rejected_reason',
-        'approved_at',
-        'safety_education_certificate',
+        'admin_note',
+        'reviewed_at',
     ];
 
     /**
@@ -44,16 +37,23 @@ class BusinessVerification extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'contact_phone_public' => 'boolean',
-        'available_regions' => 'array',
-        'main_styles' => 'array',
-        'approved_at' => 'datetime:Y-m-d H:i:s',
+        'reviewed_at' => 'datetime:Y-m-d H:i:s',
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
 
     /**
-     * 사용자 관계
+     * 댓글 관계
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function comment()
+    {
+        return $this->belongsTo(PortfolioComment::class);
+    }
+
+    /**
+     * 신고한 사용자 관계
      *
      * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
      */

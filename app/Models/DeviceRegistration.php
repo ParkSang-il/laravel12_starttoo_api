@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class PhoneVerification extends Model
+class DeviceRegistration extends Model
 {
     use HasFactory;
 
@@ -14,7 +14,7 @@ class PhoneVerification extends Model
      *
      * @var string
      */
-    protected $table = 'phone_verifications';
+    protected $table = 'device_registrations';
 
     /**
      * 대량 할당 가능한 속성들
@@ -22,10 +22,11 @@ class PhoneVerification extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'phone',
-        'verification_code',
-        'verified_at',
-        'expires_at',
+        'device_id',
+        'user_agent',
+        'user_id',
+        'marketing_notification_consent',
+        'service_notification_consent',
     ];
 
     /**
@@ -34,10 +35,20 @@ class PhoneVerification extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'verified_at' => 'datetime:Y-m-d H:i:s',
-        'expires_at' => 'datetime:Y-m-d H:i:s',
+        'marketing_notification_consent' => 'boolean',
+        'service_notification_consent' => 'boolean',
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
+
+    /**
+     * 사용자 관계
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 }
 

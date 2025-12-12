@@ -43,8 +43,10 @@ class User extends Authenticatable implements JWTSubject
     {
         return [
             'user_type' => 'integer',
-            'phone_verified_at' => 'datetime',
-            'deleted_at' => 'datetime',
+            'phone_verified_at' => 'datetime:Y-m-d H:i:s',
+            'deleted_at' => 'datetime:Y-m-d H:i:s',
+            'created_at' => 'datetime:Y-m-d H:i:s',
+            'updated_at' => 'datetime:Y-m-d H:i:s',
         ];
     }
 
@@ -66,5 +68,25 @@ class User extends Authenticatable implements JWTSubject
     public function getJWTCustomClaims(): array
     {
         return [];
+    }
+
+    /**
+     * 아티스트 프로필 관계
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasOne
+     */
+    public function artistProfile()
+    {
+        return $this->hasOne(ArtistProfile::class);
+    }
+
+    /**
+     * 포트폴리오 관계
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function portfolios()
+    {
+        return $this->hasMany(Portfolio::class);
     }
 }

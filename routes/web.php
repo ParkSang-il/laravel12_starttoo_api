@@ -31,4 +31,24 @@ Route::prefix('admin')->group(function () {
     Route::get('/api/business-edit-requests', [AdminController::class, 'getBusinessEditRequestList'])->name('admin.business-edit-request.list');
     Route::post('/api/business-edit-requests/{id}/approve', [AdminController::class, 'approveBusinessEditRequest'])->name('admin.business-edit-request.approve');
     Route::post('/api/business-edit-requests/{id}/reject', [AdminController::class, 'rejectBusinessEditRequest'])->name('admin.business-edit-request.reject');
+    
+    // 포트폴리오 관리 페이지
+    Route::get('/portfolios', [AdminController::class, 'portfolioIndex'])->name('admin.portfolio.index');
+    
+    // 포트폴리오 관리 API
+    Route::get('/api/portfolios', [AdminController::class, 'getPortfolioList'])->name('admin.portfolio.list');
+    Route::get('/api/portfolios/{id}', [AdminController::class, 'getPortfolioDetail'])->name('admin.portfolio.detail');
+    Route::put('/api/portfolios/{id}', [AdminController::class, 'updatePortfolio'])->name('admin.portfolio.update');
+    Route::delete('/api/portfolios/{id}', [AdminController::class, 'deletePortfolio'])->name('admin.portfolio.delete');
+    Route::post('/api/portfolios/{id}/toggle-sensitive', [AdminController::class, 'toggleSensitive'])->name('admin.portfolio.toggle-sensitive');
+    
+    // 댓글 관리 페이지
+    Route::get('/comments', [AdminController::class, 'commentIndex'])->name('admin.comment.index');
+    
+    // 댓글 관리 API
+    Route::get('/api/comments', [AdminController::class, 'getCommentList'])->name('admin.comment.list');
+    Route::get('/api/comments/{id}', [AdminController::class, 'getCommentDetail'])->name('admin.comment.detail');
+    Route::put('/api/comments/{id}', [AdminController::class, 'updateComment'])->name('admin.comment.update');
+    Route::delete('/api/comments/{id}', [AdminController::class, 'deleteComment'])->name('admin.comment.delete');
+    Route::post('/api/comments/{id}/restore', [AdminController::class, 'restoreComment'])->name('admin.comment.restore');
 });

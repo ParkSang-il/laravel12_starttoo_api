@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', '관리자')</title>
     <style>
         * {
@@ -95,6 +96,17 @@
                 <a href="{{ route('admin.business-edit-request.index') }}" 
                    class="menu-item {{ request()->routeIs('admin.business-edit-request.*') ? 'active' : '' }}">
                     정보수정요청 관리
+                </a>
+            </div>
+            <div class="menu-category">
+                <div class="menu-category-title">포트폴리오</div>
+                <a href="{{ route('admin.portfolio.index') }}" 
+                   class="menu-item {{ request()->routeIs('admin.portfolio.*') ? 'active' : '' }}">
+                    포트폴리오 관리
+                </a>
+                <a href="{{ route('admin.comment.index') }}" 
+                   class="menu-item {{ request()->routeIs('admin.comment.*') ? 'active' : '' }}">
+                    댓글/대댓글 관리
                 </a>
             </div>
         </nav>
