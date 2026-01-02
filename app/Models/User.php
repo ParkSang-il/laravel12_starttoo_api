@@ -23,6 +23,11 @@ class User extends Authenticatable implements JWTSubject
         'phone_verified_at',
         'username',
         'profile_image',
+        'suspended_until',
+        'suspension_type',
+        'suspension_reason',
+        'suspended_by',
+        'suspended_at',
     ];
 
     /**
@@ -44,6 +49,8 @@ class User extends Authenticatable implements JWTSubject
         return [
             'user_type' => 'integer',
             'phone_verified_at' => 'datetime:Y-m-d H:i:s',
+            'suspended_until' => 'datetime:Y-m-d H:i:s',
+            'suspended_at' => 'datetime:Y-m-d H:i:s',
             'deleted_at' => 'datetime:Y-m-d H:i:s',
             'created_at' => 'datetime:Y-m-d H:i:s',
             'updated_at' => 'datetime:Y-m-d H:i:s',
@@ -88,5 +95,78 @@ class User extends Authenticatable implements JWTSubject
     public function portfolios()
     {
         return $this->hasMany(Portfolio::class);
+    }
+
+    /**
+     * 로그인 기록 관계
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function loginLogs()
+    {
+        return $this->hasMany(UserLoginLog::class);
+    }
+
+    /**
+     * 정지 처리한 관리자 관계
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function suspendedByUser()
+    {
+        return $this->belongsTo(User::class, 'suspended_by');
+    }
+
+    /**
+     * 정지 여부 확인
+     *
+     * @return bool
+     */
+    public function isSuspended(): bool
+    {
+        if (!$this->suspended_until) {
+            return false;
+        }
+
+        // 영구정지 (9999-12-31)
+        if ($this->suspended_until->year === 9999) {
+            return true;
+        }
+
+        // 기간 정지 (현재 시간이 정지 해제 일시보다 이전이면 정지 중)
+        return now()->lt($this->suspended_until);
+    }
+
+    /**
+     * 정지 상태 텍스트 반환
+     *
+     * @return string|null
+     */
+    public function getSuspensionStatusText(): ?string
+    {
+        if (!$this->isSuspended()) {
+            return null;
+        }
+
+        if ($this->suspended_until->year === 9999) {
+            return '영구정지';
+        }
+
+        $days = now()->diffInDays($this->suspended_until, false);
+        if ($days > 0) {
+            return "정지 중 (남은 기간: {$days}일)";
+        }
+
+        return '정지 만료';
+    }
+
+    public function followings()
+    {
+        return $this->belongsToMany(User::class, 'user_follows', 'follower_id', 'followee_id');
+    }
+
+    public function followers()
+    {
+        return $this->belongsToMany(User::class, 'user_follows', 'followee_id', 'follower_id');
     }
 }

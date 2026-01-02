@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PortfolioController;
+use App\Http\Controllers\FollowController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -33,7 +34,7 @@ Route::prefix('auth')->group(function () {
 });
 
 // 인증이 필요한 라우트
-Route::middleware('auth:api')->group(function () {
+Route::middleware(['auth:api', 'check.suspended'])->group(function () {
     Route::prefix('auth')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::put('/profile', [AuthController::class, 'updateProfile']); // 프로필 수정
@@ -67,7 +68,10 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/{id}/comments/{commentId}/report', [PortfolioController::class, 'reportComment']); // 댓글 신고
     });
 
-    // 여기에 추가 API 라우트를 등록하세요
-    // 예: 팔로우, 좋아요 등
+    // 팔로우/언팔로우 및 목록
+    Route::post('/follows/{id}', [FollowController::class, 'follow']); // 팔로우 생성
+    Route::delete('/follows/{id}', [FollowController::class, 'unfollow']); // 언팔로우
+    Route::get('/me/followers', [FollowController::class, 'followers']); // 내 팔로워(사업자만)
+    Route::get('/me/followings', [FollowController::class, 'followings']); // 내 팔로잉
 });
 

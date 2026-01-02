@@ -1,15 +1,21 @@
 services:
   app:
-    image: php:8.2-fpm
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
     container_name: starttoo_app
     restart: unless-stopped
     working_dir: /var/www/html
     volumes:
       - ./:/var/www/html
+      - starttoo_storage:/var/www/html/storage
+      - starttoo_bootstrap_cache:/var/www/html/bootstrap/cache
     networks:
       - starttoo_network
     depends_on:
       - mysql
+      - redis
+      - soketi
 
   nginx:
     image: nginx:alpine
@@ -19,6 +25,8 @@ services:
       - "8000:80"
     volumes:
       - ./:/var/www/html
+      - starttoo_storage:/var/www/html/storage
+      - starttoo_bootstrap_cache:/var/www/html/bootstrap/cache
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
     networks:
       - starttoo_network
@@ -34,7 +42,7 @@ services:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_PASSWORD: root
       MYSQL_USER: starttoo
-      
+
     ports:
       - "3306:3306"
     volumes:
@@ -54,9 +62,32 @@ services:
       - starttoo_network
     command: redis-server --appendonly yes
 
+
+  soketi:
+    image: quay.io/soketi/soketi:1.6.1-16-alpine
+    container_name: starttoo_soketi
+    restart: unless-stopped
+    environment:
+      SOKETI_DEFAULT_APP_ID: "app-id"
+      SOKETI_DEFAULT_APP_KEY: "app-key"
+      SOKETI_DEFAULT_APP_SECRET: "app-secret"
+      SOKETI_PORT: "6001"
+      SOKETI_DEBUG: "1"
+      # (권장) scale-out/동기화용 Redis
+      SOKETI_REDIS_HOST: "redis"
+      SOKETI_REDIS_PORT: "6379"
+    ports:
+      - "6001:6001"
+    networks:
+      - starttoo_network
+    depends_on:
+      - redis
+
+
   # Node.js 채팅 서버 (선택사항 - Laravel Broadcasting 대신 사용 가능)
   # nodejs:
   #   build:
+
   #     context: ./docker/nodejs
   #     dockerfile: Dockerfile
   #   container_name: starttoo_nodejs
@@ -82,4 +113,8 @@ volumes:
   starttoo_mysql_data:
     driver: local
   starttoo_redis_data:
+    driver: local
+  starttoo_storage:
+    driver: local
+  starttoo_bootstrap_cache:
     driver: local

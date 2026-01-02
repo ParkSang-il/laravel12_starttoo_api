@@ -151,7 +151,7 @@ class PortfolioController extends Controller
             if ($user->user_type !== 2) {
                 return response()->json([
                     'success' => false,
-                    'message' => '사업자 회원만 포트폴리오를 생성할 수 있습니다.',
+                    'message' => '권한이 없습니다.',
                 ], 403);
             }
 

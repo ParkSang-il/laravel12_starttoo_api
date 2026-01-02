@@ -156,7 +156,7 @@ return [
     |
     */
 
-    'domain' => env('SESSION_DOMAIN'),
+    'domain' => env('SESSION_DOMAIN', null), // null이면 현재 도메인에서만 작동 (HTTP/HTTPS 모두 지원)
 
     /*
     |--------------------------------------------------------------------------
@@ -169,7 +169,7 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE', false), // HTTP에서는 false로 설정
+    'secure' => env('SESSION_SECURE_COOKIE', false), // HTTP 환경에서는 false로 설정 (인증서 없이도 작동)
 
     /*
     |--------------------------------------------------------------------------
@@ -199,7 +199,7 @@ return [
     |
     */
 
-    'same_site' => env('SESSION_SAME_SITE', null), // null로 변경하여 쿠키 전달 보장 (테스트용)
+    'same_site' => env('SESSION_SAME_SITE', 'lax'), // HTTP 환경에서도 작동하도록 'lax' 설정 (인증서 없이도 작동)
 
     /*
     |--------------------------------------------------------------------------

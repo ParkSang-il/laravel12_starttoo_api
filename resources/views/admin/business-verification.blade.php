@@ -201,8 +201,8 @@
 
 @section('content')
     <h1>사업자 가입신청 관리</h1>
-        
-        
+
+
         <div class="filter-section">
             <select id="statusFilter">
                 <option value="pending">대기중</option>
@@ -214,7 +214,7 @@
         </div>
 
         <div id="loading" class="loading" style="display: none;">로딩 중...</div>
-        
+
         <table id="verificationTable" style="display: none;">
             <thead>
                 <tr>
@@ -279,16 +279,16 @@
             currentStatus = document.getElementById('statusFilter').value;
             const loading = document.getElementById('loading');
             const table = document.getElementById('verificationTable');
-            
+
             loading.style.display = 'block';
             table.style.display = 'none';
 
-            fetch(`/admin/api/business-verifications?status=${currentStatus}&per_page=15&page=${currentPage}`)
+            fetch(`/admin/api/business-verifications?status=${currentStatus}&page=${currentPage}`)
                 .then(response => response.json())
                 .then(data => {
                     loading.style.display = 'none';
                     table.style.display = 'table';
-                    
+
                     if (data.success) {
                         renderTable(data.data.list);
                         renderPagination(data.data.pagination);
@@ -326,7 +326,7 @@
                     images.push({url: item.safety_education_certificate, label: '안전교육이수증'});
                 }
 
-                const imageHtml = images.length > 0 
+                const imageHtml = images.length > 0
                     ? `<div class="image-links">
                         ${images.map((img, idx) => `
                             <a href="#" class="image-link" onclick="event.preventDefault(); openImageModal('${img.url}', '${img.label}'); return false;">
@@ -492,7 +492,7 @@
         // 반려 확인
         function confirmReject() {
             const reason = document.getElementById('rejectedReason').value.trim();
-            
+
             if (!reason) {
                 alert('반려 사유를 입력해주세요.');
                 return;

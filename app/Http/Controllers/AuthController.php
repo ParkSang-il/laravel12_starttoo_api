@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\UserLoginLog;
 use App\Models\BusinessVerification;
 use App\Models\DeviceRegistration;
 use App\Models\ArtistProfile;
@@ -73,6 +74,17 @@ class AuthController extends Controller
                 ], 200);
             }
 
+            // 정지 여부 확인
+            if ($user->isSuspended()) {
+                // 로그인 실패 기록
+                $this->logLoginAttempt($user->id, $request, false, '정지된 계정입니다.');
+
+                return response()->json([
+                    'success' => false,
+                    'message' => $user->getSuspensionStatusText() ?? '정지된 계정입니다.',
+                ], 403);
+            }
+
             // 기존 계정이 있으면 로그인 처리
             // 휴대폰 인증 완료 업데이트
             if (!$user->phone_verified_at) {
@@ -83,6 +95,9 @@ class AuthController extends Controller
 
             // JWT 토큰 발급
             $token = JWTAuth::fromUser($user);
+
+            // 로그인 성공 기록
+            $this->logLoginAttempt($user->id, $request, true);
 
             // 디바이스 정보 업데이트는 로그인 후 registerDevice를 별도로 호출하도록 클라이언트에 안내
             // (토큰이 발급된 후 호출해야 하므로)
@@ -563,7 +578,7 @@ class AuthController extends Controller
             if ($user->user_type !== 2) {
                 return response()->json([
                     'success' => false,
-                    'message' => '사업자 회원만 아티스트 프로필을 수정할 수 있습니다.',
+                    'message' => '권한이 없습니다.',
                 ], 403);
             }
 
@@ -1186,6 +1201,9 @@ class AuthController extends Controller
             // JWT 토큰 발급
             $token = JWTAuth::fromUser($user);
 
+            // 가입 후 로그인 성공 기록 (토큰이 발급되므로 로그인으로 간주)
+            $this->logLoginAttempt($user->id, $request, true);
+
             // 디바이스가 등록되어 있다면 user_id와 수신동의 정보 업데이트
             $deviceId = $request->header('X-Device-ID');
             if ($deviceId) {
@@ -1234,6 +1252,86 @@ class AuthController extends Controller
                 'message' => '회원가입 중 오류가 발생했습니다.',
                 'error' => config('app.debug') ? $e->getMessage() : null,
             ], 500);
+        }
+    }
+
+    /**
+     * 로그인 시도 기록 저장
+     *
+     * @param int|null $userId
+     * @param Request $request
+     * @param bool $isSuccess
+     * @param string|null $failureReason
+     * @return void
+     */
+    private function logLoginAttempt(?int $userId, Request $request, bool $isSuccess, ?string $failureReason = null): void
+    {
+        try {
+            $userAgent = $request->header('User-Agent', '');
+            $ipAddress = $request->ip();
+
+            // User Agent 파싱 (간단한 버전)
+            $deviceType = 'unknown';
+            $deviceModel = null;
+            $os = null;
+            $browser = null;
+
+            if ($userAgent) {
+                // 모바일 디바이스 체크
+                if (preg_match('/Mobile|Android|iPhone|iPad/i', $userAgent)) {
+                    $deviceType = 'mobile';
+                    if (preg_match('/iPhone/i', $userAgent)) {
+                        $deviceModel = 'iPhone';
+                    } elseif (preg_match('/iPad/i', $userAgent)) {
+                        $deviceType = 'tablet';
+                        $deviceModel = 'iPad';
+                    } elseif (preg_match('/Android/i', $userAgent)) {
+                        $deviceModel = 'Android';
+                    }
+                } else {
+                    $deviceType = 'desktop';
+                }
+
+                // OS 체크
+                if (preg_match('/Windows/i', $userAgent)) {
+                    $os = 'Windows';
+                } elseif (preg_match('/Mac OS/i', $userAgent)) {
+                    $os = 'macOS';
+                } elseif (preg_match('/Linux/i', $userAgent)) {
+                    $os = 'Linux';
+                } elseif (preg_match('/Android/i', $userAgent)) {
+                    $os = 'Android';
+                } elseif (preg_match('/iOS/i', $userAgent)) {
+                    $os = 'iOS';
+                }
+
+                // 브라우저 체크
+                if (preg_match('/Chrome/i', $userAgent) && !preg_match('/Edg/i', $userAgent)) {
+                    $browser = 'Chrome';
+                } elseif (preg_match('/Safari/i', $userAgent) && !preg_match('/Chrome/i', $userAgent)) {
+                    $browser = 'Safari';
+                } elseif (preg_match('/Firefox/i', $userAgent)) {
+                    $browser = 'Firefox';
+                } elseif (preg_match('/Edg/i', $userAgent)) {
+                    $browser = 'Edge';
+                }
+            }
+
+            UserLoginLog::create([
+                'user_id' => $userId,
+                'ip_address' => $ipAddress,
+                'user_agent' => $userAgent,
+                'device_type' => $deviceType,
+                'device_model' => $deviceModel,
+                'os' => $os,
+                'browser' => $browser,
+                'login_type' => 'phone',
+                'is_success' => $isSuccess,
+                'failure_reason' => $failureReason,
+            ]);
+        } catch (\Exception $e) {
+            // 로그인 기록 저장 실패는 로그인 자체를 막지 않음
+            \Log::error('로그인 기록 저장 실패: ' . $e->getMessage());
         }
     }
 }

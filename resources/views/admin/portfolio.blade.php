@@ -220,15 +220,20 @@
 
 @section('content')
     <h1>포트폴리오 관리</h1>
-    
+
     <div class="filter-section">
         <input type="text" id="searchInput" placeholder="제목 또는 내용 검색...">
+        <select id="hasReportsFilter">
+            <option value="">전체</option>
+            <option value="true">신고 있음</option>
+            <option value="false">신고 없음</option>
+        </select>
         <button onclick="loadPortfolios()">검색</button>
         <button onclick="resetFilters()">초기화</button>
     </div>
 
     <div id="loading" class="loading" style="display: none;">로딩 중...</div>
-    
+
     <table id="portfolioTable">
         <thead>
             <tr>
@@ -258,6 +263,17 @@
             <span class="close" onclick="closeModal()">&times;</span>
             <div id="modalContent">
                 <!-- 상세 내용이 여기에 표시됩니다 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 신고 리스트 모달 -->
+    <div id="reportModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeReportModal()">&times;</span>
+            <h2 id="reportModalTitle">신고 내역</h2>
+            <div id="reportModalContent">
+                <!-- 신고 리스트가 여기에 표시됩니다 -->
             </div>
         </div>
     </div>
@@ -308,7 +324,7 @@
         // 페이지 로드 시 포트폴리오 목록 불러오기
         document.addEventListener('DOMContentLoaded', function() {
             loadPortfolios();
-            
+
             // 검색 입력 필드에서 Enter 키 처리
             document.getElementById('searchInput').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
@@ -321,15 +337,18 @@
         function loadPortfolios(page = 1) {
             currentPage = page;
             currentSearch = document.getElementById('searchInput').value;
-            
+            const hasReports = document.getElementById('hasReportsFilter').value;
+
             document.getElementById('loading').style.display = 'block';
             document.getElementById('portfolioTableBody').innerHTML = '';
 
             const url = new URL('/admin/api/portfolios', window.location.origin);
             url.searchParams.append('page', page);
-            url.searchParams.append('per_page', 15);
             if (currentSearch) {
                 url.searchParams.append('search', currentSearch);
+            }
+            if (hasReports) {
+                url.searchParams.append('has_reports', hasReports);
             }
 
             fetch(url)
@@ -361,7 +380,7 @@
                     tr.classList.add('reported');
                 }
 
-                const tagsHtml = portfolio.tags.map(tag => 
+                const tagsHtml = portfolio.tags.map(tag =>
                     `<span class="tag">${tag.name}</span>`
                 ).join('');
 
@@ -378,16 +397,16 @@
                     <td>${portfolio.images.length}</td>
                     <td>${portfolio.created_at}</td>
                     <td>
-                        ${portfolio.pending_reports_count > 0 ? 
-                            `<span style="color: red; font-weight: bold;">${portfolio.pending_reports_count}건</span>` : 
-                            portfolio.reports_count > 0 ? `${portfolio.reports_count}건` : '0건'
+                        ${portfolio.reports_count > 0 ?
+                            `<span style="color: ${portfolio.pending_reports_count > 0 ? 'red' : '#333'}; font-weight: bold; cursor: pointer; text-decoration: underline;" onclick="showReports(${portfolio.id}, 'portfolio')" title="신고 내역 보기">${portfolio.pending_reports_count > 0 ? portfolio.pending_reports_count : portfolio.reports_count}건</span>` :
+                            '0건'
                         }
                     </td>
                     <td>${statusHtml}</td>
                     <td>
                         <button class="btn btn-primary" onclick="showDetail(${portfolio.id})">상세</button>
                         <button class="btn btn-primary" onclick="showEdit(${portfolio.id})">수정</button>
-                        ${!portfolio.deleted_at ? 
+                        ${!portfolio.deleted_at ?
                             `<button class="btn btn-danger" onclick="deletePortfolio(${portfolio.id})">삭제</button>` :
                             '<span style="color: #999;">삭제됨</span>'
                         }
@@ -429,6 +448,7 @@
         // 필터 초기화
         function resetFilters() {
             document.getElementById('searchInput').value = '';
+            document.getElementById('hasReportsFilter').value = '';
             loadPortfolios(1);
         }
 
@@ -439,19 +459,19 @@
                 .then(data => {
                     if (data.success) {
                         const portfolio = data.data;
-                        const imagesHtml = portfolio.images.map(img => 
+                        const imagesHtml = portfolio.images.map(img =>
                             `<div class="image-item"><img src="${img.image_url}" alt="Image"></div>`
                         ).join('');
 
-                        const tagsHtml = portfolio.tags.map(tag => 
+                        const tagsHtml = portfolio.tags.map(tag =>
                             `<span class="tag">${tag.name}</span>`
                         ).join('');
 
                         const commentsHtml = portfolio.comments.map(comment => {
                             const deletedClass = comment.is_deleted ? 'deleted' : '';
-                            
+
                             // 대댓글 HTML 생성
-                            const repliesHtml = comment.replies && comment.replies.length > 0 
+                            const repliesHtml = comment.replies && comment.replies.length > 0
                                 ? comment.replies.map(reply => {
                                     const replyDeletedClass = reply.is_deleted ? 'deleted' : '';
                                     return `
@@ -464,7 +484,7 @@
                                     `;
                                 }).join('')
                                 : '';
-                            
+
                             return `
                                 <div class="comment-item ${deletedClass}">
                                     ${comment.is_pinned ? '<span style="color: #ff6b6b; font-weight: bold;">📌 고정</span> ' : ''}
@@ -492,8 +512,8 @@
                                 ${commentsHtml || '<p>댓글이 없습니다.</p>'}
                             </div>
                             <p><strong>신고:</strong> ${portfolio.pending_reports_count}건 (대기중) / 총 ${portfolio.reports_count}건</p>
-                            <p><strong>상태:</strong> 
-                                ${portfolio.is_public ? '공개' : '비공개'} | 
+                            <p><strong>상태:</strong>
+                                ${portfolio.is_public ? '공개' : '비공개'} |
                                 ${portfolio.is_sensitive ? '민감정보' : '일반'}
                             </p>
                         `;
@@ -511,6 +531,120 @@
         // 모달 닫기
         function closeModal() {
             document.getElementById('detailModal').style.display = 'none';
+        }
+
+        // 신고 리스트 보기
+        function showReports(id, type) {
+            const url = type === 'portfolio'
+                ? `/admin/api/portfolios/${id}/reports`
+                : `/admin/api/comments/${id}/reports`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const reports = data.data.reports;
+                        const title = type === 'portfolio'
+                            ? `포트폴리오 신고 내역 - ${data.data.portfolio_title}`
+                            : `댓글 신고 내역`;
+
+                        const reportsHtml = reports.length > 0
+                            ? reports.map(report => {
+                                const statusColor = report.status === 'pending' ? '#ffc107' :
+                                                   report.status === 'resolved' ? '#28a745' :
+                                                   report.status === 'rejected' ? '#6c757d' : '#dc3545';
+                                const actionButtons = report.status === 'pending'
+                                    ? `
+                                        <div style="margin-top: 10px; display: flex; gap: 5px;">
+                                            <button class="btn btn-success" onclick="updateReportStatus(${report.id}, 'portfolio', 'resolved', ${id})" style="font-size: 11px; padding: 5px 10px;">처리완료</button>
+                                            <button class="btn btn-danger" onclick="updateReportStatus(${report.id}, 'portfolio', 'rejected', ${id})" style="font-size: 11px; padding: 5px 10px;">거절</button>
+                                        </div>
+                                    `
+                                    : '';
+                                return `
+                                    <div class="report-item" style="margin-bottom: 15px; padding: 15px; background-color: #f8f9fa; border-radius: 4px; border-left: 4px solid ${statusColor};">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                            <strong>${report.user.username}</strong>
+                                            <span style="background-color: ${statusColor}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+                                                ${report.status === 'pending' ? '대기중' :
+                                                  report.status === 'resolved' ? '처리완료' :
+                                                  report.status === 'rejected' ? '거절됨' : '검토완료'}
+                                            </span>
+                                        </div>
+                                        <p><strong>신고 유형:</strong> ${report.report_type}</p>
+                                        <p><strong>신고 사유:</strong> ${report.reason || '(사유 없음)'}</p>
+                                        ${report.admin_note ? `<p><strong>관리자 메모:</strong> ${report.admin_note}</p>` : ''}
+                                        <p style="margin-top: 10px; font-size: 12px; color: #666;">
+                                            신고일: ${report.created_at}
+                                            ${report.reviewed_at ? ` | 검토일: ${report.reviewed_at}` : ''}
+                                        </p>
+                                        ${actionButtons}
+                                    </div>
+                                `;
+                            }).join('')
+                            : '<p>신고 내역이 없습니다.</p>';
+
+                        document.getElementById('reportModalTitle').textContent = title;
+                        document.getElementById('reportModalContent').innerHTML = `
+                            <p><strong>총 신고: ${data.data.total_count}건</strong> | <strong style="color: red;">대기중: ${data.data.pending_count}건</strong></p>
+                            <div style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
+                                ${reportsHtml}
+                            </div>
+                        `;
+                        document.getElementById('reportModal').style.display = 'block';
+                    } else {
+                        alert('신고 리스트를 불러오는 중 오류가 발생했습니다.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('신고 리스트를 불러오는 중 오류가 발생했습니다.');
+                });
+        }
+
+        // 신고 모달 닫기
+        function closeReportModal() {
+            document.getElementById('reportModal').style.display = 'none';
+        }
+
+        // 신고 상태 변경
+        function updateReportStatus(reportId, type, status, targetId) {
+            const statusText = status === 'resolved' ? '처리완료' : '거절';
+            if (!confirm(`정말로 이 신고를 ${statusText} 처리하시겠습니까?`)) {
+                return;
+            }
+
+            const url = type === 'portfolio'
+                ? `/admin/api/portfolio-reports/${reportId}/status`
+                : `/admin/api/comment-reports/${reportId}/status`;
+
+            fetch(url, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                },
+                body: JSON.stringify({
+                    status: status,
+                    admin_note: ''
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message);
+                        // 신고 리스트 다시 로드
+                        showReports(targetId, type);
+                        // 포트폴리오 목록 새로고침 (신고 카운트 업데이트)
+                        loadPortfolios(currentPage);
+                    } else {
+                        alert(data.message || '신고 상태 변경 중 오류가 발생했습니다.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('신고 상태 변경 중 오류가 발생했습니다.');
+                });
         }
 
         // 수정 모달 열기
@@ -632,11 +766,15 @@
         window.onclick = function(event) {
             const detailModal = document.getElementById('detailModal');
             const editModal = document.getElementById('editModal');
+            const reportModal = document.getElementById('reportModal');
             if (event.target === detailModal) {
                 closeModal();
             }
             if (event.target === editModal) {
                 closeEditModal();
+            }
+            if (event.target === reportModal) {
+                closeReportModal();
             }
         }
     </script>

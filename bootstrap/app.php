@@ -22,6 +22,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(remove: [
             \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
         ]);
+
+        // 관리자 인증 미들웨어 별칭 등록
+        $middleware->alias([
+            'admin.auth' => \App\Http\Middleware\AdminAuth::class,
+            'check.suspended' => \App\Http\Middleware\CheckSuspendedUser::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

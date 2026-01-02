@@ -78,6 +78,18 @@
             margin-bottom: 30px;
             color: #333;
         }
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+        .badge-danger {
+            background-color: #dc3545;
+            color: white;
+        }
     </style>
     @stack('styles')
 </head>
@@ -85,6 +97,17 @@
     <div class="sidebar">
         <div class="sidebar-header">
             <h2>관리자</h2>
+            <div style="margin-top: 10px; font-size: 12px; color: #bdc3c7;">
+                @auth('admin')
+                    <div>{{ Auth::guard('admin')->user()->name ?? Auth::guard('admin')->user()->username }}</div>
+                    <div style="font-size: 11px; margin-top: 5px;">
+                        <a href="{{ route('admin.auth.logout') }}" onclick="event.preventDefault(); document.getElementById('logout-form').submit();" style="color: #ecf0f1; text-decoration: none;">로그아웃</a>
+                        <form id="logout-form" action="{{ route('admin.auth.logout') }}" method="POST" style="display: none;">
+                            @csrf
+                        </form>
+                    </div>
+                @endauth
+            </div>
         </div>
         <nav>
             <div class="menu-category">
@@ -103,12 +126,36 @@
                 <a href="{{ route('admin.portfolio.index') }}" 
                    class="menu-item {{ request()->routeIs('admin.portfolio.*') ? 'active' : '' }}">
                     포트폴리오 관리
+                    <span id="portfolioReportBadge" class="badge badge-danger" style="display: none;">0</span>
                 </a>
                 <a href="{{ route('admin.comment.index') }}" 
                    class="menu-item {{ request()->routeIs('admin.comment.*') ? 'active' : '' }}">
                     댓글/대댓글 관리
+                    <span id="commentReportBadge" class="badge badge-danger" style="display: none;">0</span>
                 </a>
             </div>
+            <div class="menu-category">
+                <div class="menu-category-title">회원</div>
+                <a href="{{ route('admin.user.index') }}" 
+                   class="menu-item {{ request()->routeIs('admin.user.*') ? 'active' : '' }}">
+                    회원 관리
+                </a>
+                <a href="{{ route('admin.login-log.index') }}" 
+                   class="menu-item {{ request()->routeIs('admin.login-log.*') ? 'active' : '' }}">
+                    관리자 로그인 로그
+                </a>
+            </div>
+            @auth('admin')
+                @if(Auth::guard('admin')->user()->isSuperAdmin())
+                <div class="menu-category">
+                    <div class="menu-category-title">시스템</div>
+                    <a href="{{ route('admin.auth.create') }}" 
+                       class="menu-item {{ request()->routeIs('admin.auth.create') ? 'active' : '' }}">
+                        관리자 계정 추가
+                    </a>
+                </div>
+                @endif
+            @endauth
         </nav>
     </div>
     <div class="main-content">
@@ -116,6 +163,46 @@
             @yield('content')
         </div>
     </div>
+    @push('scripts')
+    <script>
+        // 신고 카운트 로드
+        function loadReportCounts() {
+            fetch('/admin/api/report-counts')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const portfolioCount = data.data.portfolio_reports;
+                        const commentCount = data.data.comment_reports;
+                        
+                        const portfolioBadge = document.getElementById('portfolioReportBadge');
+                        const commentBadge = document.getElementById('commentReportBadge');
+                        
+                        if (portfolioCount > 0) {
+                            portfolioBadge.textContent = portfolioCount;
+                            portfolioBadge.style.display = 'inline-block';
+                        } else {
+                            portfolioBadge.style.display = 'none';
+                        }
+                        
+                        if (commentCount > 0) {
+                            commentBadge.textContent = commentCount;
+                            commentBadge.style.display = 'inline-block';
+                        } else {
+                            commentBadge.style.display = 'none';
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('신고 카운트 로드 오류:', error);
+                });
+        }
+        
+        // 페이지 로드 시 신고 카운트 로드
+        document.addEventListener('DOMContentLoaded', function() {
+            loadReportCounts();
+        });
+    </script>
+    @endpush
     @stack('scripts')
 </body>
 </html>
