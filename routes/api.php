@@ -34,7 +34,7 @@ Route::prefix('auth')->group(function () {
 });
 
 // 인증이 필요한 라우트
-Route::middleware(['auth:api', 'check.suspended'])->group(function () {
+Route::middleware(['auth:api'])->group(function () {
     Route::prefix('auth')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::put('/profile', [AuthController::class, 'updateProfile']); // 프로필 수정
@@ -54,7 +54,7 @@ Route::middleware(['auth:api', 'check.suspended'])->group(function () {
         Route::delete('/{id}', [PortfolioController::class, 'destroy']); // 포트폴리오 삭제
         Route::post('/{id}/like', [PortfolioController::class, 'like']); // 포트폴리오 좋아요
         Route::delete('/{id}/like', [PortfolioController::class, 'unlike']); // 포트폴리오 좋아요 취소
-        
+
         // 댓글 API
         Route::get('/{id}/comments', [PortfolioController::class, 'getComments']); // 댓글 목록 조회 (상위 댓글만)
         Route::get('/{id}/comments/{commentId}/replies', [PortfolioController::class, 'getReplies']); // 대댓글 목록 조회
@@ -62,7 +62,7 @@ Route::middleware(['auth:api', 'check.suspended'])->group(function () {
         Route::put('/{id}/comments/{commentId}', [PortfolioController::class, 'updateComment']); // 댓글 수정
         Route::delete('/{id}/comments/{commentId}', [PortfolioController::class, 'deleteComment']); // 댓글 삭제
         Route::post('/{id}/comments/{commentId}/pin', [PortfolioController::class, 'pinComment']); // 댓글 고정/해제
-        
+
         // 신고 API
         Route::post('/{id}/report', [PortfolioController::class, 'reportPortfolio']); // 포트폴리오 신고
         Route::post('/{id}/comments/{commentId}/report', [PortfolioController::class, 'reportComment']); // 댓글 신고

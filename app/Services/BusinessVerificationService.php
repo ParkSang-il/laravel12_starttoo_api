@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\BusinessVerification;
 use App\Models\BusinessVerificationRequest;
 use App\Models\ArtistProfile;
+use App\Models\User;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class BusinessVerificationService
@@ -103,6 +104,14 @@ class BusinessVerificationService
 
         // 아티스트 프로필 자동 생성
         $this->createArtistProfile($verification);
+
+        //회원정보 회원유형 사업자로 자동변경
+        $user = User::find($verification->user_id);
+        if ($user) {
+            $user->update([
+                'user_type' => 2,
+            ]);
+        }
 
         return $verification;
     }

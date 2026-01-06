@@ -329,7 +329,7 @@
                 const imageHtml = images.length > 0
                     ? `<div class="image-links">
                         ${images.map((img, idx) => `
-                            <a href="#" class="image-link" onclick="event.preventDefault(); openImageModal('${img.url}', '${img.label}'); return false;">
+                            <a href="#" class="image-link" onclick="event.preventDefault(); openImageModal('https://kr.object.ncloudstorage.com${img.url}', '${img.label}'); return false;">
                                 ${img.label}
                             </a>
                         `).join('')}

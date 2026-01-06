@@ -161,6 +161,17 @@ class AuthController extends Controller
                 ], 409);
             }
 
+            //이미 등록된 사업자 번호인지 확인
+            if (isset($request->business_number)) {
+                $duplicateBizNumber = BusinessVerification::where('business_number', $request->business_number)->first();
+                if ($duplicateBizNumber) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => '이미 등록된 사업자 번호입니다.',
+                    ], 409);
+                }
+            }
+
             // 유효성 검사
             $validator = Validator::make($request->all(), [
                 'business_name' => 'required|string|max:100',
