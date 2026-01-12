@@ -64,6 +64,15 @@ class Portfolio extends Model
     }
 
     /**
+     * 사업자 정보 관계
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function businessVerification()
+    {
+        return $this->hasOne(BusinessVerification::class, 'user_id', 'user_id');
+    }
+
+    /**
      * 포트폴리오 이미지 관계
      *
      * @return \Illuminate\Database\Eloquent\Relations\HasMany

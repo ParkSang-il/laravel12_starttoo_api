@@ -32,12 +32,21 @@ class PortfolioController extends Controller
             $userId = $request->input('user_id'); // 특정 아티스트의 포트폴리오 조회
             $isPublic = $request->input('is_public', true); // 기본값: 공개된 것만
 
-            $query = Portfolio::with(['images', 'tags', 'user:id,username,profile_image']);
+            $query = Portfolio::with(['images', 'tags', 'user:id,username,profile_image,user_type', 'businessVerification:id,user_id,business_name']);
 
             // 특정 사용자의 포트폴리오만 조회
             if ($userId) {
                 $query->where('user_id', $userId);
             }
+
+            // 사용자 deleted_at가 null이고 suspended_until(정지기간)이 현재보다 이후인 포트폴리오 가져오기
+            $query->whereHas('user', function ($q) {
+                $q->whereNull('deleted_at')
+                  ->where(function ($subQ) {
+                      $subQ->whereNull('suspended_until')
+                           ->orWhere('suspended_until', '<=', now());
+                  });
+            });
 
             // 본인 포트폴리오가 아니면 공개된 것만 조회
             if (!$user || ($userId && $userId != $user->id)) {
@@ -1265,6 +1274,39 @@ class PortfolioController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => '신고 처리 중 오류가 발생했습니다.',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
+    }
+
+    /**
+     * 포트폴리오 개인화 피드 조회 (우선 전체리스트 desc)
+     * @return JsonResponse
+     */
+    public function feed()
+    {
+        try {
+            $portfolios = Portfolio::where('is_public', true)
+                ->orderBy('created_at', 'desc')
+                ->with(['user:id,username,profile_image', 'tags', 'images'])
+                ->paginate(15);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'portfolios' => $portfolios->items(),
+                    'pagination' => [
+                        'current_page' => $portfolios->currentPage(),
+                        'last_page' => $portfolios->lastPage(),
+                        'per_page' => $portfolios->perPage(),
+                        'total' => $portfolios->total(),
+                    ],
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => '피드 조회 중 오류가 발생했습니다.',
                 'error' => config('app.debug') ? $e->getMessage() : null,
             ], 500);
         }

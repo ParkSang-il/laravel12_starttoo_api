@@ -73,5 +73,8 @@ Route::middleware(['auth:api'])->group(function () {
     Route::delete('/follows/{id}', [FollowController::class, 'unfollow']); // 언팔로우
     Route::get('/me/followers', [FollowController::class, 'followers']); // 내 팔로워(사업자만)
     Route::get('/me/followings', [FollowController::class, 'followings']); // 내 팔로잉
+
+    //피드(포트폴리오) 리스트
+    Route::get('/feed', [PortfolioController::class, 'feed']); // 피드 포트폴리오 목록 조회
 });
 
