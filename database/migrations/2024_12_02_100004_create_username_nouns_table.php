@@ -14,8 +14,8 @@ return new class extends Migration
     {
         Schema::create('username_nouns', function (Blueprint $table) {
             $table->id()->comment('기본 키');
-            $table->string('word')->unique()->comment('명사 단어');
-            $table->string('category')->nullable()->comment('카테고리 (ink, tool, art, text, symbol, body, time, nature, place, concept)');
+            $table->string('word', 255)->nullable(false)->unique('username_nouns_word_unique')->comment('명사 단어');
+            $table->string('category', 255)->nullable()->comment('카테고리 (ink, tool, art, text, symbol, body, time, nature, place, concept)');
             $table->timestamps();
 
             //인덱스

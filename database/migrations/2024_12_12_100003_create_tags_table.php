@@ -14,8 +14,8 @@ return new class extends Migration
     {
         Schema::create('tags', function (Blueprint $table) {
             $table->id()->comment('기본 키');
-            $table->string('name', 100)->unique()->comment('태그명');
-            $table->integer('usage_count')->default(0)->comment('사용 횟수');
+            $table->string('name', 100)->nullable(false)->unique('tags_name_unique')->comment('태그명');
+            $table->integer('usage_count')->default(0)->nullable(false)->comment('사용 횟수');
             $table->timestamps();
 
             // 인덱스

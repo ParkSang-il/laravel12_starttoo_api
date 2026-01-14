@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('artist_profiles', function (Blueprint $table) {
             $table->id()->comment('기본 키');
-            $table->unsignedBigInteger('user_id')->comment('사용자 ID (users.id)');
+            $table->unsignedBigInteger('user_id')->nullable(false)->comment('사용자 ID (users.id)');
             $table->string('cover_image', 255)->nullable()->comment('커버 이미지 URL');
             $table->string('artist_name', 100)->nullable()->comment('아티스트명');
             $table->string('email', 100)->nullable()->comment('이메일');

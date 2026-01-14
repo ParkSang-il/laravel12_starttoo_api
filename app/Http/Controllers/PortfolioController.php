@@ -55,13 +55,36 @@ class PortfolioController extends Controller
                 $query->where('is_public', $isPublic);
             }
 
+            //본인이 좋아요를 했는지 여부 추가
+            if ($user) {
+                $query->withExists(['likes as is_liked' => function ($q) use ($user) {
+                    $q->where('user_id', $user->id);
+                }]);
+            }
+
+            //코멘트 수 가져오기
+            $query->withCount('comments as comments_count');
+
             $portfolios = $query->orderBy('created_at', 'desc')
                 ->paginate($request->input('per_page', 15));
+
+            // 포트폴리오 데이터 변환 (is_liked, comments_count 포함)
+            $portfoliosData = $portfolios->getCollection()->map(function ($portfolio) use ($user) {
+                $portfolioData = $portfolio->toArray();
+                
+                // is_liked: 로그인한 경우 boolean, 로그인하지 않은 경우 false
+                $portfolioData['is_liked'] = $user ? (bool) ($portfolio->is_liked ?? false) : false;
+                
+                // comments_count: 숫자로 변환
+                $portfolioData['comments_count'] = (int) ($portfolio->comments_count ?? 0);
+                
+                return $portfolioData;
+            });
 
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'portfolios' => $portfolios->items(),
+                    'portfolios' => $portfoliosData->values()->all(),
                     'pagination' => [
                         'current_page' => $portfolios->currentPage(),
                         'last_page' => $portfolios->lastPage(),

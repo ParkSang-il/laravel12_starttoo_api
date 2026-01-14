@@ -13,8 +13,8 @@ return new class extends Migration
     {
         Schema::create('user_follows', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('follower_id')->comment('팔로우 하는 사용자 ID (users.id)');
-            $table->unsignedBigInteger('followee_id')->comment('팔로우 받는 사용자 ID (users.id)');
+            $table->unsignedBigInteger('follower_id')->nullable(false)->comment('팔로우 하는 사용자 ID (users.id)');
+            $table->unsignedBigInteger('followee_id')->nullable(false)->comment('팔로우 받는 사용자 ID (users.id)');
             $table->timestamps();
 
             $table->unique(['follower_id', 'followee_id'], 'uniq_follower_followee');

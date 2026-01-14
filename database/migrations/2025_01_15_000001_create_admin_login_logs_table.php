@@ -16,8 +16,8 @@ return new class extends Migration
             $table->unsignedBigInteger('admin_id')->nullable()->comment('관리자 ID (admins.id)');
             $table->string('username', 100)->nullable()->comment('로그인 시도한 아이디');
             $table->string('ip_address', 45)->nullable()->comment('IP 주소');
-            $table->string('action', 50)->comment('login, logout, password_mismatch');
-            $table->boolean('is_success')->default(false)->comment('성공 여부');
+            $table->string('action', 50)->nullable(false)->comment('login, logout, password_mismatch');
+            $table->boolean('is_success')->default(false)->nullable(false)->comment('성공 여부');
             $table->string('failure_reason', 255)->nullable()->comment('실패 사유');
             $table->timestamps();
 

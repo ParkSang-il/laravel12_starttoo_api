@@ -14,10 +14,10 @@ return new class extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id()->comment('기본 키');
-            $table->tinyInteger('user_type')->unsigned()->comment('회원 유형 (1:일반 회원, 2:사업자)');
-            $table->string('phone', 20)->unique()->comment('휴대폰 번호 (인증 필수)');
+            $table->tinyInteger('user_type')->unsigned()->nullable(false)->comment('회원 유형 (1:일반 회원, 2:사업자)');
+            $table->string('phone', 20)->nullable(false)->unique('users_phone_unique')->comment('휴대폰 번호 (인증 필수)');
             $table->timestamp('phone_verified_at')->nullable()->comment('휴대폰 인증일시');
-            $table->string('username', 50)->unique()->comment('닉네임/사용자명 (필수)');
+            $table->string('username', 50)->nullable(false)->unique('users_username_unique')->comment('닉네임/사용자명 (필수)');
             $table->string('profile_image', 255)->nullable()->comment('프로필 이미지 URL');
 
             $table->timestamps();
@@ -34,7 +34,7 @@ return new class extends Migration
         });
 
         // 테이블 코멘트 추가
-        DB::statement("ALTER TABLE users COMMENT = '사용자 테이블 (일반 회원 및 사업자)'");
+        DB::statement("ALTER TABLE users COMMENT = '사용자 테이블 (정지 기능 포함)'");
     }
 
     /**

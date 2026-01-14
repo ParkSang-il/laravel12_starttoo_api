@@ -14,9 +14,9 @@ return new class extends Migration
     {
         Schema::create('portfolio_likes', function (Blueprint $table) {
             $table->id()->comment('기본 키');
-            $table->unsignedBigInteger('portfolio_id')->comment('포트폴리오 ID (portfolios.id)');
-            $table->unsignedBigInteger('user_id')->comment('사용자 ID (users.id)');
-            $table->timestamp('created_at')->useCurrent()->comment('생성일시');
+            $table->unsignedBigInteger('portfolio_id')->nullable(false)->comment('포트폴리오 ID (portfolios.id)');
+            $table->unsignedBigInteger('user_id')->nullable(false)->comment('사용자 ID (users.id)');
+            $table->timestamp('created_at')->useCurrent()->nullable(false)->comment('생성일시');
 
             // 인덱스
             $table->unique(['portfolio_id', 'user_id'], 'uq_portfolio_user');

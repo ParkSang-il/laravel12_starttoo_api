@@ -14,9 +14,9 @@ return new class extends Migration
     {
         Schema::create('portfolio_images', function (Blueprint $table) {
             $table->id()->comment('기본 키');
-            $table->unsignedBigInteger('portfolio_id')->comment('포트폴리오 ID (portfolios.id)');
-            $table->string('image_url', 255)->comment('이미지 URL');
-            $table->integer('image_order')->default(0)->comment('이미지 순서');
+            $table->unsignedBigInteger('portfolio_id')->nullable(false)->comment('포트폴리오 ID (portfolios.id)');
+            $table->string('image_url', 255)->nullable(false)->comment('이미지 URL');
+            $table->integer('image_order')->default(0)->nullable(false)->comment('이미지 순서');
             $table->decimal('scale', 5, 2)->nullable()->comment('이미지 스케일 (확대/축소 비율)');
             $table->decimal('offset_x', 10, 6)->nullable()->comment('X 오프셋 (정규화된 값, 0.0~1.0)');
             $table->decimal('offset_y', 10, 6)->nullable()->comment('Y 오프셋 (정규화된 값, 0.0~1.0)');

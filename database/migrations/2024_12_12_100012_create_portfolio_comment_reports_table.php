@@ -14,11 +14,11 @@ return new class extends Migration
     {
         Schema::create('portfolio_comment_reports', function (Blueprint $table) {
             $table->id()->comment('기본 키');
-            $table->unsignedBigInteger('comment_id')->comment('댓글 ID (portfolio_comments.id)');
-            $table->unsignedBigInteger('user_id')->comment('신고한 사용자 ID (users.id)');
-            $table->string('report_type', 50)->comment('신고 유형 (spam:스팸, inappropriate:부적절한내용, violence:폭력, hate:혐오, harassment:괴롭힘, other:기타)');
+            $table->unsignedBigInteger('comment_id')->nullable(false)->comment('댓글 ID (portfolio_comments.id)');
+            $table->unsignedBigInteger('user_id')->nullable(false)->comment('신고한 사용자 ID (users.id)');
+            $table->string('report_type', 50)->nullable(false)->comment('신고 유형 (spam:스팸, inappropriate:부적절한내용, violence:폭력, hate:혐오, harassment:괴롭힘, other:기타)');
             $table->text('reason')->nullable()->comment('신고 사유');
-            $table->string('status', 20)->default('pending')->comment('처리 상태 (pending:대기중, reviewed:검토완료, resolved:처리완료, rejected:거절됨)');
+            $table->string('status', 20)->default('pending')->nullable(false)->comment('처리 상태 (pending:대기중, reviewed:검토완료, resolved:처리완료, rejected:거절됨)');
             $table->text('admin_note')->nullable()->comment('관리자 메모');
             $table->timestamp('reviewed_at')->nullable()->comment('검토일시');
             $table->timestamps();

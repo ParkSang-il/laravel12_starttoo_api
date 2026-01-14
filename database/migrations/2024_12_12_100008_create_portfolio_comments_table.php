@@ -14,12 +14,12 @@ return new class extends Migration
     {
         Schema::create('portfolio_comments', function (Blueprint $table) {
             $table->id()->comment('기본 키');
-            $table->unsignedBigInteger('portfolio_id')->comment('포트폴리오 ID (portfolios.id)');
-            $table->unsignedBigInteger('user_id')->comment('작성자 ID (users.id)');
+            $table->unsignedBigInteger('portfolio_id')->nullable(false)->comment('포트폴리오 ID (portfolios.id)');
+            $table->unsignedBigInteger('user_id')->nullable(false)->comment('작성자 ID (users.id)');
             $table->unsignedBigInteger('parent_id')->nullable()->comment('부모 댓글 ID (portfolio_comments.id, 대댓글인 경우)');
-            $table->text('content')->comment('댓글 내용');
-            $table->integer('replies_count')->default(0)->comment('대댓글 수');
-            $table->boolean('is_deleted')->default(false)->comment('삭제 여부');
+            $table->text('content')->nullable(false)->comment('댓글 내용');
+            $table->integer('replies_count')->default(0)->nullable(false)->comment('대댓글 수');
+            $table->boolean('is_deleted')->default(false)->nullable(false)->comment('삭제 여부');
             $table->timestamps();
             $table->softDeletes();
 

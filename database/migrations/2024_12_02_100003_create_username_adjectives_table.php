@@ -14,8 +14,8 @@ return new class extends Migration
     {
         Schema::create('username_adjectives', function (Blueprint $table) {
             $table->id()->comment('기본 키');
-            $table->string('word')->unique()->comment('형용사 단어');
-            $table->string('tone')->nullable()->comment('톤 (dark, bold, soft, mystic, fire, free, extra, edgy)');
+            $table->string('word', 255)->nullable(false)->unique('username_adjectives_word_unique')->comment('형용사 단어');
+            $table->string('tone', 255)->nullable()->comment('톤 (dark, bold, soft, mystic, fire, free, extra, edgy)');
             $table->timestamps();
 
             //인덱스

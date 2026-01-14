@@ -13,11 +13,11 @@ return new class extends Migration
     {
         Schema::create('device_registrations', function (Blueprint $table) {
             $table->id()->comment('기본 키');
-            $table->string('device_id', 255)->unique()->comment('디바이스 고유 ID');
+            $table->string('device_id', 255)->nullable(false)->unique()->comment('디바이스 고유 ID');
             $table->text('user_agent')->nullable()->comment('에이전트 정보 (User-Agent 헤더)');
             $table->unsignedBigInteger('user_id')->nullable()->comment('사용자 ID (회원가입 전에는 null)');
-            $table->boolean('marketing_notification_consent')->default(false)->comment('마케팅 알림 수신동의');
-            $table->boolean('service_notification_consent')->default(false)->comment('서비스 알림 수신동의');
+            $table->boolean('marketing_notification_consent')->default(false)->nullable(false)->comment('마케팅 알림 수신동의');
+            $table->boolean('service_notification_consent')->default(false)->nullable(false)->comment('서비스 알림 수신동의');
             $table->timestamps();
 
             // 인덱스

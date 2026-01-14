@@ -21,10 +21,10 @@ return new class extends Migration
             $table->string('device_model', 100)->nullable()->comment('디바이스 모델');
             $table->string('os', 50)->nullable()->comment('운영체제');
             $table->string('browser', 50)->nullable()->comment('브라우저');
-            $table->string('login_type', 20)->default('phone')->comment('로그인 타입 (phone, email, social)');
-            $table->boolean('is_success')->default(true)->comment('로그인 성공 여부');
+            $table->string('login_type', 20)->default('phone')->nullable(false)->comment('로그인 타입 (phone, email, social)');
+            $table->boolean('is_success')->default(true)->nullable(false)->comment('로그인 성공 여부');
             $table->string('failure_reason', 255)->nullable()->comment('로그인 실패 사유');
-            $table->timestamp('created_at')->useCurrent()->comment('로그인 일시');
+            $table->timestamp('created_at')->useCurrent()->nullable(false)->comment('로그인 일시');
 
             $table->index('user_id', 'idx_user_id');
             $table->index('created_at', 'idx_created_at');

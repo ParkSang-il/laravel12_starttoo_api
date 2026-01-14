@@ -14,8 +14,8 @@ return new class extends Migration
     {
         Schema::create('portfolio_tags', function (Blueprint $table) {
             $table->id()->comment('기본 키');
-            $table->unsignedBigInteger('portfolio_id')->comment('포트폴리오 ID (portfolios.id)');
-            $table->unsignedBigInteger('tag_id')->comment('태그 ID (tags.id)');
+            $table->unsignedBigInteger('portfolio_id')->nullable(false)->comment('포트폴리오 ID (portfolios.id)');
+            $table->unsignedBigInteger('tag_id')->nullable(false)->comment('태그 ID (tags.id)');
             $table->timestamps();
 
             // 인덱스

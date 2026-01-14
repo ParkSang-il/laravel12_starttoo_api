@@ -1,7 +1,7 @@
 ### 변수 정의
 @baseUrl = http://localhost:8000
-@token = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2Nzg0MjU1MSwiZXhwIjoxNzY3OTIwMzM5LCJuYmYiOjE3Njc5MTY3MzksImp0aSI6ImZpelNmVElra1puUEJlOGgiLCJzdWIiOiIyOSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.TPgju9uy1cMfSs3Hf-Ga4bNdU4_8b6tw8VZqd5_azz4
-@token2 = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVnaXN0ZXIiLCJpYXQiOjE3NjU3NTk0MjUsImV4cCI6MTc2NTc2MzAyNSwibmJmIjoxNzY1NzU5NDI1LCJqdGkiOiIzSFpwWW4yNmJQYVpUd1RwIiwic3ViIjoiMTIiLCJwcnYiOiIyM2JkNWM4OTQ5ZjYwMGFkYjM5ZTcwMWM0MDA4NzJkYjdhNTk3NmY3In0.nifT-B50WAvFirRFeNNIvUdFylGbqwjQCY-nlrnMCeU
+@token = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vMjIwLjExOC4xNjIuMjAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2ODI4NTM2NSwiZXhwIjoxNzY4Mzc4MDIwLCJuYmYiOjE3NjgzNzQ0MjAsImp0aSI6InVha09oNkpUbDRBVkdtUzMiLCJzdWIiOiIxMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.LIUtYudfAHcF7QoKLFDEle1u5jXstrE7cyPiBZ1o3zc
+@token2 = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vMjIwLjExOC4xNjIuMjAvYXBpL2F1dGgvbG9naW4iLCJpYXQiOjE3NjgzNzQ1MjksImV4cCI6MTc2ODM3ODEyOSwibmJmIjoxNzY4Mzc0NTI5LCJqdGkiOiI5SmR5dHpLYjR6ZGVaaGl5Iiwic3ViIjoiMTIiLCJwcnYiOiIyM2JkNWM4OTQ5ZjYwMGFkYjM5ZTcwMWM0MDA4NzJkYjdhNTk3NmY3In0.yeEFCNCVUWnZ92zUm9zoN9n4xAt6VDlyOFfWxD0VzNk
 
 
 ### GET request to example server
@@ -23,7 +23,7 @@ Content-Type: application/json
 
 ### GET request to example server
 ### 인증번호 발송
-POST http://localhost:8000/api/auth/phone/send
+POST http://220.118.162.20/api/auth/phone/send
 Accept: application/json
 cache-control: no-cache
 #Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjM3ODBhYTU1NDI2MDQ0MGZjZmMyZmJkNjFhNTZlM2U1MTE0MjA0MjhkMmRjNjA3NTAyNjQ0OGNmZDMwOTg1N2M5YjdhNjA4NWQ1YzU5NmJiIn0.eyJhdWQiOiI2IiwianRpIjoiMzc4MGFhNTU0MjYwNDQwZmNmYzJmYmQ2MWE1NmUzZTUxMTQyMDQyOGQyZGM2MDc1MDI2NDQ4Y2ZkMzA5ODU3YzliN2E2MDg1ZDVjNTk2YmIiLCJpYXQiOjE2MTk1MDEyNjUsIm5iZiI6MTYxOTUwMTI2NSwiZXhwIjoyNTY2MTg2MDY0LCJzdWIiOiI4Iiwic2NvcGVzIjpbXX0.R6Affj0YPMg9yJVdrlol1jSkUn8Uzhk5svZJML-zV72__Zv5nzDxp0PIH0iXBtDT8h7sDENRpa7mFV6qAUznbMkx5DB3tn9ZplpVbVPnMl9SixhvCV5g_WWKoRJGY0Vp2v2Lb1NfIM_s0PoQ2q1weNgifIwF9LfcRJF9vhMTGmdO84Ox_wfWdO5_eqUjUgmQbV6FQoasFAgoF4yIPJLvMcOm3TWC7fJ7M3Xqfp6bd5VkLejxE1_iXqVwSlmoyOSy9YtiEVwp4LeiswhL0xKQfzlGJsEXF31xSL7OCGDBgOdd29x3I-jdI6vYY0GC_k3aYYICw7exVTr-6Q2NS1kjgMTIQhnW5HoEhPD6G_0zOqA252AkbjD0u7lFfj60w9YRGTjnYRjMkHo1YEmKddccyXTACgthWvuJDVOqDSMkFXnzgxHNS8vnvh9MeEKr-fj_3_4V38_-vekYOEPKFk6EGWlNoM1iTmet7rlvCj9hMganS20UgD25rViG-zhMgdnltmudenvQ4iS37OKtBBUnK0ft_UsCpBLGJUymQUqQrvxyWHSXTcw0gyIScM2VNcgDxEHf446Jz5I76Mb72uCz-_jjDKDnNtSGnVktaEu20qHqzQBFuwz6gTxO47LZli3AlvuuRyV-4DvqyHNJetP_AD3_sBEc7u7XY_75ef4A4bI
@@ -36,7 +36,7 @@ Content-Type: application/json
 
 ###
 ### 인증번호 검증
-POST http://localhost:8000/api/auth/phone/verify
+POST http://220.118.162.20/api/auth/phone/verify
 Accept: application/json
 cache-control: no-cache
 #Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjM3ODBhYTU1NDI2MDQ0MGZjZmMyZmJkNjFhNTZlM2U1MTE0MjA0MjhkMmRjNjA3NTAyNjQ0OGNmZDMwOTg1N2M5YjdhNjA4NWQ1YzU5NmJiIn0.eyJhdWQiOiI2IiwianRpIjoiMzc4MGFhNTU0MjYwNDQwZmNmYzJmYmQ2MWE1NmUzZTUxMTQyMDQyOGQyZGM2MDc1MDI2NDQ4Y2ZkMzA5ODU3YzliN2E2MDg1ZDVjNTk2YmIiLCJpYXQiOjE2MTk1MDEyNjUsIm5iZiI6MTYxOTUwMTI2NSwiZXhwIjoyNTY2MTg2MDY0LCJzdWIiOiI4Iiwic2NvcGVzIjpbXX0.R6Affj0YPMg9yJVdrlol1jSkUn8Uzhk5svZJML-zV72__Zv5nzDxp0PIH0iXBtDT8h7sDENRpa7mFV6qAUznbMkx5DB3tn9ZplpVbVPnMl9SixhvCV5g_WWKoRJGY0Vp2v2Lb1NfIM_s0PoQ2q1weNgifIwF9LfcRJF9vhMTGmdO84Ox_wfWdO5_eqUjUgmQbV6FQoasFAgoF4yIPJLvMcOm3TWC7fJ7M3Xqfp6bd5VkLejxE1_iXqVwSlmoyOSy9YtiEVwp4LeiswhL0xKQfzlGJsEXF31xSL7OCGDBgOdd29x3I-jdI6vYY0GC_k3aYYICw7exVTr-6Q2NS1kjgMTIQhnW5HoEhPD6G_0zOqA252AkbjD0u7lFfj60w9YRGTjnYRjMkHo1YEmKddccyXTACgthWvuJDVOqDSMkFXnzgxHNS8vnvh9MeEKr-fj_3_4V38_-vekYOEPKFk6EGWlNoM1iTmet7rlvCj9hMganS20UgD25rViG-zhMgdnltmudenvQ4iS37OKtBBUnK0ft_UsCpBLGJUymQUqQrvxyWHSXTcw0gyIScM2VNcgDxEHf446Jz5I76Mb72uCz-_jjDKDnNtSGnVktaEu20qHqzQBFuwz6gTxO47LZli3AlvuuRyV-4DvqyHNJetP_AD3_sBEc7u7XY_75ef4A4bI
@@ -95,7 +95,7 @@ Content-Type: application/json
 
 ###
 ### 내정보 호출
-GET http://localhost:8000/api/auth/me
+GET http://220.118.162.20/api/auth/me
 Accept: application/json
 cache-control: no-cache
 Authorization: Bearer {{token}}
@@ -105,16 +105,16 @@ Content-Type: application/json
 
 ###
 ### 프로필 수정
-PUT http://localhost:8000/api/auth/profile
+PUT http://220.118.162.20/api/auth/profile
 Accept: application/json
 cache-control: no-cache
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2NTM1MDczNSwiZXhwIjoxNzY1NDIyODUxLCJuYmYiOjE3NjU0MTkyNTEsImp0aSI6Ikh1M2hEeVNJVEdrRDZ4enQiLCJzdWIiOiIxMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.BiGC8cJnl3Gluswour4kMExP2-DwOhaZvpPPsErB-iU
+Authorization: Bearer {{token}}
 #X-CSRF-TOKEN: qTt4q5P9dPeoMygTDxbZ0G27X6QYfyPN6qchtWXk
 Content-Type: application/json
 
 {
     "username": "안욕심쟁이",
-    "profile_image": "/profile/image.jpg"
+    "profile_image": "https://kr.object.ncloudstorage.com/uploadimage/2026/01/teamgod00.jfif"
 }
 
 ###
@@ -148,7 +148,7 @@ Content-Type: application/json
 
 ###
 ### 로그인
-POST http://localhost:8000/api/auth/login
+POST http://220.118.162.20/api/auth/login
 Accept: application/json
 cache-control: no-cache
 #Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVnaXN0ZXIiLCJpYXQiOjE3NjUzMzIxNzUsImV4cCI6MTc2NTMzNTc3NSwibmJmIjoxNzY1MzMyMTc1LCJqdGkiOiJXaE5scVVpTXNTZGU5dTkxIiwic3ViIjoiMTEiLCJwcnYiOiIyM2JkNWM4OTQ5ZjYwMGFkYjM5ZTcwMWM0MDA4NzJkYjdhNTk3NmY3In0.6ePRCDrw4oeBeyErwlqCu0vFTCyCTH16yQDUB8bLYHs
@@ -156,7 +156,7 @@ cache-control: no-cache
 Content-Type: application/json
 
 {
-    "phone": "01045752251"
+    "phone": "01011111111"
 }
 
 ###
@@ -190,7 +190,7 @@ Authorization: Bearer {{token}}
 
 ###
 ### 신규 사업자 추가 정보 등록
-POST http://localhost:8000/api/auth/biz_additional_info
+POST http://220.118.162.20/api/auth/biz_additional_info
 Accept: application/json
 cache-control: no-cache
 Authorization: Bearer {{token}}
@@ -305,7 +305,7 @@ cache-control: no-cache
 
 ###
 ### 포트폴리오 생성 (사업자 회원만 가능)
-POST http://localhost:8000/api/portfolios
+POST http://220.118.162.20/api/portfolios
 Accept: application/json
 cache-control: no-cache
 Authorization: Bearer {{token}}
@@ -393,10 +393,10 @@ Content-Type: application/json
 
 ###
 ### 포트폴리오 좋아요 (인증 필요, 본인 포트폴리오는 불가)
-POST http://localhost:8000/api/portfolios/8/like
+POST http://220.118.162.20/api/portfolios/2/like
 Accept: application/json
 cache-control: no-cache
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2NTQ0MDE3MywiZXhwIjoxNzY1NTI0NzYzLCJuYmYiOjE3NjU1MjExNjMsImp0aSI6InMyV3RlZ2UzUGkyWWhUV1giLCJzdWIiOiIxMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.w_j3Y6YknsblJ4YKwakkbSjSr8giIE7_mLXdfxDZc_4
+Authorization: Bearer {{token}}
 Content-Type: application/json
 # 좋아요 처리 시:
 # 1. portfolio_likes 테이블에 레코드 추가
@@ -406,7 +406,7 @@ Content-Type: application/json
 
 ###
 ### 포트폴리오 좋아요 취소 (인증 필요)
-DELETE http://localhost:8000/api/portfolios/3/like
+DELETE http://220.118.162.20/api/portfolios/3/like
 Accept: application/json
 cache-control: no-cache
 Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2NTQ0MDE3MywiZXhwIjoxNzY1NTEyNzc5LCJuYmYiOjE3NjU1MDkxNzksImp0aSI6IklVdkNHYjZPdHYyOW10TlMiLCJzdWIiOiIxMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.ROfClhtiCTW7mwjJU3LanOsdXv5DXOQMVNDyKW2TCMI
@@ -547,7 +547,7 @@ Content-Type: application/json
 
 ###
 ### 토큰 리프레시
-POST http://localhost:8000/api/auth/refresh
+POST http://220.118.162.20/api/auth/refresh
 Accept: application/json
 cache-control: no-cache
 Authorization: Bearer {{token}}

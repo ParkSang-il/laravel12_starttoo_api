@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('portfolio_comments', function (Blueprint $table) {
-            $table->boolean('is_pinned')->default(false)->after('is_deleted')->comment('상위 고정 여부');
+            $table->boolean('is_pinned')->default(false)->nullable(false)->after('is_deleted')->comment('상위 고정 여부');
             $table->index(['portfolio_id', 'is_pinned'], 'idx_portfolio_pinned');
         });
     }
