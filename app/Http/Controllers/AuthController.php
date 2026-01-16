@@ -702,6 +702,8 @@ class AuthController extends Controller
 
     /**
      * 아티스트 프로필 정보 + 사업자 정보 + 팔로우/팔로워 정보 조회
+     * - 사업자 회원: user, artist_profile, business_verification, follow_info 반환
+     * - 일반 회원: user, follow_info만 반환
      *
      * @param Request $request
      * @param int|null $userId 특정 사용자 ID (선택적, 라우트 파라미터 또는 현재 로그인한 사용자)
@@ -711,11 +713,11 @@ class AuthController extends Controller
     {
         try {
             $currentUser = $request->user();
-            
+
             // userId가 라우트 파라미터로 제공되지 않으면 현재 로그인한 사용자 사용
             // 라우트 파라미터는 문자열로 올 수 있으므로 int로 변환
             $targetUserId = $userId ? (int) $userId : ($currentUser?->id ?? null);
-            
+
             if (!$targetUserId) {
                 return response()->json([
                     'success' => false,
@@ -725,29 +727,13 @@ class AuthController extends Controller
 
             // 대상 사용자 조회
             $targetUser = User::find($targetUserId);
-            
+
             if (!$targetUser) {
                 return response()->json([
                     'success' => false,
                     'message' => '사용자를 찾을 수 없습니다.',
                 ], 404);
             }
-
-            // 사업자 회원인지 확인
-            if ($targetUser->user_type !== 2) {
-                return response()->json([
-                    'success' => false,
-                    'message' => '사업자 회원만 조회할 수 있습니다.',
-                ], 403);
-            }
-
-            // 아티스트 프로필 조회
-            $artistProfile = ArtistProfile::where('user_id', $targetUserId)->first();
-
-            // 사업자 정보 조회 (승인된 것만)
-            $businessVerification = BusinessVerification::where('user_id', $targetUserId)
-                ->where('status', 'approved')
-                ->first();
 
             // 팔로워 수 조회
             $followerCount = UserFollow::where('followee_id', $targetUserId)->count();
@@ -763,7 +749,7 @@ class AuthController extends Controller
                     ->exists();
             }
 
-            // 응답 데이터 구성
+            // 기본 응답 데이터 구성 (모든 사용자 공통)
             $responseData = [
                 'user' => [
                     'id' => $targetUser->id,
@@ -771,7 +757,24 @@ class AuthController extends Controller
                     'profile_image' => $targetUser->profile_image,
                     'user_type' => $targetUser->user_type,
                 ],
-                'artist_profile' => $artistProfile ? [
+                'follow_info' => [
+                    'follower_count' => $followerCount,
+                    'following_count' => $followingCount,
+                    'is_following' => $isFollowing,
+                ],
+            ];
+
+            // 사업자 회원인 경우에만 artist_profile과 business_verification 추가
+            if ($targetUser->user_type === 2) {
+                // 아티스트 프로필 조회
+                $artistProfile = ArtistProfile::where('user_id', $targetUserId)->first();
+
+                // 사업자 정보 조회 (승인된 것만)
+                $businessVerification = BusinessVerification::where('user_id', $targetUserId)
+                    ->where('status', 'approved')
+                    ->first();
+
+                $responseData['artist_profile'] = $artistProfile ? [
                     'id' => $artistProfile->id,
                     'cover_image' => $artistProfile->cover_image,
                     'artist_name' => $artistProfile->artist_name,
@@ -782,8 +785,9 @@ class AuthController extends Controller
                     'bio' => $artistProfile->bio,
                     'created_at' => $artistProfile->created_at?->toDateTimeString(),
                     'updated_at' => $artistProfile->updated_at?->toDateTimeString(),
-                ] : null,
-                'business_verification' => $businessVerification ? [
+                ] : null;
+
+                $responseData['business_verification'] = $businessVerification ? [
                     'id' => $businessVerification->id,
                     'business_name' => $businessVerification->business_name,
                     'business_number' => $businessVerification->business_number,
@@ -794,13 +798,8 @@ class AuthController extends Controller
                     'main_styles' => $businessVerification->main_styles,
                     'status' => $businessVerification->status,
                     'approved_at' => $businessVerification->approved_at?->toDateTimeString(),
-                ] : null,
-                'follow_info' => [
-                    'follower_count' => $followerCount,
-                    'following_count' => $followingCount,
-                    'is_following' => $isFollowing,
-                ],
-            ];
+                ] : null;
+            }
 
             return response()->json([
                 'success' => true,
@@ -809,7 +808,7 @@ class AuthController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => '아티스트 프로필 정보 조회 중 오류가 발생했습니다.',
+                'message' => '사용자 프로필 정보 조회 중 오류가 발생했습니다.',
                 'error' => config('app.debug') ? $e->getMessage() : null,
             ], 500);
         }
