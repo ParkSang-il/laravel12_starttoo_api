@@ -39,11 +39,15 @@ Route::middleware(['auth:api'])->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::put('/profile', [AuthController::class, 'updateProfile']); // 프로필 수정
         Route::put('/artist-profile', [AuthController::class, 'updateArtistProfile']); // 아티스트 프로필 수정
+        Route::get('/artist-profile', [AuthController::class, 'getArtistProfileInfo']); // 아티스트 프로필 정보 조회 (현재 사용자)
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::post('/biz_additional_info', [AuthController::class, 'bizAdditionalInfo']); // 사업자 추가정보 등록
         Route::put('/biz_additional_info', [AuthController::class, 'updateBizAdditionalInfo']); // 사업자 추가정보 수정
         Route::post('/biz_edit_info', [AuthController::class, 'bizEditInfo']); // 사업자 정보 수정요청(승인된 사업자만 가능)
     });
+
+    // 아티스트 프로필 조회 (특정 사용자 ID)
+    Route::get('/artists/{userId}/profile', [AuthController::class, 'getArtistProfileInfo']); // 아티스트 프로필 정보 조회 (특정 사용자)
 
     // 포트폴리오 API
     Route::prefix('portfolios')->group(function () {

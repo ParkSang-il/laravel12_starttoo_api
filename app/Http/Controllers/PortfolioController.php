@@ -71,13 +71,13 @@ class PortfolioController extends Controller
             // 포트폴리오 데이터 변환 (is_liked, comments_count 포함)
             $portfoliosData = $portfolios->getCollection()->map(function ($portfolio) use ($user) {
                 $portfolioData = $portfolio->toArray();
-                
+
                 // is_liked: 로그인한 경우 boolean, 로그인하지 않은 경우 false
                 $portfolioData['is_liked'] = $user ? (bool) ($portfolio->is_liked ?? false) : false;
-                
+
                 // comments_count: 숫자로 변환
                 $portfolioData['comments_count'] = (int) ($portfolio->comments_count ?? 0);
-                
+
                 return $portfolioData;
             });
 
@@ -1238,22 +1238,22 @@ class PortfolioController extends Controller
                 ], 403);
             }
 
-            $validator = Validator::make($request->all(), [
-                'report_type' => 'required|string|in:spam,inappropriate,violence,nudity,hate,copyright,other',
-                'reason' => 'nullable|string|max:1000',
-            ], [
-                'report_type.required' => '신고 유형은 필수입니다.',
-                'report_type.in' => '올바른 신고 유형이 아닙니다.',
-                'reason.max' => '신고 사유는 최대 1000자까지 입력할 수 있습니다.',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => '유효성 검사 실패',
-                    'errors' => $validator->errors(),
-                ], 422);
-            }
+//            $validator = Validator::make($request->all(), [
+//                'report_type' => 'required|string|in:spam,inappropriate,violence,nudity,hate,copyright,other',
+//                'reason' => 'nullable|string|max:1000',
+//            ], [
+//                'report_type.required' => '신고 유형은 필수입니다.',
+//                'report_type.in' => '올바른 신고 유형이 아닙니다.',
+//                'reason.max' => '신고 사유는 최대 1000자까지 입력할 수 있습니다.',
+//            ]);
+//
+//            if ($validator->fails()) {
+//                return response()->json([
+//                    'success' => false,
+//                    'message' => '유효성 검사 실패',
+//                    'errors' => $validator->errors(),
+//                ], 422);
+//            }
 
             DB::beginTransaction();
 
