@@ -1,6 +1,6 @@
 ### 변수 정의
 @baseUrl = http://localhost:8000
-@token = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vMjIwLjExOC4xNjIuMjAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2ODQ1MzUwNiwiZXhwIjoxNzY4NTI0NzQ1LCJuYmYiOjE3Njg1MjExNDUsImp0aSI6InFBM3ltVnl5N1RaREpnRWwiLCJzdWIiOiIxMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.IJ77Ft68V60LN4MgL5LiySg-f3_KlCEx8Xu8QQ_IOLc
+@token = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vMjIwLjExOC4xNjIuMjAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2ODQ1MzUwNiwiZXhwIjoxNzY4NTQxNjU3LCJuYmYiOjE3Njg1MzgwNTcsImp0aSI6ImZ6eU83VlRFTFB3WGoyMk4iLCJzdWIiOiIxMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.LLK4ZBQDid-7wqfRUS22EyVm07hvSzRQ5WchMrFg-Pk
 @token2 = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vMjIwLjExOC4xNjIuMjAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2ODM3NDUyOSwiZXhwIjoxNzY4MzgyMjAzLCJuYmYiOjE3NjgzNzg2MDMsImp0aSI6IlZsQWE0ZTEwY0k0cTd2TUIiLCJzdWIiOiIxMiIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.5a3HgkZfpWhAHJ_rcTIvOdLuhrsnj6ZFhLJSHOVVzqo
 
 
@@ -119,16 +119,16 @@ Content-Type: application/json
 
 ###
 ### 아티스트 프로필 수정
-PUT http://localhost:8000/api/auth/artist-profile
+PUT http://220.118.162.20/api/auth/artist-profile
 Accept: application/json
 cache-control: no-cache
-Authorization: Bearer Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2NTQyMjk2MSwiZXhwIjoxNzY1NDMyMzAzLCJuYmYiOjE3NjU0Mjg3MDMsImp0aSI6ImJzYnBrZmNRVlJYc3A0aHAiLCJzdWIiOiIxMiIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.H2Y0-HUDbjoUAg03wIfHWdpTUGekRs001RyoGBgBlag
+Authorization: Bearer {{token}}
 #X-CSRF-TOKEN: qTt4q5P9dPeoMygTDxbZ0G27X6QYfyPN6qchtWXk
 Content-Type: application/json
 
 {
-    "cover_image": "/cover/image.jpg",
-    "artist_name": "타투아티스트",
+    "cover_image": "/2026/01/image%20(10).jpg",
+    "artist_name": "박상일",
     "email": "artist@example.com",
     "instagram": "@tattoo_artist",
     "website": "https://example.com",
