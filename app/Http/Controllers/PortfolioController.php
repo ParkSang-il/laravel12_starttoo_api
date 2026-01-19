@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Portfolio;
 use App\Models\PortfolioImage;
+use App\Models\PortfolioVideo;
 use App\Models\PortfolioTag;
 use App\Models\PortfolioLike;
 use App\Models\PortfolioLikeLog;
@@ -32,7 +33,7 @@ class PortfolioController extends Controller
             $userId = $request->input('user_id'); // 특정 아티스트의 포트폴리오 조회
             $isPublic = $request->input('is_public', true); // 기본값: 공개된 것만
 
-            $query = Portfolio::with(['images', 'tags', 'user:id,username,profile_image,user_type', 'businessVerification:id,user_id,business_name']);
+            $query = Portfolio::with(['images', 'videos', 'tags', 'user:id,username,profile_image,user_type', 'businessVerification:id,user_id,business_name']);
 
             // 특정 사용자의 포트폴리오만 조회
             if ($userId) {
@@ -68,7 +69,7 @@ class PortfolioController extends Controller
             $portfolios = $query->orderBy('created_at', 'desc')
                 ->paginate($request->input('per_page', 15));
 
-            // 포트폴리오 데이터 변환 (is_liked, comments_count 포함)
+            // 포트폴리오 데이터 변환 (is_liked, comments_count 포함, 이미지와 비디오 합치기)
             $portfoliosData = $portfolios->getCollection()->map(function ($portfolio) use ($user) {
                 $portfolioData = $portfolio->toArray();
 
@@ -77,6 +78,51 @@ class PortfolioController extends Controller
 
                 // comments_count: 숫자로 변환
                 $portfolioData['comments_count'] = (int) ($portfolio->comments_count ?? 0);
+
+                // 이미지와 비디오를 하나의 media 배열로 합치기
+                $media = collect();
+
+                // 이미지를 media 형식으로 변환
+                foreach ($portfolio->images as $image) {
+                    $media->push([
+                        'type' => 'image',
+                        'id' => $image->id,
+                        'image_url' => $image->image_url,
+                        'image_order' => $image->image_order,
+                        'scale' => $image->scale,
+                        'offset_x' => $image->offset_x,
+                        'offset_y' => $image->offset_y,
+                        'order' => $image->image_order,
+                        'created_at' => $image->created_at?->toDateTimeString(),
+                    ]);
+                }
+
+                // 비디오를 media 형식으로 변환
+                foreach ($portfolio->videos as $video) {
+                    $media->push([
+                        'type' => 'video',
+                        'id' => $video->id,
+                        'video_file_path' => $video->video_file_path,
+                        'video_url' => $video->video_url,
+                        'video_thumbnail_url' => $video->video_thumbnail_url,
+                        'video_job_id' => $video->video_job_id,
+                        'video_status' => $video->video_status,
+                        'video_order' => $video->video_order,
+                        'order' => $video->video_order,
+                        'created_at' => $video->created_at?->toDateTimeString(),
+                    ]);
+                }
+
+                // order 기준으로 정렬 (order가 같으면 created_at 기준)
+                $media = $media->sortBy([
+                    ['order', 'asc'],
+                    ['created_at', 'asc'],
+                ])->values();
+
+                // 기존 images, videos 필드는 제거하고 media 배열로 대체
+                unset($portfolioData['images']);
+                unset($portfolioData['videos']);
+                $portfolioData['media'] = $media->all();
 
                 return $portfolioData;
             });
@@ -114,7 +160,7 @@ class PortfolioController extends Controller
         try {
             $user = $request->user();
 
-            $portfolio = Portfolio::with(['images', 'tags', 'user:id,username,profile_image'])
+            $portfolio = Portfolio::with(['images', 'videos', 'tags', 'user:id,username,profile_image'])
                 ->find($id);
 
             if (!$portfolio) {
@@ -146,10 +192,55 @@ class PortfolioController extends Controller
                 }
             }
 
+            // 이미지와 비디오를 하나의 media 배열로 합치기
+            $media = collect();
+
+            // 이미지를 media 형식으로 변환
+            foreach ($portfolio->images as $image) {
+                $media->push([
+                    'type' => 'image',
+                    'id' => $image->id,
+                    'image_url' => $image->image_url,
+                    'image_order' => $image->image_order,
+                    'scale' => $image->scale,
+                    'offset_x' => $image->offset_x,
+                    'offset_y' => $image->offset_y,
+                    'order' => $image->image_order,
+                    'created_at' => $image->created_at?->toDateTimeString(),
+                ]);
+            }
+
+            // 비디오를 media 형식으로 변환
+            foreach ($portfolio->videos as $video) {
+                $media->push([
+                    'type' => 'video',
+                    'id' => $video->id,
+                    'video_file_path' => $video->video_file_path,
+                    'video_url' => $video->video_url,
+                    'video_thumbnail_url' => $video->video_thumbnail_url,
+                    'video_job_id' => $video->video_job_id,
+                    'video_status' => $video->video_status,
+                    'video_order' => $video->video_order,
+                    'order' => $video->video_order,
+                    'created_at' => $video->created_at?->toDateTimeString(),
+                ]);
+            }
+
+            // order 기준으로 정렬 (order가 같으면 created_at 기준)
+            $media = $media->sortBy([
+                ['order', 'asc'],
+                ['created_at', 'asc'],
+            ])->values();
+
+            $portfolioData = $portfolio->toArray();
+            unset($portfolioData['images']);
+            unset($portfolioData['videos']);
+            $portfolioData['media'] = $media->all();
+
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'portfolio' => $portfolio,
+                    'portfolio' => $portfolioData,
                 ],
             ], 200);
         } catch (\Exception $e) {
@@ -199,6 +290,8 @@ class PortfolioController extends Controller
                 'images.*.scale' => 'nullable|numeric|min:0|max:10',
                 'images.*.offset_x' => 'nullable|numeric|min:0|max:1',
                 'images.*.offset_y' => 'nullable|numeric|min:0|max:1',
+                'video_file_path' => 'nullable|string|max:500',
+                'video_job_id' => 'nullable|integer',
                 'tags' => 'nullable|array',
                 'tags.*' => 'string|max:100',
             ], [
@@ -212,6 +305,8 @@ class PortfolioController extends Controller
                 'images.required' => '이미지는 최소 1개 이상 필요합니다.',
                 'images.array' => '이미지는 배열 형식이어야 합니다.',
                 'images.*.image_url.required' => '이미지 URL은 필수입니다.',
+                'videos.*.video_file_path.required_with' => '비디오 파일 경로는 필수입니다.',
+                'videos.*.video_file_path.max' => '비디오 파일 경로는 최대 500자까지 입력할 수 있습니다.',
             ]);
 
             if ($validator->fails()) {
@@ -252,6 +347,17 @@ class PortfolioController extends Controller
                     ]);
                 }
 
+                // 비디오 생성
+                $videos = $request->input('videos', []);
+                foreach ($videos as $index => $video) {
+                    PortfolioVideo::create([
+                        'portfolio_id' => $portfolio->id,
+                        'video_file_path' => $video['video_file_path'],
+                        'video_order' => $video['video_order'] ?? $index,
+                        'video_status' => 'pending', // 비디오가 있으면 pending 상태로 설정
+                    ]);
+                }
+
                 // 태그 생성/연결
                 $tagNames = $request->input('tags', []);
                 $tagIds = [];
@@ -280,7 +386,7 @@ class PortfolioController extends Controller
                 DB::commit();
 
                 // 관계 데이터 포함하여 반환
-                $portfolio->load(['images', 'tags', 'user:id,username,profile_image']);
+                $portfolio->load(['images', 'videos', 'tags', 'user:id,username,profile_image']);
 
                 return response()->json([
                     'success' => true,
@@ -347,6 +453,9 @@ class PortfolioController extends Controller
                 'images' => 'nullable|array|min:1',
                 'images.*.image_url' => 'required_with:images|string|max:255',
                 'images.*.image_order' => 'nullable|integer|min:0',
+                'videos' => 'nullable|array',
+                'videos.*.video_file_path' => 'required_with:videos|string|max:500',
+                'videos.*.video_order' => 'nullable|integer|min:0',
                 'tags' => 'nullable|array',
                 'tags.*' => 'string|max:100',
             ]);
@@ -404,6 +513,23 @@ class PortfolioController extends Controller
                     }
                 }
 
+                // 비디오 수정 (전체 교체)
+                if ($request->has('videos')) {
+                    // 기존 비디오 삭제
+                    PortfolioVideo::where('portfolio_id', $portfolio->id)->delete();
+
+                    // 새 비디오 생성
+                    $videos = $request->input('videos');
+                    foreach ($videos as $index => $video) {
+                        PortfolioVideo::create([
+                            'portfolio_id' => $portfolio->id,
+                            'video_file_path' => $video['video_file_path'],
+                            'video_order' => $video['video_order'] ?? $index,
+                            'video_status' => 'pending', // 비디오가 있으면 pending 상태로 설정
+                        ]);
+                    }
+                }
+
                 // 태그 수정 (전체 교체)
                 if ($request->has('tags')) {
                     // 기존 태그 사용 횟수 감소
@@ -435,7 +561,7 @@ class PortfolioController extends Controller
 
                 // 관계 데이터 포함하여 반환
                 $portfolio->refresh();
-                $portfolio->load(['images', 'tags', 'user:id,username,profile_image']);
+                $portfolio->load(['images', 'videos', 'tags', 'user:id,username,profile_image']);
 
                 return response()->json([
                     'success' => true,
@@ -1311,13 +1437,65 @@ class PortfolioController extends Controller
         try {
             $portfolios = Portfolio::where('is_public', true)
                 ->orderBy('created_at', 'desc')
-                ->with(['user:id,username,profile_image', 'tags', 'images'])
+                ->with(['user:id,username,profile_image', 'tags', 'images', 'videos'])
                 ->paginate(15);
+
+            // 포트폴리오 데이터 변환 (이미지와 비디오를 media 배열로 합치기)
+            $portfoliosData = collect($portfolios->items())->map(function ($portfolio) {
+                $portfolioData = $portfolio->toArray();
+
+                // 이미지와 비디오를 하나의 media 배열로 합치기
+                $media = collect();
+
+                // 이미지를 media 형식으로 변환
+                foreach ($portfolio->images as $image) {
+                    $media->push([
+                        'type' => 'image',
+                        'id' => $image->id,
+                        'image_url' => $image->image_url,
+                        'image_order' => $image->image_order,
+                        'scale' => $image->scale,
+                        'offset_x' => $image->offset_x,
+                        'offset_y' => $image->offset_y,
+                        'order' => $image->image_order,
+                        'created_at' => $image->created_at?->toDateTimeString(),
+                    ]);
+                }
+
+                // 비디오를 media 형식으로 변환
+                foreach ($portfolio->videos as $video) {
+                    $media->push([
+                        'type' => 'video',
+                        'id' => $video->id,
+                        'video_file_path' => $video->video_file_path,
+                        'video_url' => $video->video_url,
+                        'video_thumbnail_url' => $video->video_thumbnail_url,
+                        'video_job_id' => $video->video_job_id,
+                        'video_status' => $video->video_status,
+                        'video_order' => $video->video_order,
+                        'order' => $video->video_order,
+                        'created_at' => $video->created_at?->toDateTimeString(),
+                    ]);
+                }
+
+                // order 기준으로 정렬 (order가 같으면 created_at 기준)
+                $media = $media->sortBy([
+                    ['order', 'asc'],
+                    ['created_at', 'asc'],
+                ])->values();
+
+                // 기존 images, videos 필드는 제거하고 media 배열로 대체
+                unset($portfolioData['images']);
+                unset($portfolioData['videos']);
+                $portfolioData['media'] = $media->all();
+
+                return $portfolioData;
+            });
 
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'portfolios' => $portfolios->items(),
+                    'portfolios' => $portfoliosData->values()->all(),
                     'pagination' => [
                         'current_page' => $portfolios->currentPage(),
                         'last_page' => $portfolios->lastPage(),

@@ -83,6 +83,16 @@ class Portfolio extends Model
     }
 
     /**
+     * 포트폴리오 비디오 관계
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function videos()
+    {
+        return $this->hasMany(PortfolioVideo::class)->orderBy('video_order');
+    }
+
+    /**
      * 포트폴리오 태그 관계 (다대다)
      *
      * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany

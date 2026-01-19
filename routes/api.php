@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PortfolioController;
 use App\Http\Controllers\FollowController;
+use App\Http\Controllers\VodController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -32,6 +33,10 @@ Route::prefix('auth')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);                         // 휴대폰 번호로 로그인
     Route::post('/refresh', [AuthController::class, 'refresh']);                     // 토큰 리프레시
 });
+
+// VOD 콜백 (인증 불필요)
+Route::post('/vod/callback', [VodController::class, 'callback']);                    // VOD 인코딩 완료 콜백
+Route::post('/vod/test-callback', [VodController::class, 'testCallback']);           // VOD 테스트 콜백 (로그만 저장)
 
 // 인증이 필요한 라우트
 Route::middleware(['auth:api'])->group(function () {

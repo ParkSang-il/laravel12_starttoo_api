@@ -332,6 +332,43 @@ Authorization: Bearer {{token2}}
 # - user_id: 특정 아티스트의 포트폴리오만 조회 (선택)
 # - per_page: 페이지당 항목 수 (기본값: 15)
 # - is_public: 공개 여부 필터 (본인 포트폴리오 조회 시만 사용)
+#
+# 응답 구조:
+# {
+#   "success": true,
+#   "data": {
+#     "portfolios": [
+#       {
+#         "id": 1,
+#         "title": "...",
+#         "media": [
+#           {
+#             "type": "image",
+#             "id": 1,
+#             "image_url": "...",
+#             "image_order": 0,
+#             "order": 0,
+#             "created_at": "..."
+#           },
+#           {
+#             "type": "video",
+#             "id": 1,
+#             "video_file_path": "test2.mp4",
+#             "video_url": "...",
+#             "video_thumbnail_url": "...",
+#             "video_status": "complete",
+#             "video_order": 1,
+#             "order": 1,
+#             "created_at": "..."
+#           }
+#         ],
+#         ...
+#       }
+#     ],
+#     "pagination": {...}
+#   }
+# }
+# 참고: images와 videos가 media 배열로 합쳐져서 order 기준으로 정렬되어 반환됩니다.
 
 ###
 ### 포트폴리오 상세 조회
@@ -340,6 +377,40 @@ Accept: application/json
 cache-control: no-cache
 #Authorization: Bearer {token}
 # 조회 시 조회수 자동 증가 (본인 포트폴리오 제외)
+#
+# 응답 구조:
+# {
+#   "success": true,
+#   "data": {
+#     "portfolio": {
+#       "id": 1,
+#       "title": "...",
+#       "media": [
+#         {
+#           "type": "image",
+#           "id": 1,
+#           "image_url": "...",
+#           "image_order": 0,
+#           "order": 0,
+#           "created_at": "..."
+#         },
+#         {
+#           "type": "video",
+#           "id": 1,
+#           "video_file_path": "test2.mp4",
+#           "video_url": "...",
+#           "video_thumbnail_url": "...",
+#           "video_status": "complete",
+#           "video_order": 1,
+#           "order": 1,
+#           "created_at": "..."
+#         }
+#       ],
+#       ...
+#     }
+#   }
+# }
+# 참고: images와 videos가 media 배열로 합쳐져서 order 기준으로 정렬되어 반환됩니다.
 
 ###
 ### 포트폴리오 생성 (사업자 회원만 가능)
@@ -389,15 +460,55 @@ Content-Type: application/json
 }
 
 ###
+### 포트폴리오 생성 (비디오 포함, 1분 30초 이하)
+POST http://220.118.162.20/api/portfolios
+Accept: application/json
+cache-control: no-cache
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "title": "비디오 포함 포트폴리오",
+    "description": "1분 30초 분량의 짧은 영상이 포함된 포트폴리오입니다.",
+    "work_date": "2026-01-16",
+    "price": 600000,
+    "is_public": true,
+    "images": [
+        {
+            "image_url": "https://kr.object.ncloudstorage.com/uploadimage/2026/01/thumbnail.jpg",
+            "image_order": 0,
+            "scale": 1.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0
+        }
+    ],
+    "videos": [
+        {
+            "video_file_path": "test2.mp4",
+            "video_order": 0
+        },
+        {
+            "video_file_path": "test3.mp4",
+            "video_order": 1
+        }
+    ],
+    "tags": ["타투", "타임랩스"]
+}
+# 참고: videos는 배열로 여러 비디오를 추가할 수 있습니다.
+# 각 비디오의 video_file_path는 콜백에서 받은 input.filePath와 매칭됩니다.
+# video_job_id는 포트폴리오 생성 시점에는 알 수 없으므로 콜백에서 저장됩니다.
+# 콜백에서 파일 경로로 포트폴리오 비디오를 찾아서 video_url과 video_thumbnail_url을 업데이트합니다.
+
+###
 ### 포트폴리오 수정 (본인 포트폴리오만 수정 가능)
 PUT http://localhost:8000/api/portfolios/8
 Accept: application/json
 cache-control: no-cache
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2NTQ0MDE3MywiZXhwIjoxNzY1NTI0NzYzLCJuYmYiOjE3NjU1MjExNjMsImp0aSI6InMyV3RlZ2UzUGkyWWhUV1giLCJzdWIiOiIxMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.w_j3Y6YknsblJ4YKwakkbSjSr8giIE7_mLXdfxDZc_4
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-    "title": "수정된 제목ㅁㅁㅁㅁㅁ",
+    "title": "수정된 제목",
     "description": "수정된 설명",
     "is_public": false,
     "tags": ["이레즈미", "수정된태그"],
@@ -416,8 +527,20 @@ Content-Type: application/json
             "offset_x": 0.1,
             "offset_y": 0.1
         }
+    ],
+    "videos": [
+        {
+            "video_file_path": "test2.mp4",
+            "video_order": 0
+        },
+        {
+            "video_file_path": "test3.mp4",
+            "video_order": 1
+        }
     ]
 }
+# 참고: images와 videos는 전체 교체됩니다. 기존 항목은 삭제되고 새로 전송한 항목으로 대체됩니다.
+# videos 배열은 선택사항이며, 비디오를 수정하지 않으려면 videos 필드를 생략하면 됩니다.
 
 ###
 ### 포트폴리오 삭제 (본인 포트폴리오만 삭제 가능)
@@ -582,6 +705,117 @@ Content-Type: application/json
     "report_type": "spam",
     "reason": "스팸 댓글입니다."
 }
+
+
+###
+### VOD 테스트 콜백 (모든 데이터를 로그에 저장)
+### 실제 콜백 데이터 구조를 확인하기 위한 테스트 엔드포인트
+### 로그 확인: storage/logs/laravel.log 또는 storage/logs/laravel-YYYY-MM-DD.log
+POST http://220.118.162.20/api/vod/test-callback
+Accept: application/json
+Content-Type: application/json
+
+{
+  "jobId": 1285970,
+  "status": "COMPLETE",
+  "categoryId": 20324,
+  "categoryName": "startoo-vod-category",
+  "input": {
+    "bucketName": "startoo-vod",
+    "filePath": "test2.mp4"
+  },
+  "output": [
+    {
+      "type": "HLS",
+      "url": "https://cdn.starttoo.com/out/test2/index.m3u8",
+      "bitrate": "2000",
+      "resolution": "1080p"
+    },
+    {
+      "type": "THUMBNAIL",
+      "url": "https://cdn.starttoo.com/out/test2/thumb_001.jpg"
+    }
+  ]
+}
+
+###
+### 피드(포트폴리오) 리스트 조회
+GET http://220.118.162.20/api/feed?per_page=15
+Accept: application/json
+cache-control: no-cache
+Authorization: Bearer {{token}}
+# 쿼리 파라미터:
+# - per_page: 페이지당 항목 수 (기본값: 15)
+#
+# 응답 구조:
+# {
+#   "success": true,
+#   "data": {
+#     "portfolios": [
+#       {
+#         "id": 1,
+#         "title": "...",
+#         "media": [
+#           {
+#             "type": "image",
+#             "id": 1,
+#             "image_url": "...",
+#             "image_order": 0,
+#             "order": 0,
+#             "created_at": "..."
+#           },
+#           {
+#             "type": "video",
+#             "id": 1,
+#             "video_file_path": "test2.mp4",
+#             "video_url": "...",
+#             "video_thumbnail_url": "...",
+#             "video_status": "complete",
+#             "video_order": 1,
+#             "order": 1,
+#             "created_at": "..."
+#           }
+#         ],
+#         ...
+#       }
+#     ],
+#     "pagination": {...}
+#   }
+# }
+# 참고: 공개된 포트폴리오만 조회되며, images와 videos가 media 배열로 합쳐져서 order 기준으로 정렬되어 반환됩니다.
+
+###
+### VOD 인코딩 완료 콜백 (네이버 클라우드 플랫폼에서 호출)
+### 인증 불필요, notificationUrl에 설정: http://220.118.162.20/api/vod/callback
+### 파일 경로로 포트폴리오를 찾아서 업데이트합니다.
+POST http://220.118.162.20/api/vod/callback
+Accept: application/json
+Content-Type: application/json
+
+{
+  "jobId": 1285970,
+  "status": "COMPLETE",
+  "categoryId": 20324,
+  "categoryName": "startoo-vod-category",
+  "input": {
+    "bucketName": "startoo-vod",
+    "filePath": "test2.mp4"
+  },
+  "output": [
+    {
+      "type": "HLS",
+      "url": "https://cdn.starttoo.com/out/test2/index.m3u8",
+      "bitrate": "2000",
+      "resolution": "1080p"
+    },
+    {
+      "type": "THUMBNAIL",
+      "url": "https://cdn.starttoo.com/out/test2/thumb_001.jpg"
+    }
+  ]
+}
+
+
 
 ###
 ### 토큰 리프레시
