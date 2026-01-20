@@ -1,6 +1,6 @@
 ### 변수 정의
 @baseUrl = http://localhost:8000
-@token = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vMjIwLjExOC4xNjIuMjAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2ODQ1MzUwNiwiZXhwIjoxNzY4NTQxNjU3LCJuYmYiOjE3Njg1MzgwNTcsImp0aSI6ImZ6eU83VlRFTFB3WGoyMk4iLCJzdWIiOiIxMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.LLK4ZBQDid-7wqfRUS22EyVm07hvSzRQ5WchMrFg-Pk
+@token = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vMjIwLjExOC4xNjIuMjAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2ODQ1MzUwNiwiZXhwIjoxNzY4ODcyNjI3LCJuYmYiOjE3Njg4NjkwMjcsImp0aSI6Ink5ckpiaE9wMkxiOGp4U3YiLCJzdWIiOiIxMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.kfbxgdAKvxBt8ntpe4KMQHK4WT_bFzB1OSbSsVJgJiU
 @token2 = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vMjIwLjExOC4xNjIuMjAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2ODM3NDUyOSwiZXhwIjoxNzY4MzgyMjAzLCJuYmYiOjE3NjgzNzg2MDMsImp0aSI6IlZsQWE0ZTEwY0k0cTd2TUIiLCJzdWIiOiIxMiIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.5a3HgkZfpWhAHJ_rcTIvOdLuhrsnj6ZFhLJSHOVVzqo
 
 
@@ -327,7 +327,7 @@ User-Agent: MyApp/1.0.0 (iOS 17.0)
 GET http://220.118.162.20/api/portfolios?per_page=10
 Accept: application/json
 cache-control: no-cache
-Authorization: Bearer {{token2}}
+Authorization: Bearer {{token}}
 # 쿼리 파라미터:
 # - user_id: 특정 아티스트의 포트폴리오만 조회 (선택)
 # - per_page: 페이지당 항목 수 (기본값: 15)
@@ -372,7 +372,7 @@ Authorization: Bearer {{token2}}
 
 ###
 ### 포트폴리오 상세 조회
-GET http://localhost:8000/api/portfolios/1
+GET http://220.118.162.20/api/portfolios/1
 Accept: application/json
 cache-control: no-cache
 #Authorization: Bearer {token}
@@ -413,53 +413,6 @@ cache-control: no-cache
 # 참고: images와 videos가 media 배열로 합쳐져서 order 기준으로 정렬되어 반환됩니다.
 
 ###
-### 포트폴리오 생성 (사업자 회원만 가능)
-POST http://220.118.162.20/api/portfolios
-Accept: application/json
-cache-control: no-cache
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{
-    "title": "피드 업로드 테스트",
-    "description": "피드 업로드 테스트 설명입니다.",
-    "work_date": "2026-01-08",
-    "price": 500000,
-    "is_public": true,
-    "images": [
-        {
-            "image_url": "https://kr.object.ncloudstorage.com/uploadimage/2026/01/0c860160-c9bf-11ef-94cb-5f844ceb9e30.jpg.webp",
-            "image_order": 0,
-            "scale": 1.5,
-            "offset_x": 0.2,
-            "offset_y": 0.3
-        },
-        {
-            "image_url": "https://kr.object.ncloudstorage.com/uploadimage/2026/01/2023082202359_0.jpg",
-            "image_order": 1,
-            "scale": 1.0,
-            "offset_x": 0.0,
-            "offset_y": 0.0
-        },
-        {
-            "image_url": "https://kr.object.ncloudstorage.com/uploadimage/2026/01/a53ac5310dd5f6bd2c6a895036d388b5.jpg",
-            "image_order": 2,
-            "scale": 1.0,
-            "offset_x": 0.0,
-            "offset_y": 0.0
-        },
-        {
-            "image_url": "https://kr.object.ncloudstorage.com/uploadimage/2026/01/tattoo-images-1.jpg",
-            "image_order": 3,
-            "scale": 1.0,
-            "offset_x": 0.0,
-            "offset_y": 0.0
-        }
-    ],
-    "tags": ["이레즈미", "팔", "레터링"]
-}
-
-###
 ### 포트폴리오 생성 (비디오 포함, 1분 30초 이하)
 POST http://220.118.162.20/api/portfolios
 Accept: application/json
@@ -475,8 +428,8 @@ Content-Type: application/json
     "is_public": true,
     "images": [
         {
-            "image_url": "https://kr.object.ncloudstorage.com/uploadimage/2026/01/thumbnail.jpg",
-            "image_order": 0,
+            "image_url": "/2026/01/thumbnail.jpg",
+            "image_order": 1,
             "scale": 1.0,
             "offset_x": 0.0,
             "offset_y": 0.0
@@ -489,7 +442,7 @@ Content-Type: application/json
         },
         {
             "video_file_path": "test3.mp4",
-            "video_order": 1
+            "video_order": 2
         }
     ],
     "tags": ["타투", "타임랩스"]
