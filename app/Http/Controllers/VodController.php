@@ -147,30 +147,6 @@ class VodController extends Controller
                 }
             }
 
-            // 타임스탬프로 매칭 시도 (파일명이 다를 수 있으므로)
-            // 예: "20260120025254_456789ab_AVC_HD_1Pass_30fps.mp4" -> "20260120025254" 추출
-            if (!$portfolioVideo && $filePath) {
-                $fileName = basename($filePath);
-                $fileNameWithoutExt = pathinfo($fileName, PATHINFO_FILENAME);
-                
-                // 타임스탬프 추출 (14자리 숫자: YYYYMMDDHHmmss)
-                if (preg_match('/^(\d{14})/', $fileNameWithoutExt, $matches)) {
-                    $timestamp = $matches[1]; // "20260120025254"
-                    
-                    Log::info('VOD 콜백: 타임스탬프로 매칭 시도', [
-                        'extracted_timestamp' => $timestamp,
-                        'file_name' => $fileNameWithoutExt,
-                    ]);
-                    
-                    // 타임스탬프로 매칭 (대소문자 무시, pending 또는 processing 상태만)
-                    $portfolioVideo = PortfolioVideo::where(function ($query) use ($timestamp) {
-                        $query->whereRaw('LOWER(video_file_path) LIKE ?', ['%' . $timestamp . '%']);
-                    })
-                    ->whereIn('video_status', ['pending', 'processing'])
-                    ->orderBy('created_at', 'desc') // 최신 것 우선
-                    ->first();
-                }
-            }
 
             if (!$portfolioVideo) {
                 Log::channel('daily')->warning('VOD 콜백: 포트폴리오 비디오를 찾을 수 없음', [
