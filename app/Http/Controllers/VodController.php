@@ -139,11 +139,36 @@ class VodController extends Controller
                         'original_with_ext' => $originalFileNameWithExt,
                     ]);
                     
-                    // 원본 파일명으로 매칭 시도 (전체 경로 또는 파일명만)
+                    // 원본 파일명으로 매칭 시도 (대소문자 무시)
                     $portfolioVideo = PortfolioVideo::where(function ($query) use ($originalFileName, $originalFileNameWithExt) {
-                        $query->where('video_file_path', 'like', '%' . $originalFileName . '%')
-                              ->orWhere('video_file_path', 'like', '%' . $originalFileNameWithExt . '%');
+                        $query->whereRaw('LOWER(video_file_path) LIKE ?', ['%' . strtolower($originalFileName) . '%'])
+                              ->orWhereRaw('LOWER(video_file_path) LIKE ?', ['%' . strtolower($originalFileNameWithExt) . '%']);
                     })->first();
+                }
+            }
+
+            // 타임스탬프로 매칭 시도 (파일명이 다를 수 있으므로)
+            // 예: "20260120025254_456789ab_AVC_HD_1Pass_30fps.mp4" -> "20260120025254" 추출
+            if (!$portfolioVideo && $filePath) {
+                $fileName = basename($filePath);
+                $fileNameWithoutExt = pathinfo($fileName, PATHINFO_FILENAME);
+                
+                // 타임스탬프 추출 (14자리 숫자: YYYYMMDDHHmmss)
+                if (preg_match('/^(\d{14})/', $fileNameWithoutExt, $matches)) {
+                    $timestamp = $matches[1]; // "20260120025254"
+                    
+                    Log::info('VOD 콜백: 타임스탬프로 매칭 시도', [
+                        'extracted_timestamp' => $timestamp,
+                        'file_name' => $fileNameWithoutExt,
+                    ]);
+                    
+                    // 타임스탬프로 매칭 (대소문자 무시, pending 또는 processing 상태만)
+                    $portfolioVideo = PortfolioVideo::where(function ($query) use ($timestamp) {
+                        $query->whereRaw('LOWER(video_file_path) LIKE ?', ['%' . $timestamp . '%']);
+                    })
+                    ->whereIn('video_status', ['pending', 'processing'])
+                    ->orderBy('created_at', 'desc') // 최신 것 우선
+                    ->first();
                 }
             }
 
