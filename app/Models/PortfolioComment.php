@@ -27,6 +27,7 @@ class PortfolioComment extends Model
         'user_id',
         'parent_id',
         'content',
+        'gif_image_url',
         'replies_count',
         'is_deleted',
         'is_pinned',

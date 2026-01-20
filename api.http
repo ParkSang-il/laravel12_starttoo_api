@@ -564,8 +564,11 @@ Content-Type: application/json
 
 {
     "content": "댓글 테스트 리턴확인",
+    "gif_image_url": null,
     "parent_id": null
 }
+# 참고: content 또는 gif_image_url 중 하나는 필수입니다.
+# GIF 이미지만으로 댓글 작성 가능: { "gif_image_url": "https://example.com/image.gif", "parent_id": null }
 
 
 ###
@@ -580,8 +583,10 @@ Content-Type: application/json
 
 {
     "content": "대댓글 등록 리턴확인",
+    "gif_image_url": null,
     "parent_id": 9
 }
+# 참고: content 또는 gif_image_url 중 하나는 필수입니다.
 
 
 ###
@@ -594,8 +599,11 @@ Content-Type: application/json
 # 응답: { "success": true, "message": "댓글이 수정되었습니다.", "data": { "comment": {...} } }
 
 {
-    "content": "수정된 댓글 내용입니다AㅁㄴㅇㄹA."
+    "content": "수정된 댓글 내용입니다.",
+    "gif_image_url": null
 }
+# 참고: content 또는 gif_image_url 중 하나는 필수입니다.
+# GIF 이미지만으로 댓글 수정 가능: { "gif_image_url": "https://example.com/image.gif" }
 
 
 ###

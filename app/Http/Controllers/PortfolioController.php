@@ -1042,13 +1042,20 @@ class PortfolioController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
-                'content' => 'required|string|max:100',
+                'content' => 'nullable|string|max:100',
+                'gif_image_url' => 'nullable|string|max:500|url',
                 'parent_id' => 'nullable|integer|exists:portfolio_comments,id',
             ], [
-                'content.required' => '댓글 내용은 필수입니다.',
                 'content.max' => '댓글은 최대 100자까지 입력할 수 있습니다.',
+                'gif_image_url.url' => '올바른 URL 형식이 아닙니다.',
+                'gif_image_url.max' => 'GIF 이미지 URL은 최대 500자까지 입력할 수 있습니다.',
                 'parent_id.exists' => '존재하지 않는 댓글입니다.',
             ]);
+
+            // content 또는 gif_image_url 중 하나는 필수
+            if (empty($request->input('content')) && empty($request->input('gif_image_url'))) {
+                $validator->errors()->add('content', '댓글 내용 또는 GIF 이미지 중 하나는 필수입니다.');
+            }
 
             if ($validator->fails()) {
                 return response()->json([
@@ -1092,6 +1099,7 @@ class PortfolioController extends Controller
                 // 댓글 생성
                 $comment = PortfolioComment::create([
                     'portfolio_id' => $id,
+                    'gif_image_url' => $request->input('gif_image_url'),
                     'user_id' => $user->id,
                     'parent_id' => $parentId,
                     'content' => $request->input('content'),
@@ -1210,11 +1218,18 @@ class PortfolioController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
-                'content' => 'required|string|max:1000',
+                'content' => 'nullable|string|max:100',
+                'gif_image_url' => 'nullable|string|max:500|url',
             ], [
-                'content.required' => '댓글 내용은 필수입니다.',
-                'content.max' => '댓글은 최대 1000자까지 입력할 수 있습니다.',
+                'content.max' => '댓글은 최대 100자까지 입력할 수 있습니다.',
+                'gif_image_url.url' => '올바른 URL 형식이 아닙니다.',
+                'gif_image_url.max' => 'GIF 이미지 URL은 최대 500자까지 입력할 수 있습니다.',
             ]);
+
+            // content 또는 gif_image_url 중 하나는 필수
+            if (empty($request->input('content')) && empty($request->input('gif_image_url'))) {
+                $validator->errors()->add('content', '댓글 내용 또는 GIF 이미지 중 하나는 필수입니다.');
+            }
 
             if ($validator->fails()) {
                 return response()->json([
@@ -1224,9 +1239,15 @@ class PortfolioController extends Controller
                 ], 422);
             }
 
-            $comment->update([
-                'content' => $request->input('content'),
-            ]);
+            $updateData = [];
+            if ($request->has('content')) {
+                $updateData['content'] = $request->input('content');
+            }
+            if ($request->has('gif_image_url')) {
+                $updateData['gif_image_url'] = $request->input('gif_image_url');
+            }
+
+            $comment->update($updateData);
 
             $comment->load('user:id,username,profile_image');
 
