@@ -669,26 +669,14 @@ Accept: application/json
 Content-Type: application/json
 
 {
-  "jobId": 1285970,
-  "status": "COMPLETE",
   "categoryId": 20324,
   "categoryName": "startoo-vod-category",
-  "input": {
-    "bucketName": "startoo-vod",
-    "filePath": "test2.mp4"
-  },
-  "output": [
-    {
-      "type": "HLS",
-      "url": "https://cdn.starttoo.com/out/test2/index.m3u8",
-      "bitrate": "2000",
-      "resolution": "1080p"
-    },
-    {
-      "type": "THUMBNAIL",
-      "url": "https://cdn.starttoo.com/out/test2/thumb_001.jpg"
-    }
-  ]
+  "fileId": 1286370,
+  "filePath": "/startoo-vod-category/20260120004052_23456789_AVC_HD_1Pass_30fps.mp4",
+  "encodingOptionId": 3,
+  "outputType": "AVC_HD_1Pass_30fps",
+  "link": "https://kr.object.ncloudstorage.com/startoo-vod-output/startoo-vod-category/20260120004052_23456789_AVC_HD_1Pass_30fps.mp4",
+  "status": "COMPLETE"
 }
 
 ###
@@ -740,33 +728,25 @@ Authorization: Bearer {{token}}
 ###
 ### VOD 인코딩 완료 콜백 (네이버 클라우드 플랫폼에서 호출)
 ### 인증 불필요, notificationUrl에 설정: http://220.118.162.20/api/vod/callback
-### 파일 경로로 포트폴리오를 찾아서 업데이트합니다.
+### 파일 경로로 포트폴리오 비디오를 찾아서 HLS URL을 생성하여 업데이트합니다.
 POST http://220.118.162.20/api/vod/callback
 Accept: application/json
 Content-Type: application/json
 
 {
-  "jobId": 1285970,
-  "status": "COMPLETE",
   "categoryId": 20324,
   "categoryName": "startoo-vod-category",
-  "input": {
-    "bucketName": "startoo-vod",
-    "filePath": "test2.mp4"
-  },
-  "output": [
-    {
-      "type": "HLS",
-      "url": "https://cdn.starttoo.com/out/test2/index.m3u8",
-      "bitrate": "2000",
-      "resolution": "1080p"
-    },
-    {
-      "type": "THUMBNAIL",
-      "url": "https://cdn.starttoo.com/out/test2/thumb_001.jpg"
-    }
-  ]
+  "fileId": 1286370,
+  "filePath": "/startoo-vod-category/20260120004052_23456789_AVC_HD_1Pass_30fps.mp4",
+  "encodingOptionId": 3,
+  "outputType": "AVC_HD_1Pass_30fps",
+  "link": "https://kr.object.ncloudstorage.com/startoo-vod-output/startoo-vod-category/20260120004052_23456789_AVC_HD_1Pass_30fps.mp4",
+  "status": "COMPLETE"
 }
+# 참고: 
+# - filePath로 포트폴리오 비디오를 찾아서 매칭합니다.
+# - HLS URL은 자동으로 생성됩니다: https://{VOD_CDN_DOMAIN}/hls/{filePath}/index.m3u8
+# - 환경변수 VOD_CDN_DOMAIN을 설정해야 합니다 (기본값: cdn.starttoo.com)
 
 
 

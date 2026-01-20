@@ -59,4 +59,15 @@ return [
         'redirect' => env('INSTAGRAM_REDIRECT_URI', env('APP_URL') . '/api/auth/social/instagram/callback'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | VOD CDN 설정
+    |--------------------------------------------------------------------------
+    */
+
+    'vod' => [
+        'cdn_domain' => env('VOD_CDN_DOMAIN', 'cdn.starttoo.com'),
+        'encrypted_bucket_name' => env('VOD_ENCRYPTED_BUCKET_NAME', ''),
+    ],
+
 ];
