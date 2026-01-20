@@ -87,6 +87,24 @@ class VodController extends Controller
                 'file_path' => $filePath,
             ]);
 
+            // DB에 저장된 모든 video_file_path 로그 출력 (디버깅용)
+            $allVideos = PortfolioVideo::select('id', 'portfolio_id', 'video_file_path', 'video_status')
+                ->where('video_status', 'pending')
+                ->orWhere('video_status', 'processing')
+                ->get();
+            
+            Log::info('VOD 콜백: 대기 중인 포트폴리오 비디오 목록', [
+                'pending_videos_count' => $allVideos->count(),
+                'pending_videos' => $allVideos->map(function ($video) {
+                    return [
+                        'id' => $video->id,
+                        'portfolio_id' => $video->portfolio_id,
+                        'video_file_path' => $video->video_file_path,
+                        'video_status' => $video->video_status,
+                    ];
+                })->toArray(),
+            ]);
+
             // 전체 경로 매칭 시도
             $portfolioVideo = PortfolioVideo::where('video_file_path', $filePath)->first();
             
@@ -99,6 +117,36 @@ class VodController extends Controller
                 $portfolioVideo = PortfolioVideo::where('video_file_path', 'like', '%' . $fileName)->first();
             }
 
+            // 파일명에서 인코딩 옵션 제거하여 원본 파일명 추출
+            // 예: "20260120024700_uvwxyzAB_AVC_HD_1Pass_30fps.mp4" -> "20260120024700_uvwxyzAB.mp4"
+            if (!$portfolioVideo && $filePath) {
+                $fileName = basename($filePath);
+                // 파일명에서 확장자 제거
+                $fileNameWithoutExt = pathinfo($fileName, PATHINFO_FILENAME);
+                
+                // "_AVC_HD_1Pass_30fps" 인코딩 옵션 제거
+                // 패턴: 타임스탬프_식별자_AVC_HD_1Pass_30fps
+                // 예: "20260120024700_uvwxyzAB_AVC_HD_1Pass_30fps" -> "20260120024700_uvwxyzAB"
+                $originalFileName = preg_replace('/_AVC_HD_1Pass_30fps$/', '', $fileNameWithoutExt);
+                
+                if ($originalFileName !== $fileNameWithoutExt) {
+                    // 원본 파일명으로 매칭 시도 (확장자 포함)
+                    $originalFileNameWithExt = $originalFileName . '.mp4';
+                    
+                    Log::info('VOD 콜백: 인코딩 옵션 제거하여 원본 파일명 추출', [
+                        'original_file_name' => $fileNameWithoutExt,
+                        'extracted_original' => $originalFileName,
+                        'original_with_ext' => $originalFileNameWithExt,
+                    ]);
+                    
+                    // 원본 파일명으로 매칭 시도 (전체 경로 또는 파일명만)
+                    $portfolioVideo = PortfolioVideo::where(function ($query) use ($originalFileName, $originalFileNameWithExt) {
+                        $query->where('video_file_path', 'like', '%' . $originalFileName . '%')
+                              ->orWhere('video_file_path', 'like', '%' . $originalFileNameWithExt . '%');
+                    })->first();
+                }
+            }
+
             if (!$portfolioVideo) {
                 Log::channel('daily')->warning('VOD 콜백: 포트폴리오 비디오를 찾을 수 없음', [
                     'file_id' => $fileId,
@@ -106,12 +154,19 @@ class VodController extends Controller
                     'file_name' => $filePath ? basename($filePath) : null,
                     'searched_path' => $filePath,
                     'searched_file_name' => $filePath ? basename($filePath) : null,
+                    'all_pending_videos' => $allVideos->map(function ($video) {
+                        return [
+                            'id' => $video->id,
+                            'video_file_path' => $video->video_file_path,
+                        ];
+                    })->toArray(),
                 ]);
 
                 Log::warning('VOD 콜백: 포트폴리오 비디오를 찾을 수 없음', [
                     'file_id' => $fileId,
                     'file_path' => $filePath,
                     'file_name' => $filePath ? basename($filePath) : null,
+                    'pending_videos_count' => $allVideos->count(),
                 ]);
 
                 return response()->json([
