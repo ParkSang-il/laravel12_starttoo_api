@@ -105,46 +105,41 @@ class VodController extends Controller
                 })->toArray(),
             ]);
 
-            // 전체 경로 매칭 시도
-            $portfolioVideo = PortfolioVideo::where('video_file_path', $filePath)->first();
+            // 콜백에서 파일명 추출
+            // 예: "/startoo-vod-category/20260120030636_vwxyzABC_AVC_HD_1Pass_30fps.mp4" 
+            // -> "20260120030636_vwxyzABC_AVC_HD_1Pass_30fps.mp4"
+            $fileName = basename($filePath);
             
-            // 전체 경로로 못 찾으면 파일명만으로 매칭 시도
-            if (!$portfolioVideo && $filePath) {
-                $fileName = basename($filePath); // "20260120004052_23456789_AVC_HD_1Pass_30fps.mp4" 추출
-                Log::info('VOD 콜백: 전체 경로 매칭 실패, 파일명으로 재검색', [
-                    'file_name' => $fileName,
+            // 파일명에서 확장자 제거
+            // 예: "20260120030636_vwxyzABC_AVC_HD_1Pass_30fps.mp4" 
+            // -> "20260120030636_vwxyzABC_AVC_HD_1Pass_30fps"
+            $fileNameWithoutExt = pathinfo($fileName, PATHINFO_FILENAME);
+            
+            // "_AVC_HD_1Pass_30fps" 인코딩 옵션 제거 (앞의 언더바 포함)
+            // 예: "20260120030636_vwxyzABC_AVC_HD_1Pass_30fps" -> "20260120030636_vwxyzABC"
+            $originalFileName = preg_replace('/_AVC_HD_1Pass_30fps$/', '', $fileNameWithoutExt);
+            
+            // 원본 파일명에 확장자 추가
+            // 예: "20260120030636_vwxyzABC" -> "20260120030636_vwxyzABC.mp4"
+            $originalFileNameWithExt = $originalFileName . '.mp4';
+            
+            Log::info('VOD 콜백: 파일명 처리', [
+                'callback_file_path' => $filePath,
+                'extracted_file_name' => $fileName,
+                'file_name_without_ext' => $fileNameWithoutExt,
+                'original_file_name' => $originalFileName,
+                'original_file_name_with_ext' => $originalFileNameWithExt,
+            ]);
+            
+            // DB에서 원본 파일명으로 매칭 (DB에는 파일명만 저장되어 있음)
+            $portfolioVideo = PortfolioVideo::where('video_file_path', $originalFileNameWithExt)->first();
+            
+            // 대소문자 무시 매칭 시도
+            if (!$portfolioVideo) {
+                Log::info('VOD 콜백: 대소문자 무시 매칭 시도', [
+                    'search_file_name' => $originalFileNameWithExt,
                 ]);
-                $portfolioVideo = PortfolioVideo::where('video_file_path', 'like', '%' . $fileName)->first();
-            }
-
-            // 파일명에서 인코딩 옵션 제거하여 원본 파일명 추출
-            // 예: "20260120024700_uvwxyzAB_AVC_HD_1Pass_30fps.mp4" -> "20260120024700_uvwxyzAB.mp4"
-            if (!$portfolioVideo && $filePath) {
-                $fileName = basename($filePath);
-                // 파일명에서 확장자 제거
-                $fileNameWithoutExt = pathinfo($fileName, PATHINFO_FILENAME);
-                
-                // "_AVC_HD_1Pass_30fps" 인코딩 옵션 제거
-                // 패턴: 타임스탬프_식별자_AVC_HD_1Pass_30fps
-                // 예: "20260120024700_uvwxyzAB_AVC_HD_1Pass_30fps" -> "20260120024700_uvwxyzAB"
-                $originalFileName = preg_replace('/_AVC_HD_1Pass_30fps$/', '', $fileNameWithoutExt);
-                
-                if ($originalFileName !== $fileNameWithoutExt) {
-                    // 원본 파일명으로 매칭 시도 (확장자 포함)
-                    $originalFileNameWithExt = $originalFileName . '.mp4';
-                    
-                    Log::info('VOD 콜백: 인코딩 옵션 제거하여 원본 파일명 추출', [
-                        'original_file_name' => $fileNameWithoutExt,
-                        'extracted_original' => $originalFileName,
-                        'original_with_ext' => $originalFileNameWithExt,
-                    ]);
-                    
-                    // 원본 파일명으로 매칭 시도 (대소문자 무시)
-                    $portfolioVideo = PortfolioVideo::where(function ($query) use ($originalFileName, $originalFileNameWithExt) {
-                        $query->whereRaw('LOWER(video_file_path) LIKE ?', ['%' . strtolower($originalFileName) . '%'])
-                              ->orWhereRaw('LOWER(video_file_path) LIKE ?', ['%' . strtolower($originalFileNameWithExt) . '%']);
-                    })->first();
-                }
+                $portfolioVideo = PortfolioVideo::whereRaw('LOWER(video_file_path) = ?', [strtolower($originalFileNameWithExt)])->first();
             }
 
 
