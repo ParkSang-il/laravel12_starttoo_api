@@ -1097,12 +1097,13 @@ class PortfolioController extends Controller
                 }
 
                 // 댓글 생성
+                // GIF 이미지가 있으면 content는 null이어도 됨
                 $comment = PortfolioComment::create([
                     'portfolio_id' => $id,
-                    'gif_image_url' => $request->input('gif_image_url'),
                     'user_id' => $user->id,
                     'parent_id' => $parentId,
                     'content' => $request->input('content'),
+                    'gif_image_url' => $request->input('gif_image_url'),
                     'replies_count' => 0,
                 ]);
 
