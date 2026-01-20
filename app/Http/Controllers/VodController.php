@@ -146,22 +146,26 @@ class VodController extends Controller
             if (!$portfolioVideo) {
                 Log::channel('daily')->warning('VOD 콜백: 포트폴리오 비디오를 찾을 수 없음', [
                     'file_id' => $fileId,
-                    'file_path' => $filePath,
-                    'file_name' => $filePath ? basename($filePath) : null,
-                    'searched_path' => $filePath,
-                    'searched_file_name' => $filePath ? basename($filePath) : null,
+                    'callback_file_path' => $filePath,
+                    'extracted_file_name' => $fileName,
+                    'original_file_name_with_ext' => $originalFileNameWithExt,
+                    'searched_in_db' => $originalFileNameWithExt,
                     'all_pending_videos' => $allVideos->map(function ($video) {
                         return [
                             'id' => $video->id,
+                            'portfolio_id' => $video->portfolio_id,
                             'video_file_path' => $video->video_file_path,
+                            'video_status' => $video->video_status,
                         ];
                     })->toArray(),
                 ]);
 
                 Log::warning('VOD 콜백: 포트폴리오 비디오를 찾을 수 없음', [
                     'file_id' => $fileId,
-                    'file_path' => $filePath,
-                    'file_name' => $filePath ? basename($filePath) : null,
+                    'callback_file_path' => $filePath,
+                    'extracted_file_name' => $fileName,
+                    'original_file_name_with_ext' => $originalFileNameWithExt,
+                    'searched_in_db' => $originalFileNameWithExt,
                     'pending_videos_count' => $allVideos->count(),
                 ]);
 
