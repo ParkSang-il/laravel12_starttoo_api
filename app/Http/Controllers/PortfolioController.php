@@ -284,14 +284,15 @@ class PortfolioController extends Controller
                 'work_date' => 'nullable|date',
                 'price' => 'nullable|numeric|min:0|max:99999999.99',
                 'is_public' => 'nullable|boolean',
-                'images' => 'required|array|min:1',
+                'images' => 'nullable|array',
                 'images.*.image_url' => 'required|string|max:255',
                 'images.*.image_order' => 'nullable|integer|min:0',
                 'images.*.scale' => 'nullable|numeric|min:0|max:10',
                 'images.*.offset_x' => 'nullable|numeric|min:0|max:1',
                 'images.*.offset_y' => 'nullable|numeric|min:0|max:1',
-                'video_file_path' => 'nullable|string|max:500',
-                'video_job_id' => 'nullable|integer',
+                'videos' => 'nullable|array',
+                'videos.*.video_file_path' => 'required|string|max:500',
+                'videos.*.video_order' => 'nullable|integer|min:0',
                 'tags' => 'nullable|array',
                 'tags.*' => 'string|max:100',
             ], [
@@ -302,12 +303,20 @@ class PortfolioController extends Controller
                 'price.numeric' => '가격은 숫자여야 합니다.',
                 'price.min' => '가격은 0 이상이어야 합니다.',
                 'price.max' => '가격은 99,999,999.99 이하여야 합니다.',
-                'images.required' => '이미지는 최소 1개 이상 필요합니다.',
                 'images.array' => '이미지는 배열 형식이어야 합니다.',
                 'images.*.image_url.required' => '이미지 URL은 필수입니다.',
-                'videos.*.video_file_path.required_with' => '비디오 파일 경로는 필수입니다.',
+                'videos.array' => '비디오는 배열 형식이어야 합니다.',
+                'videos.*.video_file_path.required' => '비디오 파일 경로는 필수입니다.',
                 'videos.*.video_file_path.max' => '비디오 파일 경로는 최대 500자까지 입력할 수 있습니다.',
             ]);
+
+            // 이미지 또는 비디오 중 하나는 있어야 함
+            $images = $request->input('images', []);
+            $videos = $request->input('videos', []);
+            
+            if (empty($images) && empty($videos)) {
+                $validator->errors()->add('media', '이미지 또는 비디오 중 최소 1개 이상 필요합니다.');
+            }
 
             if ($validator->fails()) {
                 return response()->json([
@@ -450,7 +459,7 @@ class PortfolioController extends Controller
                 'work_date' => 'nullable|date',
                 'price' => 'nullable|numeric|min:0|max:99999999.99',
                 'is_public' => 'nullable|boolean',
-                'images' => 'nullable|array|min:1',
+                'images' => 'nullable|array',
                 'images.*.image_url' => 'required_with:images|string|max:255',
                 'images.*.image_order' => 'nullable|integer|min:0',
                 'videos' => 'nullable|array',
@@ -459,6 +468,20 @@ class PortfolioController extends Controller
                 'tags' => 'nullable|array',
                 'tags.*' => 'string|max:100',
             ]);
+
+            // 이미지 또는 비디오 중 하나는 있어야 함 (기존 데이터가 없는 경우에만)
+            $images = $request->input('images', []);
+            $videos = $request->input('videos', []);
+            $existingImagesCount = $portfolio->images()->count();
+            $existingVideosCount = $portfolio->videos()->count();
+            
+            // 업데이트 시 images나 videos가 전달된 경우, 둘 다 비어있으면 안됨
+            // 단, 기존에 이미지나 비디오가 있으면 괜찮음
+            if ($request->has('images') || $request->has('videos')) {
+                if (empty($images) && empty($videos) && $existingImagesCount === 0 && $existingVideosCount === 0) {
+                    $validator->errors()->add('media', '이미지 또는 비디오 중 최소 1개 이상 필요합니다.');
+                }
+            }
 
             if ($validator->fails()) {
                 return response()->json([

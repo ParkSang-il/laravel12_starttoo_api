@@ -1,6 +1,6 @@
 ### 변수 정의
 @baseUrl = http://localhost:8000
-@token = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vMjIwLjExOC4xNjIuMjAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2ODQ1MzUwNiwiZXhwIjoxNzY4ODcyNjI3LCJuYmYiOjE3Njg4NjkwMjcsImp0aSI6Ink5ckpiaE9wMkxiOGp4U3YiLCJzdWIiOiIxMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.kfbxgdAKvxBt8ntpe4KMQHK4WT_bFzB1OSbSsVJgJiU
+@token = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vMjIwLjExOC4xNjIuMjAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2ODQ1MzUwNiwiZXhwIjoxNzY4ODc4Nzk2LCJuYmYiOjE3Njg4NzUxOTYsImp0aSI6Im1vNU9mN2hFdXNKUm9VMnYiLCJzdWIiOiIxMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.Y8ZRiYWMnt9lFJoSR-PZ-yIuR2UUyk-Na-p2lbYsrdM
 @token2 = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vMjIwLjExOC4xNjIuMjAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2ODM3NDUyOSwiZXhwIjoxNzY4MzgyMjAzLCJuYmYiOjE3NjgzNzg2MDMsImp0aSI6IlZsQWE0ZTEwY0k0cTd2TUIiLCJzdWIiOiIxMiIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.5a3HgkZfpWhAHJ_rcTIvOdLuhrsnj6ZFhLJSHOVVzqo
 
 
@@ -743,7 +743,7 @@ Content-Type: application/json
   "link": "https://kr.object.ncloudstorage.com/startoo-vod-output/startoo-vod-category/20260120004052_23456789_AVC_HD_1Pass_30fps.mp4",
   "status": "COMPLETE"
 }
-# 참고: 
+# 참고:
 # - filePath로 포트폴리오 비디오를 찾아서 매칭합니다.
 # - HLS URL은 자동으로 생성됩니다: https://{VOD_CDN_DOMAIN}/hls/{filePath}/index.m3u8
 # - 환경변수 VOD_CDN_DOMAIN을 설정해야 합니다 (기본값: cdn.starttoo.com)
