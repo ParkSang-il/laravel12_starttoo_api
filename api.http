@@ -1,6 +1,6 @@
 ### 변수 정의
 @baseUrl = http://localhost:8000
-@token = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vMjIwLjExOC4xNjIuMjAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2ODQ1MzUwNiwiZXhwIjoxNzY4ODc4Nzk2LCJuYmYiOjE3Njg4NzUxOTYsImp0aSI6Im1vNU9mN2hFdXNKUm9VMnYiLCJzdWIiOiIxMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.Y8ZRiYWMnt9lFJoSR-PZ-yIuR2UUyk-Na-p2lbYsrdM
+@token = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vMjIwLjExOC4xNjIuMjAvYXBpL2F1dGgvbG9naW4iLCJpYXQiOjE3Njg4OTM3MzYsImV4cCI6MTc2ODg5NzMzNiwibmJmIjoxNzY4ODkzNzM2LCJqdGkiOiI3UDFXOXQ1c0YxOVBDdDA4Iiwic3ViIjoiMTEiLCJwcnYiOiIyM2JkNWM4OTQ5ZjYwMGFkYjM5ZTcwMWM0MDA4NzJkYjdhNTk3NmY3In0.8TPZjiqR2A7F38f4qxs5pZj4buVRp-5FCI1Ky-GtHZc
 @token2 = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vMjIwLjExOC4xNjIuMjAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2ODM3NDUyOSwiZXhwIjoxNzY4MzgyMjAzLCJuYmYiOjE3NjgzNzg2MDMsImp0aSI6IlZsQWE0ZTEwY0k0cTd2TUIiLCJzdWIiOiIxMiIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.5a3HgkZfpWhAHJ_rcTIvOdLuhrsnj6ZFhLJSHOVVzqo
 
 
@@ -533,10 +533,10 @@ Content-Type: application/json
 
 ###
 ### 포트폴리오 댓글 목록 조회 (상위 댓글만, 인증 필요)
-GET http://localhost:8000/api/portfolios/1/comments?per_page=15
+GET http://220.118.162.20/api/portfolios/28/comments?per_page=15
 Accept: application/json
 cache-control: no-cache
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvcmVmcmVzaCIsImlhdCI6MTc2NTQ0MDE3MywiZXhwIjoxNzY1NTE4NjEyLCJuYmYiOjE3NjU1MTUwMTIsImp0aSI6Im5samJkS2FzVldXTHV3TEMiLCJzdWIiOiIxMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.BO7voSOllT4aC_iwXJ3J8PXQQnJLJS4NNUtP5ZNTFKI
+Authorization: Bearer {{token}}
 # 상위 댓글만 조회 (대댓글 제외)
 # 각 댓글에 replies_count 포함
 # 응답: { "success": true, "data": { "comments": [...], "pagination": {...} } }
