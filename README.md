@@ -1,59 +1,18 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# 프로젝트별 DB를 사용하는 API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+현재 등록 대상은 **streetcat 하나**다. Laravel/JWT/MySQL/Nginx 공통 기반을 사용하고, 앱별 회원·인증·업무 데이터는 별도 DB에 저장한다. 프레임워크는 기존 composer.json의 Laravel 13.38.0 설정을 유지했다.
 
-## About Laravel
+| 문서 | 내용 |
+|---|---|
+| [서버 설치·사용법](docs/SETUP_STREETCAT.md) | streetcat DB 생성, 전용 계정, 마이그레이션, 프로젝트 등록, 운영 설정 |
+| [Flutter API 목록](docs/FLUTTER_API.md) | 현재 구현된 5개 API, 요청·응답·오류, 앱 연결 순서, 향후 API 구분 |
+| [DB 분리 구조](docs/PROJECT_DATABASES.md) | 프로젝트 선택, 전용 연결, JWT 검증, 기존 데이터 처리, 다음 앱 추가법 |
+| [HTTP 요청 테스트](api.http) | streetcat만 사용하는 순차 테스트 13개 |
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+빠른 시작: MySQL에 streetcat DB/계정 준비 → .env의 STREETCAT_DB_* 설정 → `php artisan project:migrate streetcat` → `php artisan project:create streetcat`.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+기존 DB와 과거 마이그레이션은 보존했다. **프로젝트 DB에 일반 `php artisan migrate`를 실행하지 않는다.** `project:migrate`는 `database/project-migrations`만 적용하며 과거 포트폴리오 테이블을 생성하지 않는다. 기존 데이터의 자동 복사·삭제는 없다. 과거 START/SETUP/JWT 문서와 .backup 자료는 이전 서비스의 참고 자료이며 이 README의 링크가 현재 안내다.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+운영 SMS 제공자는 아직 연결되지 않았다. 개발에서만 `APP_ENV=local` + `PLATFORM_SMS_DRIVER=preview`로 인증번호를 응답받을 수 있다. production에서는 503으로 차단된다. 공동 돌봄 그룹·장소·친구·상태 승인 API도 아직 구현 전이다.
 
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
-
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-## Laravel Sponsors
-
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
-
-### Premium Partners
-
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
-
-## Contributing
-
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+검증 명령: `php artisan test --filter=ProjectIsolationTest`, `php artisan test`, `vendor/bin/pint --test`. 격리 테스트의 두 번째 앱은 메모리 DB 테스트에만 존재하며 실제 설정/운영 등록에는 추가하지 않는다. PHP/Composer/vendor가 없는 현재 작업 환경에서는 실행 검증하지 못했다. 실제 MySQL 동시 요청·잠금·Redis 토큰 폐기는 서버 통합 검증이 필요하다.

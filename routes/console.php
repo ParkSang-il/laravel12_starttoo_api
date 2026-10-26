@@ -1,15 +1,28 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
+use App\Models\Project;
+use App\Services\ProjectDatabase;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Schedule;
 
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
+Artisan::command('project:migrate {code=streetcat} {--pretend} {--force}', function () {
+    $connection = app(ProjectDatabase::class)->configuredConnection($this->argument('code'));
 
-// 포트폴리오 통계 업데이트 스케줄 (매일 새벽 2시에 실행)
-Schedule::command('portfolio:update-stats')
-    ->dailyAt('02:00')
-    ->timezone('Asia/Seoul')
-    ->description('포트폴리오 최근 통계 업데이트 (최근 7일)');
+    return $this->call('migrate', [
+        '--database' => $connection,
+        '--path' => 'database/project-migrations',
+        '--pretend' => $this->option('pretend'),
+        '--force' => $this->option('force'),
+    ]);
+})->purpose('Migrate only the allowlisted project database, without legacy tables');
+
+Artisan::command('project:create {code=streetcat} {name?}', function () {
+    $code = $this->argument('code');
+
+    return app(ProjectDatabase::class)->run($code, function () use ($code) {
+        $name = $this->argument('name') ?: config('platform.projects.'.$code.'.name');
+        $project = Project::firstOrCreate(['code' => $code], ['name' => $name]);
+        $this->info($project->wasRecentlyCreated ? '프로젝트를 등록했습니다.' : '이미 등록된 프로젝트입니다.');
+
+        return 0;
+    });
+})->purpose('Register a project inside its own previously migrated database');

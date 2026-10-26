@@ -1,8 +1,11 @@
 <?php
 
+use App\Http\Middleware\EnsureProjectAccount;
+use App\Http\Middleware\ResolveProject;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -12,24 +15,22 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // API 라우트에서 세션 미들웨어 제거 (JWT 사용)
-        $middleware->api(remove: [
-            \Illuminate\Session\Middleware\StartSession::class,
-            \Illuminate\View\Middleware\ShareErrorsFromSession::class,
-        ]);
 
-        // ✅ 진짜 CSRF 미들웨어 제거 (전역 OFF)
-        $middleware->web(remove: [
-            \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
-        ]);
-
-        // 관리자 인증 미들웨어 별칭 등록
+        // Laravel sorts route middleware: select the DB before JWT loads a member.
+        $middleware->prependToPriorityList(
+            \Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests::class,
+            ResolveProject::class,
+        );
+        $middleware->appendToPriorityList(
+            \Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests::class,
+            EnsureProjectAccount::class,
+        );
         $middleware->alias([
-            'admin.auth' => \App\Http\Middleware\AdminAuth::class,
-            'check.suspended' => \App\Http\Middleware\CheckSuspendedUser::class,
+            'project.resolve' => ResolveProject::class,
+            'project.account' => EnsureProjectAccount::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->shouldRenderJsonWhen(fn (Request $request, \Throwable $e) =>
+            $request->is('api/*') || $request->expectsJson());
     })->create();
-

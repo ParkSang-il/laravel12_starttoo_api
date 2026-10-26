@@ -2,22 +2,16 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use App\Models\Project;
+use App\Services\ProjectDatabase;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
-        $this->call([
-            UsernameAdjectiveSeeder::class,
-            UsernameNounSeeder::class,
-            UserSeeder::class,
-        ]);
+        app(ProjectDatabase::class)->run('streetcat', function () {
+            Project::firstOrCreate(['code' => 'streetcat'], ['name' => '스트릿캣']);
+        });
     }
 }

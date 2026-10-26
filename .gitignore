@@ -49,3 +49,8 @@ Homestead.yaml
 
 # Docker
 docker-compose.override.yml
+
+# Current API and database setup documentation
+!/docs/SETUP_STREETCAT.md
+!/docs/FLUTTER_API.md
+!/docs/PROJECT_DATABASES.md

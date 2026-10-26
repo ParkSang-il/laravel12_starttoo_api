@@ -31,6 +31,27 @@ return [
 
     'connections' => [
 
+
+        // Physically separate app database; no DB_URL or legacy credential fallback.
+        'streetcat' => [
+            'driver' => 'mysql',
+            'host' => env('STREETCAT_DB_HOST', '127.0.0.1'),
+            'port' => env('STREETCAT_DB_PORT', '3306'),
+            'database' => env('STREETCAT_DB_DATABASE', 'streetcat'),
+            'username' => env('STREETCAT_DB_USERNAME', 'streetcat'),
+            'password' => env('STREETCAT_DB_PASSWORD', ''),
+            'unix_socket' => env('STREETCAT_DB_SOCKET', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => 'InnoDB',
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('STREETCAT_MYSQL_SSL_CA'),
+            ]) : [],
+        ],
+
         'sqlite' => [
             'driver' => 'sqlite',
             'url' => env('DB_URL'),
