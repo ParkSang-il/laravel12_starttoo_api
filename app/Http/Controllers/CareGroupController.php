@@ -26,6 +26,19 @@ class CareGroupController extends Controller
         return (string) $request->route('group');
     }
 
+    private function discoveryCenter(array $data): array
+    {
+        if (array_key_exists('discovery_latitude', $data) !== array_key_exists('discovery_longitude', $data)
+            || (($data['discovery_latitude'] ?? null) === null) !== (($data['discovery_longitude'] ?? null) === null)) {
+            throw ValidationException::withMessages(['discovery_latitude' => ['활동 지역의 기준 위치는 두 좌표를 함께 지정해 주세요.']]);
+        }
+        foreach (['discovery_latitude', 'discovery_longitude'] as $field) {
+            if (isset($data[$field])) $data[$field] = round((float) $data[$field], 2);
+        }
+
+        return $data;
+    }
+
     public function create(Request $request)
     {
         $data = $this->input($request, [
@@ -35,11 +48,13 @@ class CareGroupController extends Controller
             'region_label' => ['required', 'string', 'max:80'],
             'is_discoverable' => ['sometimes', 'boolean'],
             'accepting_requests' => ['sometimes', 'boolean'],
+            'discovery_latitude' => ['sometimes', 'nullable', 'numeric', 'between:-90,90'],
+            'discovery_longitude' => ['sometimes', 'nullable', 'numeric', 'between:-180,180'],
         ]);
 
         $data['description'] = $data['description'] ?? '';
 
-        return response()->json(['data' => $this->groups->create($request->user(), $data)], 201);
+        return response()->json(['data' => $this->groups->create($request->user(), $this->discoveryCenter($data))], 201);
     }
 
     public function discover(Request $request)
@@ -58,6 +73,19 @@ class CareGroupController extends Controller
         return response()->json(['data' => $this->groups->mine($request->user())]);
     }
 
+    public function nearby(Request $request)
+    {
+        $data = $this->input($request, [
+            'latitude' => ['required', 'numeric', 'between:-90,90'],
+            'longitude' => ['required', 'numeric', 'between:-180,180'],
+            'radius_m' => ['required', 'integer', 'min:500', 'max:2000'],
+            'page' => ['sometimes', 'integer', 'min:1', 'max:1000'],
+        ]);
+
+        return response()->json(['data' => $this->groups->nearby($request->user(),
+            (float) $data['latitude'], (float) $data['longitude'], (int) $data['radius_m'], (int) ($data['page'] ?? 1))]);
+    }
+
     public function show(Request $request)
     {
         return response()->json(['data' => $this->groups->detail($request->user(), $this->groupId($request))]);
@@ -70,13 +98,15 @@ class CareGroupController extends Controller
             'description' => ['sometimes', 'nullable', 'string', 'max:500'],
             'is_discoverable' => ['sometimes', 'boolean'],
             'accepting_requests' => ['sometimes', 'boolean'],
+            'discovery_latitude' => ['sometimes', 'nullable', 'numeric', 'between:-90,90'],
+            'discovery_longitude' => ['sometimes', 'nullable', 'numeric', 'between:-180,180'],
         ]);
 
         if (array_key_exists('description', $data)) {
             $data['description'] = $data['description'] ?? '';
         }
 
-        return response()->json(['data' => $this->groups->update($request->user(), $this->groupId($request), $data)]);
+        return response()->json(['data' => $this->groups->update($request->user(), $this->groupId($request), $this->discoveryCenter($data))]);
     }
 
     public function createInvitation(Request $request)

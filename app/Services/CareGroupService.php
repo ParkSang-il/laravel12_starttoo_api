@@ -64,7 +64,8 @@ class CareGroupService
         return ['id' => $group->id, 'name' => $group->name, 'description' => $group->description,
             'region_code' => $group->region_code, 'region_label' => $group->region_label,
             'is_discoverable' => (bool) $group->is_discoverable,
-            'accepting_requests' => (bool) $group->accepting_requests];
+            'accepting_requests' => (bool) $group->accepting_requests,
+            'has_discovery_center' => $group->discovery_latitude !== null && $group->discovery_longitude !== null];
     }
 
     private function memberSummary(object $member): array
@@ -132,6 +133,33 @@ class CareGroupService
 
         return ['groups' => $groups->take(20)->map(fn ($g) => $this->summary($g))->all(),
             'page' => $page, 'has_more' => $groups->count() > 20];
+    }
+
+    public function nearby(ProjectAccount $actor, float $latitude, float $longitude, int $radius, int $page): array
+    {
+        // Only coarse public reference points, never group_places or a member's GPS.
+        $latitudeBand = $radius / 110000 + 0.00001;
+        $rows = $this->table('care_groups')->where('project_id', $actor->project_id)
+            ->where('is_discoverable', true)->where('accepting_requests', true)
+            ->whereNotNull('discovery_latitude')->whereNotNull('discovery_longitude')
+            ->whereBetween('discovery_latitude', [max(-90, $latitude - $latitudeBand), min(90, $latitude + $latitudeBand)])
+            ->get()->map(function ($group) use ($latitude, $longitude) {
+                $dLat = deg2rad((float) $group->discovery_latitude - $latitude);
+                $dLon = deg2rad((float) $group->discovery_longitude - $longitude);
+                $a = sin($dLat / 2) ** 2 + cos(deg2rad($latitude))
+                    * cos(deg2rad((float) $group->discovery_latitude)) * sin($dLon / 2) ** 2;
+                $distance = 6371000 * 2 * asin(sqrt(min(1, max(0, $a))));
+
+                return ['group' => $group, 'distance' => $distance];
+            })->filter(fn ($entry) => $entry['distance'] <= $radius)
+            ->sort(fn ($a, $b) => ($a['distance'] <=> $b['distance']) ?: strcmp($a['group']->id, $b['group']->id))->values();
+
+        return ['groups' => $rows->slice(($page - 1) * 20, 20)->map(fn ($entry) => [
+            ...$this->summary($entry['group']),
+            // Rounded approximate distance; exact reference coordinates are not returned.
+            'distance_m' => max(250, (int) round($entry['distance'] / 250) * 250),
+        ])->values()->all(), 'page' => $page, 'has_more' => $rows->count() > $page * 20,
+            'radius_m' => $radius];
     }
 
     public function mine(ProjectAccount $actor): array

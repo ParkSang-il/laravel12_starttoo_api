@@ -56,4 +56,5 @@ docker-compose.override.yml
 !/docs/PROJECT_DATABASES.md
 !/docs/CARE_GROUPS.md
 !/docs/GROUP_PLACES.md
+!/docs/NEARBY_GROUPS.md
 !/docs/공동돌봄_전환_기획제안서.md

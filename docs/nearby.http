@@ -1,0 +1,8 @@
+@baseUrl = http://220.118.162.20:8000
+### 현재 위치 반경 1km (로그인 HTTP 파일에서 sc_token 저장 후 실행)
+POST {{baseUrl}}/api/v1/projects/streetcat/groups/nearby
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{sc_token}}
+
+{"latitude":37.56,"longitude":126.92,"radius_m":1000,"page":1}

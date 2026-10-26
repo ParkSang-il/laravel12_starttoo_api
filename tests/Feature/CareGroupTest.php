@@ -48,6 +48,28 @@ class CareGroupTest extends TestCase
         ])->assertCreated()->json('data.id');
     }
 
+    public function test_nearby_search_enforces_radius_and_hides_coordinates(): void
+    {
+        $public = $this->group(true);
+        $private = $this->group(false, 2);
+        app(ProjectDatabase::class)->run('streetcat', function () use ($public, $private) {
+            DB::connection('test_groups')->table('care_groups')->whereIn('id', [$public, $private])
+                ->update(['discovery_latitude' => 37.56, 'discovery_longitude' => 126.92]);
+        });
+        $this->withToken($this->tokens[3])->postJson($this->base.'/groups/nearby', [
+            'latitude' => 37.56, 'longitude' => 126.92, 'radius_m' => 1000,
+        ])->assertOk()->assertJsonCount(1, 'data.groups')->assertJsonPath('data.groups.0.id', $public)
+            ->assertJsonPath('data.groups.0.distance_m', 250)
+            ->assertJsonMissingPath('data.groups.0.discovery_latitude')
+            ->assertJsonMissingPath('data.groups.0.discovery_longitude');
+        $this->withToken($this->tokens[3])->postJson($this->base.'/groups/nearby', [
+            'latitude' => 37.56, 'longitude' => 126.92, 'radius_m' => 2001,
+        ])->assertUnprocessable();
+        $this->withToken($this->tokens[3])->postJson($this->base.'/groups/nearby', [
+            'latitude' => 38, 'longitude' => 126.92, 'radius_m' => 2000,
+        ])->assertOk()->assertJsonCount(0, 'data.groups');
+    }
+
     private function invitation(string $group, array $data = []): array
     {
         return $this->withToken($this->tokens[1])->postJson($this->base."/groups/$group/invitations", $data)
@@ -89,7 +111,7 @@ class CareGroupTest extends TestCase
         $response = $this->withToken($this->tokens[2])->getJson($this->base.'/groups/discover?region_code=0000000000')
             ->assertOk()->assertJsonCount(1, 'data.groups')->assertJsonPath('data.groups.0.id', $public);
         $this->assertStringNotContainsString($private, $response->getContent());
-        $this->assertSame(['id', 'name', 'description', 'region_code', 'region_label', 'is_discoverable', 'accepting_requests'],
+        $this->assertSame(['id', 'name', 'description', 'region_code', 'region_label', 'is_discoverable', 'accepting_requests', 'has_discovery_center'],
             array_keys($response->json('data.groups.0')));
         $this->withToken($this->tokens[2])->getJson($this->base.'/groups/discover?region_code=1111111111')
             ->assertOk()->assertJsonCount(0, 'data.groups');

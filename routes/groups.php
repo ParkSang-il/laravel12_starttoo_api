@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 
 // Loaded inside the authenticated, project-scoped API route group.
 Route::get('groups/discover', [CareGroupController::class, 'discover']);
+Route::post('groups/nearby', [CareGroupController::class, 'nearby'])->middleware('throttle:group-discover');
 Route::get('me/groups', [CareGroupController::class, 'mine']);
 Route::get('me/group-requests', [CareGroupController::class, 'myRequests']);
 Route::post('groups', [CareGroupController::class, 'create'])->middleware('throttle:group-create');
