@@ -54,3 +54,5 @@ docker-compose.override.yml
 !/docs/SETUP_STREETCAT.md
 !/docs/FLUTTER_API.md
 !/docs/PROJECT_DATABASES.md
+!/docs/CARE_GROUPS.md
+!/docs/공동돌봄_전환_기획제안서.md

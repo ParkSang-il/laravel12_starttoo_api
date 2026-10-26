@@ -15,5 +15,6 @@ Route::prefix('v1/projects/{projectCode}')
             Route::get('me', [ProjectAuthController::class, 'me']);
             Route::patch('me', [ProjectAuthController::class, 'updateProfile']);
             Route::post('auth/logout', [ProjectAuthController::class, 'logout']);
+            require __DIR__.'/groups.php';
         });
     });

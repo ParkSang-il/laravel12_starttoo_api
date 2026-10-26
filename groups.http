@@ -1,0 +1,286 @@
+# 공동 돌봄 그룹 API — 개발 DB에서 위에서 아래로 실행하세요.
+# 준비: php artisan project:migrate streetcat
+# APP_ENV=local / PLATFORM_SMS_DRIVER=preview / APP_DEBUG=false 권장.
+# 운영자와 신청자의 테스트 계정, 비공개 그룹, 신청/감사 이력이 실제 생성됩니다.
+# 같은 번호 재발급은 60초 대기, 그룹 생성은 회원당 시간당 3회입니다.
+# 인증번호와 JWT는 응답에서 세션 변수로 저장합니다. 파일에 직접 쓰지 않습니다.
+# 기존 HTTP Client의 전역 Authorization 헤더는 해제하세요.
+
+@baseUrl = http://220.118.162.20:8000
+@api = {{baseUrl}}/api/v1/projects/streetcat
+@ownerPhone = 01000000001
+@applicantPhone = 01000000002
+@regionCode = 0000000000
+
+### 01. 운영자 인증 요청 — 201
+< {%
+    ["cg_owner_challenge", "cg_owner_code", "cg_owner_token", "cg_app_challenge", "cg_app_code", "cg_app_token", "cg_app_id", "cg_group", "cg_invite", "cg_invite_id", "cg_request", "cg_version", "cg_revoke_token", "cg_revoke_id"].forEach(function (key) {
+        client.global.clear(key);
+    });
+%}
+POST {{api}}/auth/phone/request
+Accept: application/json
+Content-Type: application/json
+
+{"phone":"{{ownerPhone}}"}
+
+> {%
+    client.assert(response.status === 201, "Expected 201; 429면 발급 대기, 503이면 preview 설정 확인");
+    client.global.set("cg_owner_challenge", response.body.data.challenge_id);
+    client.global.set("cg_owner_code", response.body.data.development_code);
+%}
+
+### 02. 운영자 로그인 — 200 (01 후 3분 이내)
+POST {{api}}/auth/phone/verify
+Accept: application/json
+Content-Type: application/json
+
+{"challenge_id":"{{cg_owner_challenge}}","code":"{{cg_owner_code}}"}
+
+> {%
+    client.assert(response.status === 200, "Expected 200");
+    client.global.set("cg_owner_token", response.body.data.access_token);
+%}
+
+### 03. 비공개 그룹 생성 — 201
+POST {{api}}/groups
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_owner_token}}
+
+{"name":"그룹 API 테스트","description":"개발 확인용 비공개 그룹","region_code":"{{regionCode}}","region_label":"테스트 동네"}
+
+> {%
+    client.test("생성자는 운영자, 기본 비공개", function () {
+        client.assert(response.status === 201, "Expected 201");
+        client.assert(response.body.data.is_discoverable === false, "기본 비공개");
+        client.assert(response.body.data.my_membership.role === "owner", "운영자 생성");
+        client.assert(response.body.data.my_membership.can_view_locations === false, "위치 열람은 별도");
+    });
+    if (response.status === 201) client.global.set("cg_group", response.body.data.id);
+%}
+
+### 04. 신청자 인증 요청 — 201
+POST {{api}}/auth/phone/request
+Accept: application/json
+Content-Type: application/json
+
+{"phone":"{{applicantPhone}}"}
+
+> {%
+    client.assert(response.status === 201, "Expected 201");
+    client.global.set("cg_app_challenge", response.body.data.challenge_id);
+    client.global.set("cg_app_code", response.body.data.development_code);
+%}
+
+### 05. 신청자 로그인 — 200
+POST {{api}}/auth/phone/verify
+Accept: application/json
+Content-Type: application/json
+
+{"challenge_id":"{{cg_app_challenge}}","code":"{{cg_app_code}}"}
+
+> {%
+    client.assert(response.status === 200, "Expected 200");
+    client.global.set("cg_app_token", response.body.data.access_token);
+    client.global.set("cg_app_id", String(response.body.data.account.id));
+%}
+
+### 06. 비공개 그룹은 동네 검색에서 제외 — 200
+GET {{api}}/groups/discover?region_code={{regionCode}}
+Accept: application/json
+Authorization: Bearer {{cg_app_token}}
+
+> {%
+    client.test("비공개 그룹 숨김", function () {
+        client.assert(response.status === 200, "Expected 200");
+        client.assert(!response.body.data.groups.some(function (group) { return group.id === client.global.get("cg_group"); }), "비공개 그룹은 제외");
+    });
+%}
+
+### 07. 비공개 그룹 상세 무단 조회 차단 — 404
+GET {{api}}/groups/{{cg_group}}
+Accept: application/json
+Authorization: Bearer {{cg_app_token}}
+
+> {% client.test("가입 전 비공개 상세 차단", function () { client.assert(response.status === 404, "Expected 404"); }); %}
+
+### 08. 운영자가 1회용 초대 발급 — 201
+POST {{api}}/groups/{{cg_group}}/invitations
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_owner_token}}
+
+{"max_uses":1,"expires_in_hours":24}
+
+> {%
+    client.assert(response.status === 201, "Expected 201");
+    client.global.set("cg_invite", response.body.data.token);
+    client.global.set("cg_invite_id", response.body.data.id);
+%}
+
+### 09. 신청자가 초대 소개 확인 — 200, 승인 필요
+POST {{api}}/invitations/preview
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_app_token}}
+
+{"token":"{{cg_invite}}"}
+
+> {%
+    client.test("초대는 가입 권한이 아닌 신청 경로", function () {
+        client.assert(response.status === 200, "Expected 200");
+        client.assert(response.body.data.requires_approval === true, "운영자 승인 필요");
+        client.assert(response.body.data.group.id === client.global.get("cg_group"), "그룹 일치");
+    });
+%}
+
+### 10. 초대 코드로 가입 신청 — 200 pending
+POST {{api}}/groups/{{cg_group}}/join-requests
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_app_token}}
+
+{"message":"주말 돌봄에 참여하고 싶어요.","availability":"주말 오전","experience":"개인 돌봄 경험","invitation_token":"{{cg_invite}}"}
+
+> {%
+    client.assert(response.status === 200, "Expected 200");
+    client.assert(response.body.data.status === "pending", "대기 상태");
+    client.global.set("cg_request", String(response.body.data.id));
+    client.global.set("cg_version", String(response.body.data.version));
+%}
+
+### 11. 같은 신청 재시도 — 200, 기존 신청 반환 (초대 횟수 중복 소비 없음)
+POST {{api}}/groups/{{cg_group}}/join-requests
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_app_token}}
+
+{"message":"주말 돌봄에 참여하고 싶어요.","invitation_token":"{{cg_invite}}"}
+
+> {%
+    client.test("신청 재시도", function () {
+        client.assert(response.status === 200, "Expected 200");
+        client.assert(String(response.body.data.id) === client.global.get("cg_request"), "기존 신청 반환");
+        client.assert(String(response.body.data.version) === client.global.get("cg_version"), "버전 유지");
+    });
+%}
+
+### 12. 승인 전에는 내 그룹에 없음 — 200
+GET {{api}}/me/groups
+Accept: application/json
+Authorization: Bearer {{cg_app_token}}
+
+> {%
+    client.test("대기자는 구성원 아님", function () {
+        client.assert(response.status === 200, "Expected 200");
+        client.assert(!response.body.data.some(function (group) { return group.id === client.global.get("cg_group"); }), "승인 전 그룹 제외");
+    });
+%}
+
+### 13. 신청자가 다른 신청 목록을 보는 것은 차단 — 403
+GET {{api}}/groups/{{cg_group}}/join-requests
+Accept: application/json
+Authorization: Bearer {{cg_app_token}}
+
+> {% client.test("운영자 전용 목록", function () { client.assert(response.status === 403, "Expected 403"); }); %}
+
+### 14. 운영자 신청 목록 확인 — 200
+GET {{api}}/groups/{{cg_group}}/join-requests
+Accept: application/json
+Authorization: Bearer {{cg_owner_token}}
+
+> {%
+    client.test("운영자 심사 목록", function () {
+        client.assert(response.status === 200, "Expected 200");
+        client.assert(response.body.data.some(function (item) { return String(item.id) === client.global.get("cg_request"); }), "신청 포함");
+    });
+%}
+
+### 15. 운영자 승인 — 200 approved
+POST {{api}}/groups/{{cg_group}}/join-requests/{{cg_request}}/review
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_owner_token}}
+
+{"version":{{cg_version}},"decision":"approve","role":"caregiver","note":"테스트 승인"}
+
+> {% client.test("운영자 승인", function () { client.assert(response.status === 200 && response.body.data.status === "approved", "Expected approved"); }); %}
+
+### 16. 같은 버전으로 재승인 차단 — 409
+POST {{api}}/groups/{{cg_group}}/join-requests/{{cg_request}}/review
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_owner_token}}
+
+{"version":{{cg_version}},"decision":"approve","role":"caregiver"}
+
+> {% client.test("중복 승인 방지", function () { client.assert(response.status === 409, "Expected 409"); }); %}
+
+### 17. 승인 후 상세 — 200, 위치 권한은 여전히 없음
+GET {{api}}/groups/{{cg_group}}
+Accept: application/json
+Authorization: Bearer {{cg_app_token}}
+
+> {%
+    client.test("가입과 위치 권한 분리", function () {
+        client.assert(response.status === 200, "Expected 200");
+        client.assert(response.body.data.my_membership.role === "caregiver", "돌보미 역할");
+        client.assert(response.body.data.my_membership.can_view_locations === false, "위치 열람 부여 안 됨");
+    });
+%}
+
+### 18. 운영자 탈퇴 차단 — 409
+POST {{api}}/groups/{{cg_group}}/leave
+Accept: application/json
+Authorization: Bearer {{cg_owner_token}}
+
+> {% client.test("운영자 없는 그룹 방지", function () { client.assert(response.status === 409, "Expected 409"); }); %}
+
+### 19. 운영자가 신청자 내보내기 — 204
+DELETE {{api}}/groups/{{cg_group}}/members/{{cg_app_id}}
+Accept: application/json
+Authorization: Bearer {{cg_owner_token}}
+
+> {% client.test("구성원 내보내기", function () { client.assert(response.status === 204, "Expected 204"); }); %}
+
+### 20. 내보낸 회원의 재신청 차단 — 403
+POST {{api}}/groups/{{cg_group}}/join-requests
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_app_token}}
+
+{"message":"다시 신청","invitation_token":"{{cg_invite}}"}
+
+> {% client.test("내보내기 후 재가입 제한", function () { client.assert(response.status === 403, "Expected 403"); }); %}
+
+### 21. 취소 검증용 새 초대 발급 — 201
+POST {{api}}/groups/{{cg_group}}/invitations
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_owner_token}}
+
+{}
+
+> {%
+    client.assert(response.status === 201, "Expected 201");
+    client.global.set("cg_revoke_token", response.body.data.token);
+    client.global.set("cg_revoke_id", response.body.data.id);
+%}
+
+### 22. 초대 취소 — 204
+DELETE {{api}}/groups/{{cg_group}}/invitations/{{cg_revoke_id}}
+Accept: application/json
+Authorization: Bearer {{cg_owner_token}}
+
+> {% client.test("초대 취소", function () { client.assert(response.status === 204, "Expected 204"); }); %}
+
+### 23. 취소한 초대는 사용 불가 — 422
+POST {{api}}/invitations/preview
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_app_token}}
+
+{"token":"{{cg_revoke_token}}"}
+
+> {% client.test("취소된 초대 거부", function () { client.assert(response.status === 422, "Expected 422"); }); %}
