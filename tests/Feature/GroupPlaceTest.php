@@ -76,7 +76,7 @@ class GroupPlaceTest extends TestCase
     {
         $place = $this->createPlace();
         $path = $this->path('/'.$place['id'].'/animals');
-        $animal = $this->withToken($this->tokens[1])->postJson($path, ['name' => '나비'])->assertCreated()->json('data');
+        $animal = $this->withToken($this->tokens[1])->postJson($path, ['name' => '나비', 'age' => '약 2살'])->assertCreated()->assertJsonPath('data.age', '약 2살')->json('data');
         $this->withToken($this->tokens[2])->getJson($path)->assertNotFound();
         $this->grant($place, 2, 'care')->assertOk();
         $this->grant($place, 3, 'view')->assertOk();

@@ -26,13 +26,14 @@ class GroupAnimalController extends Controller
     {
         $rules = ['name' => [$edit ? 'sometimes' : 'required', 'required', 'string', 'max:80'],
             'coat' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'age' => ['sometimes', 'nullable', 'string', 'max:80'],
             'sex' => ['sometimes', Rule::in(['unknown', 'male', 'female'])],
             'neutered' => ['sometimes', 'boolean'],
             'life_status' => ['sometimes', Rule::in(['active', 'missing', 'rescued', 'moved', 'passedAway'])],
             'note' => ['sometimes', 'nullable', 'string', 'max:500']];
         if ($edit) $rules['version'] = ['required', 'integer', 'min:1'];
         $data = $this->input($request, $rules);
-        foreach (['coat', 'note'] as $field) {
+        foreach (['coat', 'age', 'note'] as $field) {
             if (array_key_exists($field, $data)) $data[$field] ??= '';
         }
         return $data;

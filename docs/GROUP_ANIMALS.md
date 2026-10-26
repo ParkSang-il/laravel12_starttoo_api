@@ -1,6 +1,6 @@
 # 그룹 친구 공유
 
-배포 후 `php artisan project:migrate streetcat --force` (000005).
+배포 후 `php artisan project:migrate streetcat --force` (000005, 000006).
 개인 SQLite 친구를 전송하지 않습니다. 그룹 친구는 서버에 별도로 등록합니다.
 
 기준 경로: `/api/v1/projects/streetcat/groups/{group}/places/{place}/animals`
@@ -12,14 +12,14 @@ JWT 인증 필요. 모든 조회는 현재 그룹 가입 상태, 계정 활성 �
 |---|---|---|
 | GET | 기준 경로 | page=1 (20개) |
 | GET | /available | page=1, 현재 장소에 미연결인 같은 그룹 친구 (운영자) |
-| POST | 기준 경로 | name 필수; coat, sex(unknown/male/female), neutered, life_status, note 선택 |
+| POST | 기준 경로 | name 필수; coat, age(추정 나이, 최대80자), sex(unknown/male/female), neutered, life_status, note 선택 |
 | PATCH | /{animal} | version 필수, 수정할 필드 |
 | POST | /link | animal_id, version |
 | DELETE | /{animal} | version |
 
 life_status: active / missing / rescued / moved / passedAway.
 조회 응답 data: animals, can_manage, page, has_more.
-생성/수정/연결 응답 data: id, group_id, name, coat, sex, neutered, life_status, note, version.
+생성/수정/연결 응답 data: id, group_id, name, coat, age, sex, neutered, life_status, note, version.
 같은 그룹의 여러 장소에 동일 친구를 연결합니다. 수정은 연결된 모든 장소에 반영됩니다.
 DELETE는 해당 장소 연결만 해제합니다. 친구와 다른 연결은 보존되며 available에서 다시 연결할 수 있습니다.
 장소 중지 시 친구 데이터는 보존하고 장소 권한으로 조회를 차단합니다.

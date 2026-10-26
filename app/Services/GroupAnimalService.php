@@ -27,7 +27,7 @@ class GroupAnimalService
     {
         // No other place IDs, coordinates or private records are returned.
         return ['id' => $row->id, 'group_id' => $row->group_id, 'name' => $row->name,
-            'coat' => $row->coat, 'sex' => $row->sex, 'neutered' => (bool) $row->neutered,
+            'coat' => $row->coat, 'age' => $row->age, 'sex' => $row->sex, 'neutered' => (bool) $row->neutered,
             'life_status' => $row->life_status, 'note' => $row->note, 'version' => (int) $row->version];
     }
 
