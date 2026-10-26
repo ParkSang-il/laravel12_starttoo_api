@@ -1,7 +1,7 @@
 services:
   app:
     build:
-      context: ./docker/php
+      context: /home/docker/php
       dockerfile: Dockerfile
     container_name: starttoo_app
     restart: unless-stopped
