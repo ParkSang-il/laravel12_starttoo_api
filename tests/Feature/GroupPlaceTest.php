@@ -72,6 +72,56 @@ class GroupPlaceTest extends TestCase
             ['version' => $version, 'access' => $access]);
     }
 
+    public function test_group_care_requires_care_grant_and_preserves_idempotency(): void
+    {
+        $place=$this->createPlace(); $path=$this->path('/'.$place['id'].'/care-records');
+        $data=['request_id'=>(string)\Illuminate\Support\Str::uuid(),'fed_at'=>now()->subMinute()->toIso8601String(),
+            'cost'=>2000,'tags'=>['물 갈아줌'],'sightings'=>[],'memo'=>'함께 돌봄'];
+        $this->withToken($this->tokens[2])->getJson($path)->assertNotFound();
+        $this->grant($place,2,'care')->assertOk(); $this->grant($place,3,'view')->assertOk();
+        $record=$this->withToken($this->tokens[2])->postJson($path,$data)->assertCreated()->json('data.id');
+        $this->withToken($this->tokens[2])->postJson($path,$data)->assertCreated()->assertJsonPath('data.id',$record);
+        $this->withToken($this->tokens[2])->postJson($path,[...$data,'memo'=>'다른 요청'])->assertConflict();
+        $this->withToken($this->tokens[3])->getJson($path)->assertOk()->assertJsonCount(1,'data.records')->assertJsonPath('data.records.0.cost',2000);
+        $this->withToken($this->tokens[3])->postJson($path,[...$data,'request_id'=>(string)\Illuminate\Support\Str::uuid()])->assertForbidden();
+        $this->grant($place,2,'none')->assertOk();
+        $this->withToken($this->tokens[2])->getJson($path)->assertNotFound();
+    }
+
+    public function test_care_sightings_cannot_include_unlinked_animals_or_client_identity(): void
+    {
+        $place=$this->createPlace(); $other=$this->createPlace('다른 장소');
+        $animal=$this->withToken($this->tokens[1])->postJson($this->path('/'.$other['id'].'/animals'),['name'=>'다른 친구'])->assertCreated()->json('data.id');
+        $path=$this->path('/'.$place['id'].'/care-records');
+        $data=['request_id'=>(string)\Illuminate\Support\Str::uuid(),'fed_at'=>now()->subMinute()->toIso8601String(),
+            'cost'=>0,'tags'=>[],'sightings'=>[$animal=>'seen']];
+        $this->withToken($this->tokens[1])->postJson($path,$data)->assertUnprocessable();
+        $this->withToken($this->tokens[1])->postJson($path,[...$data,'created_by'=>2])->assertUnprocessable();
+        $this->withToken($this->tokens[1])->postJson($path,[...$data,'sightings'=>[],'latitude'=>37.5])->assertUnprocessable();
+    }
+
+    public function test_local_import_is_idempotent_and_never_overwrites_group_edits(): void
+    {
+        $place = $this->createPlace();
+        $other = $this->createPlace('다른 장소');
+        $path = $this->path('/'.$place['id'].'/animals');
+        $data = ['source_local_id' => 'animal-local-1', 'name' => '로컬 나비', 'coat' => '삼색이', 'age' => '약 2살'];
+        $created = $this->withToken($this->tokens[1])->postJson($path.'/import', $data)->assertOk()
+            ->assertJsonPath('data.created', true)->json('data.animal');
+        $this->withToken($this->tokens[1])->patchJson($path.'/'.$created['id'], ['version' => 1, 'name' => '그룹에서 수정'])->assertOk();
+        $this->withToken($this->tokens[1])->postJson($path.'/import', $data)->assertOk()
+            ->assertJsonPath('data.created', false)->assertJsonPath('data.linked', false)
+            ->assertJsonPath('data.animal.name', '그룹에서 수정')->assertJsonPath('data.animal.version', 2)
+            ->assertJsonMissingPath('data.animal.source_local_id')->assertJsonMissingPath('data.animal.source_account_id');
+        $this->withToken($this->tokens[1])->postJson($this->path('/'.$other['id'].'/animals/import'), $data)
+            ->assertOk()->assertJsonPath('data.created', false)->assertJsonPath('data.linked', true)
+            ->assertJsonPath('data.animal.id', $created['id'])->assertJsonPath('data.animal.version', 3);
+        $this->withToken($this->tokens[1])->getJson($path)->assertOk()->assertJsonCount(1, 'data.animals');
+        $this->grant($place, 2, 'care')->assertOk();
+        $this->withToken($this->tokens[2])->postJson($path.'/import', $data)->assertForbidden();
+        $this->withToken($this->tokens[1])->postJson($path.'/import', [...$data, 'source_account_id' => 2])->assertUnprocessable();
+    }
+
     public function test_shared_friends_require_place_grants_and_only_owner_can_edit(): void
     {
         $place = $this->createPlace();

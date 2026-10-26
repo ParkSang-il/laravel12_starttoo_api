@@ -48,3 +48,13 @@ Accept: application/json
 Content-Type: application/json
 
 {"version":{{sc_animal_version}}}
+
+### 로컬 친구를 그룹에 등록 (같은 source_local_id로 재시도해도 중복 생성/덮어쓰기 없음)
+POST {{baseUrl}}/api/v1/projects/streetcat/groups/{{group}}/places/{{place}}/animals/import
+Authorization: Bearer {{sc_token}}
+Accept: application/json
+Content-Type: application/json
+
+{"source_local_id":"animal-http-import-test-1","name":"로컬 나비","coat":"삼색이","sex":"unknown","age":"약 2살","neutered":false,"life_status":"active","note":""}
+
+> {% client.test('그룹 등록', function () { client.assert(response.status === 200, 'Expected 200'); client.assert(!!response.body.data.animal.id, '그룹 친구 ID 필요'); }); %}

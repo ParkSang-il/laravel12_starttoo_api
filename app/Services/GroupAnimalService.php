@@ -87,6 +87,33 @@ class GroupAnimalService
         });
     }
 
+    public function importLocal(ProjectAccount $actor, string $group, string $place, array $data): array
+    {
+        return $this->locked($actor, $group, $place, function () use ($actor, $group, $place, $data) {
+            $source = $data['source_local_id'];
+            unset($data['source_local_id']);
+            $existing = $this->table('group_animals')->where('project_id', $actor->project_id)
+                ->where('group_id', $group)->where('source_account_id', $actor->id)->where('source_local_id', $source)->first();
+            if ($existing) {
+                // Re-import never overwrites information already maintained by the group.
+                $linked = !$this->table('group_animal_places')->where('animal_id', $existing->id)->where('place_id', $place)->exists();
+                if ($linked) {
+                    $this->table('group_animal_places')->insert(['group_id' => $group, 'animal_id' => $existing->id,
+                        'place_id' => $place, 'created_at' => now()]);
+                    $this->table('group_animals')->where('id', $existing->id)->update(['version' => $existing->version + 1,
+                        'updated_by' => $actor->id, 'updated_at' => now()]);
+                    $this->audit($actor, $group, $place, $existing->id, 'animal_linked');
+                }
+                return ['animal' => $this->summary($this->animal($actor, $group, $place, $existing->id)), 'created' => false, 'linked' => $linked];
+            }
+            $animal = $this->create($actor, $group, $place, [...$data,
+                'source_account_id' => $actor->id, 'source_local_id' => $source]);
+            $this->audit($actor, $group, $place, $animal['id'], 'animal_imported');
+
+            return ['animal' => $animal, 'created' => true, 'linked' => true];
+        });
+    }
+
     public function update(ProjectAccount $actor, string $group, string $place, string $id, array $data): array
     {
         return $this->locked($actor, $group, $place, function () use ($actor, $group, $place, $id, $data) {

@@ -1,0 +1,15 @@
+@baseUrl = http://220.118.162.20:8000
+@group = 그룹_UUID
+@place = 장소_UUID
+### 공동돌봄 기록 생성 (request_id는 재시도 때 유지, 새로운 돌봄은 새 UUID)
+POST {{baseUrl}}/api/v1/projects/streetcat/groups/{{group}}/places/{{place}}/care-records
+Authorization: Bearer {{sc_token}}
+Accept: application/json
+Content-Type: application/json
+
+{"request_id":"a6f5b7d2-19c0-4eed-91a4-16afab76e333","fed_at":"2026-10-26T09:00:00Z","cost":2000,"food_amount_gram":50,"tags":["건사료","물 갈아줌"],"sightings":{},"memo":"공동 돌봄"}
+
+### 권한 있는 장소의 기록 (20개/페이지)
+GET {{baseUrl}}/api/v1/projects/streetcat/groups/{{group}}/places/{{place}}/care-records?page=1
+Authorization: Bearer {{sc_token}}
+Accept: application/json

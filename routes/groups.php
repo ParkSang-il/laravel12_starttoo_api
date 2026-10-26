@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\CareGroupController;
 use App\Http\Controllers\GroupPlaceController;
+use App\Http\Controllers\GroupCareController;
 use App\Http\Controllers\GroupAnimalController;
 use Illuminate\Support\Facades\Route;
 
@@ -18,10 +19,13 @@ Route::prefix('groups/{group}')->whereUuid('group')->group(function () {
         Route::get('/', [GroupAnimalController::class, 'index']);
         Route::get('available', [GroupAnimalController::class, 'available']);
         Route::post('/', [GroupAnimalController::class, 'create']);
+        Route::post('import', [GroupAnimalController::class, 'importLocal']);
         Route::post('link', [GroupAnimalController::class, 'link']);
         Route::patch('{animal}', [GroupAnimalController::class, 'update'])->whereUuid('animal');
         Route::delete('{animal}', [GroupAnimalController::class, 'unlink'])->whereUuid('animal');
     });
+    Route::get('places/{place}/care-records', [GroupCareController::class, 'index'])->whereUuid('place');
+    Route::post('places/{place}/care-records', [GroupCareController::class, 'create'])->whereUuid('place');
     Route::get('places', [GroupPlaceController::class, 'index']);
     Route::post('places', [GroupPlaceController::class, 'create']);
     Route::get('places/{place}', [GroupPlaceController::class, 'show'])->whereUuid('place');

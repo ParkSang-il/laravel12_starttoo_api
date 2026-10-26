@@ -59,3 +59,5 @@ docker-compose.override.yml
 !/docs/NEARBY_GROUPS.md
 !/docs/공동돌봄_전환_기획제안서.md
 !/docs/GROUP_ANIMALS.md
+
+!/docs/UNIFIED_CARE.md

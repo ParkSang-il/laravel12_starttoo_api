@@ -22,7 +22,7 @@ class GroupAnimalController extends Controller
     {
         return [$request->user(), (string) $request->route('group'), (string) $request->route('place')];
     }
-    private function fields(Request $request, bool $edit): array
+    private function fields(Request $request, bool $edit, bool $import = false): array
     {
         $rules = ['name' => [$edit ? 'sometimes' : 'required', 'required', 'string', 'max:80'],
             'coat' => ['sometimes', 'nullable', 'string', 'max:80'],
@@ -31,6 +31,7 @@ class GroupAnimalController extends Controller
             'neutered' => ['sometimes', 'boolean'],
             'life_status' => ['sometimes', Rule::in(['active', 'missing', 'rescued', 'moved', 'passedAway'])],
             'note' => ['sometimes', 'nullable', 'string', 'max:500']];
+        if ($import) $rules['source_local_id'] = ['required', 'string', 'max:80'];
         if ($edit) $rules['version'] = ['required', 'integer', 'min:1'];
         $data = $this->input($request, $rules);
         foreach (['coat', 'age', 'note'] as $field) {
@@ -51,6 +52,11 @@ class GroupAnimalController extends Controller
     public function create(Request $request)
     {
         return response()->json(['data' => $this->animals->create(...[...$this->ids($request), $this->fields($request, false)])], 201);
+    }
+    public function importLocal(Request $request)
+    {
+        $data = $this->fields($request, false, true);
+        return response()->json(['data' => $this->animals->importLocal(...[...$this->ids($request), $data])]);
     }
     public function update(Request $request)
     {
