@@ -5,9 +5,10 @@
 | 문서 | 내용 |
 |---|---|
 | [서버 설치·사용법](docs/SETUP_STREETCAT.md) | streetcat DB 생성, 전용 계정, 마이그레이션, 프로젝트 등록, 운영 설정 |
-| [Flutter API 목록](docs/FLUTTER_API.md) | 현재 구현된 5개 API, 요청·응답·오류, 앱 연결 순서, 향후 API 구분 |
+| [Flutter API 목록](docs/FLUTTER_API.md) | 인증 API와 그룹·장소 계약 링크, 요청·응답·오류 |
 | [DB 분리 구조](docs/PROJECT_DATABASES.md) | 프로젝트 선택, 전용 연결, JWT 검증, 기존 데이터 처리, 다음 앱 추가법 |
 | [공동 돌봄 그룹 API](docs/CARE_GROUPS.md) | 동네 모집 검색·생성·초대·가입 신청·승인·탈퇴·내보내기 |
+| [그룹 돌봄장소 API](docs/GROUP_PLACES.md) | 장소 등록·수정·사용중지·장소별 권한과 회수 |
 | [HTTP 요청 테스트](api.http) | streetcat만 사용하는 순차 테스트 13개 |
 | [그룹 HTTP 요청 테스트](groups.http) | 운영자·신청자 두 계정의 가입 승인·초대·접근 제한 테스트 |
 
@@ -15,7 +16,7 @@
 
 기존 DB와 과거 마이그레이션은 보존했다. **프로젝트 DB에 일반 `php artisan migrate`를 실행하지 않는다.** `project:migrate`는 `database/project-migrations`만 적용하며 과거 포트폴리오 테이블을 생성하지 않는다. 기존 데이터의 자동 복사·삭제는 없다. 과거 START/SETUP/JWT 문서와 .backup 자료는 이전 서비스의 참고 자료이며 이 README의 링크가 현재 안내다.
 
-운영 SMS 제공자는 아직 연결되지 않았다. 개발에서만 `APP_ENV=local` + `PLATFORM_SMS_DRIVER=preview`로 인증번호를 응답받을 수 있다. production에서는 503으로 차단된다. 그룹 생성·가입 심사 API를 추가했으며 장소·친구·상태 승인 API와 그룹 Flutter 화면 연결은 다음 단계다. 그룹 가입만으로 위치 열람 권한이 부여되지는 않는다.
+운영 SMS 제공자는 아직 연결되지 않았다. 개발에서만 `APP_ENV=local` + `PLATFORM_SMS_DRIVER=preview`로 인증번호를 응답받을 수 있다. production에서는 503으로 차단된다. 그룹 생성·가입 심사와 그룹 돌봄장소·장소별 권한 API를 제공한다. Flutter 그룹·장소 화면도 연결했으며 친구·상태 승인·공유 돌봄 기록은 다음 단계다. 그룹 가입만으로 위치 열람 권한이 부여되지는 않는다.
 
 그룹 DB 추가 적용: `php artisan project:migrate streetcat --pretend` 확인 후 `php artisan project:migrate streetcat` (production 배포에서는 `--force`). 검증: `php artisan test --filter=CareGroupTest`. 현재 작업 환경에는 PHP/vendor가 없어 실행 검증은 하지 못했다. 서버 DB에는 아직 적용하지 않았다.
 

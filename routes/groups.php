@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CareGroupController;
+use App\Http\Controllers\GroupPlaceController;
 use Illuminate\Support\Facades\Route;
 
 // Loaded inside the authenticated, project-scoped API route group.
@@ -11,6 +12,14 @@ Route::post('groups', [CareGroupController::class, 'create'])->middleware('throt
 Route::post('invitations/preview', [CareGroupController::class, 'previewInvitation'])->middleware('throttle:group-invite');
 
 Route::prefix('groups/{group}')->whereUuid('group')->group(function () {
+    Route::get('places', [GroupPlaceController::class, 'index']);
+    Route::post('places', [GroupPlaceController::class, 'create']);
+    Route::get('places/{place}', [GroupPlaceController::class, 'show'])->whereUuid('place');
+    Route::patch('places/{place}', [GroupPlaceController::class, 'update'])->whereUuid('place');
+    Route::delete('places/{place}', [GroupPlaceController::class, 'archive'])->whereUuid('place');
+    Route::get('places/{place}/permissions', [GroupPlaceController::class, 'permissions'])->whereUuid('place');
+    Route::patch('places/{place}/permissions/{account}', [GroupPlaceController::class, 'grant'])
+        ->whereUuid('place')->whereNumber('account');
     Route::get('/', [CareGroupController::class, 'show']);
     Route::patch('/', [CareGroupController::class, 'update']);
     Route::post('invitations', [CareGroupController::class, 'createInvitation']);

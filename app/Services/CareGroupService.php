@@ -70,7 +70,25 @@ class CareGroupService
     private function memberSummary(object $member): array
     {
         return ['account_id' => (int) $member->account_id, 'role' => $member->role,
-            'status' => $member->status, 'can_view_locations' => false];
+            'status' => $member->status, 'can_view_locations' => $this->hasPlaceAccess(
+                $member->group_id, (int) $member->account_id, $member->role)];
+    }
+
+    private function hasPlaceAccess(string $group, int $account, string $role): bool
+    {
+        if ($role === 'owner') return true;
+
+        return $this->table('group_place_permissions as access')->join('group_places as p', 'p.id', '=', 'access.place_id')
+            ->where('access.group_id', $group)->where('access.account_id', $account)
+            ->whereIn('access.access', ['view', 'care'])->whereNull('p.deleted_at')->exists();
+    }
+
+    private function resetPlaceAccess(string $group, int $account, int $actor): void
+    {
+        $this->table('group_place_permissions')->where('group_id', $group)->where('account_id', $account)->delete();
+        // A membership change also invalidates any open permission editor snapshot.
+        $this->table('group_places')->where('group_id', $group)->whereNull('deleted_at')
+            ->increment('version', 1, ['updated_at' => now(), 'updated_by' => $actor]);
     }
 
     private function requestSummary(object $request): array
@@ -122,7 +140,7 @@ class CareGroupService
             ->where('m.project_id', $actor->project_id)->where('m.account_id', $actor->id)
             ->where('m.status', 'active')->select('g.*', 'm.role')->orderBy('g.created_at')
             ->get()->map(fn ($g) => [...$this->summary($g), 'my_role' => $g->role,
-                'can_view_locations' => false])->all();
+                'can_view_locations' => $this->hasPlaceAccess($g->id, $actor->id, $g->role)])->all();
     }
 
     public function detail(ProjectAccount $actor, string $id): array
@@ -294,6 +312,8 @@ class CareGroupService
                     ->where('status', 'active')->exists(), 409, '현재 가입할 수 없는 회원입니다.');
                 $member = $this->membership($group->id, $row->account_id);
                 abort_if($member && $member->status === 'removed', 409, '가입이 제한된 회원입니다.');
+                abort_if($member && $member->status === 'active', 409, '이미 참여 중인 회원입니다.');
+                $this->resetPlaceAccess($group->id, (int) $row->account_id, $actor->id);
                 $this->table('group_memberships')->updateOrInsert(
                     ['group_id' => $group->id, 'account_id' => $row->account_id],
                     ['project_id' => $actor->project_id, 'role' => $data['role'], 'status' => 'active',
@@ -343,6 +363,7 @@ class CareGroupService
             $member = $this->membership($group->id, $target ?? $actor->id);
             abort_unless($member && $member->status === 'active', 404);
             abort_if($member->role === 'owner', 409, '운영자는 그룹을 탈퇴하거나 내보낼 수 없습니다.');
+            $this->resetPlaceAccess($group->id, (int) $member->account_id, $actor->id);
             $this->table('group_memberships')->where('id', $member->id)->update([
                 'status' => $target === null ? 'left' : 'removed', 'updated_at' => now(),
             ]);

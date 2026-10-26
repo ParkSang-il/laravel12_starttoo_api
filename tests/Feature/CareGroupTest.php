@@ -75,7 +75,7 @@ class CareGroupTest extends TestCase
         $this->withToken($this->tokens[1])->getJson($this->base."/groups/$id")
             ->assertOk()->assertJsonPath('data.is_discoverable', false)
             ->assertJsonPath('data.my_membership.role', 'owner')
-            ->assertJsonPath('data.my_membership.can_view_locations', false);
+            ->assertJsonPath('data.my_membership.can_view_locations', true);
         $this->assertSame(1, DB::connection('test_groups')->table('group_memberships')->count());
         $this->assertFalse(DB::connection('sqlite')->getSchemaBuilder()->hasTable('care_groups'));
     }

@@ -55,7 +55,7 @@ Authorization: Bearer {{cg_owner_token}}
         client.assert(response.status === 201, "Expected 201");
         client.assert(response.body.data.is_discoverable === false, "기본 비공개");
         client.assert(response.body.data.my_membership.role === "owner", "운영자 생성");
-        client.assert(response.body.data.my_membership.can_view_locations === false, "위치 열람은 별도");
+        client.assert(response.body.data.my_membership.can_view_locations === true, "운영자는 그룹 장소를 관리");
     });
     if (response.status === 201) client.global.set("cg_group", response.body.data.id);
 %}

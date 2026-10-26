@@ -1,0 +1,104 @@
+# 개발용 그룹 장소 테스트. groups.http의 01~17을 실행한 뒤 사용하세요.
+# groups.http 19번 내보내기는 이 파일 테스트 이후에 실행합니다.
+# 그룹/토큰/신청자 ID는 groups.http 응답에서 저장한 세션 변수를 재사용합니다.
+# 좌표는 예시 테스트 값입니다. 실제 장소 정보를 넣지 말고 개발 DB에서 실행하세요.
+@baseUrl = http://220.118.162.20:8000
+@api = {{baseUrl}}/api/v1/projects/streetcat
+
+### 01. 운영자 장소 등록 — 201
+POST {{api}}/groups/{{cg_group}}/places
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_owner_token}}
+
+{"name":"권한 검증용 장소","note":"개발용 장소 메모","latitude":37.1234567,"longitude":127.1234567,"interval_hours":24}
+
+> {%
+    client.assert(response.status === 201, "Expected 201");
+    client.global.set("cp_place", response.body.data.id);
+    client.global.set("cp_version", String(response.body.data.version));
+%}
+
+### 02. 승인된 돌보미도 권한 부여 전에는 빈 목록 — 200
+GET {{api}}/groups/{{cg_group}}/places
+Accept: application/json
+Authorization: Bearer {{cg_app_token}}
+
+> {% client.test("가입과 장소 권한 분리", function () { client.assert(response.status === 200 && response.body.data.places.length === 0, "Expected empty places"); }); %}
+
+### 03. UUID를 알아도 권한 없으면 상세 차단 — 404
+GET {{api}}/groups/{{cg_group}}/places/{{cp_place}}
+Accept: application/json
+Authorization: Bearer {{cg_app_token}}
+
+> {% client.test("UUID 직접 접근 차단", function () { client.assert(response.status === 404, "Expected 404"); }); %}
+
+### 04. 운영자가 장소 열람 권한 부여 — 200
+PATCH {{api}}/groups/{{cg_group}}/places/{{cp_place}}/permissions/{{cg_app_id}}
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_owner_token}}
+
+{"version":{{cp_version}},"access":"view"}
+
+> {%
+    client.assert(response.status === 200, "Expected 200");
+    client.global.set("cp_version", String(response.body.data.place_version));
+%}
+
+### 05. 허용 후 상세 조회 — 200
+GET {{api}}/groups/{{cg_group}}/places/{{cp_place}}
+Accept: application/json
+Authorization: Bearer {{cg_app_token}}
+
+> {% client.test("허용된 장소만 열람", function () { client.assert(response.status === 200 && response.body.data.access === "view" && response.body.data.can_manage === false, "Expected view only"); }); %}
+
+### 06. 일반 구성원은 장소 변경 불가 — 403
+PATCH {{api}}/groups/{{cg_group}}/places/{{cp_place}}
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_app_token}}
+
+{"version":{{cp_version}},"name":"무단 변경"}
+
+> {% client.test("운영자만 장소 변경", function () { client.assert(response.status === 403, "Expected 403"); }); %}
+
+### 07. 운영자가 권한 회수 — 200
+PATCH {{api}}/groups/{{cg_group}}/places/{{cp_place}}/permissions/{{cg_app_id}}
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_owner_token}}
+
+{"version":{{cp_version}},"access":"none"}
+
+> {%
+    client.assert(response.status === 200, "Expected 200");
+    client.global.set("cp_version", String(response.body.data.place_version));
+%}
+
+### 08. 회수 후 즉시 다음 상세 요청 차단 — 404
+GET {{api}}/groups/{{cg_group}}/places/{{cp_place}}
+Accept: application/json
+Authorization: Bearer {{cg_app_token}}
+
+> {% client.test("회수 반영", function () { client.assert(response.status === 404, "Expected 404"); }); %}
+
+### 09. 과거 버전 수정 차단 — 409
+PATCH {{api}}/groups/{{cg_group}}/places/{{cp_place}}
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_owner_token}}
+
+{"version":1,"name":"과거 편집 덮어쓰기"}
+
+> {% client.test("수정 충돌 방지", function () { client.assert(response.status === 409, "Expected 409"); }); %}
+
+### 10. 운영자 장소 사용 중지 — 204
+DELETE {{api}}/groups/{{cg_group}}/places/{{cp_place}}
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{cg_owner_token}}
+
+{"version":{{cp_version}}}
+
+> {% client.test("사용 중지", function () { client.assert(response.status === 204, "Expected 204"); }); %}
