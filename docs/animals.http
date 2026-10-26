@@ -1,0 +1,50 @@
+@baseUrl = http://220.118.162.20:8000
+@group = 여기에_그룹_UUID
+@place = 여기에_장소_UUID
+### 친구 등록 (운영자)
+POST {{baseUrl}}/api/v1/projects/streetcat/groups/{{group}}/places/{{place}}/animals
+Authorization: Bearer {{sc_token}}
+Accept: application/json
+Content-Type: application/json
+
+{"name":"나비","coat":"고등어","sex":"unknown","neutered":false,"life_status":"active","note":""}
+
+> {% if(response.status === 201) { client.global.set('sc_animal', response.body.data.id); client.global.set('sc_animal_version', response.body.data.version); } %}
+
+### 장소 친구 목록
+GET {{baseUrl}}/api/v1/projects/streetcat/groups/{{group}}/places/{{place}}/animals?page=1
+Authorization: Bearer {{sc_token}}
+Accept: application/json
+
+### 친구 정보 수정 (최신 version 필요)
+PATCH {{baseUrl}}/api/v1/projects/streetcat/groups/{{group}}/places/{{place}}/animals/{{sc_animal}}
+Authorization: Bearer {{sc_token}}
+Accept: application/json
+Content-Type: application/json
+
+{"version":{{sc_animal_version}},"life_status":"missing"}
+
+> {% if(response.status === 200) client.global.set('sc_animal_version', response.body.data.version); %}
+
+### 기존 친구 연결 후보 (다른 장소의 place UUID로 변경해 사용)
+GET {{baseUrl}}/api/v1/projects/streetcat/groups/{{group}}/places/{{place}}/animals/available?page=1
+Authorization: Bearer {{sc_token}}
+Accept: application/json
+
+### 같은 그룹의 기존 친구 연결
+POST {{baseUrl}}/api/v1/projects/streetcat/groups/{{group}}/places/{{place}}/animals/link
+Authorization: Bearer {{sc_token}}
+Accept: application/json
+Content-Type: application/json
+
+{"animal_id":"{{sc_animal}}","version":{{sc_animal_version}}}
+
+> {% if(response.status === 200) client.global.set('sc_animal_version', response.body.data.version); %}
+
+### 해당 장소 연결만 해제 (다른 연결 유지)
+DELETE {{baseUrl}}/api/v1/projects/streetcat/groups/{{group}}/places/{{place}}/animals/{{sc_animal}}
+Authorization: Bearer {{sc_token}}
+Accept: application/json
+Content-Type: application/json
+
+{"version":{{sc_animal_version}}}

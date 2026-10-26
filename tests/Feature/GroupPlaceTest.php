@@ -72,6 +72,63 @@ class GroupPlaceTest extends TestCase
             ['version' => $version, 'access' => $access]);
     }
 
+    public function test_shared_friends_require_place_grants_and_only_owner_can_edit(): void
+    {
+        $place = $this->createPlace();
+        $path = $this->path('/'.$place['id'].'/animals');
+        $animal = $this->withToken($this->tokens[1])->postJson($path, ['name' => '나비'])->assertCreated()->json('data');
+        $this->withToken($this->tokens[2])->getJson($path)->assertNotFound();
+        $this->grant($place, 2, 'care')->assertOk();
+        $this->grant($place, 3, 'view')->assertOk();
+        foreach ([2, 3] as $account) {
+            $this->withToken($this->tokens[$account])->getJson($path)->assertOk()->assertJsonPath('data.animals.0.name', '나비')
+                ->assertJsonPath('data.can_manage', false)->assertJsonMissingPath('data.animals.0.place_ids');
+            $this->withToken($this->tokens[$account])->postJson($path, ['name' => '임의 등록'])->assertForbidden();
+            $this->withToken($this->tokens[$account])->patchJson($path.'/'.$animal['id'], ['version' => 1, 'life_status' => 'passedAway'])->assertForbidden();
+            $this->withToken($this->tokens[$account])->getJson($path.'/available')->assertForbidden();
+        }
+        $this->withToken($this->tokens[1])->patchJson($path.'/'.$animal['id'], ['version' => 1, 'life_status' => 'missing'])
+            ->assertOk()->assertJsonPath('data.version', 2)->assertJsonPath('data.life_status', 'missing');
+        $this->withToken($this->tokens[1])->patchJson($path.'/'.$animal['id'], ['version' => 1, 'name' => '오래된 수정'])->assertConflict();
+        $this->grant($place, 2, 'none')->assertOk();
+        $this->withToken($this->tokens[2])->getJson($path)->assertNotFound();
+        $this->withToken($this->tokens[4])->getJson($path)->assertForbidden();
+    }
+
+    public function test_friend_can_link_to_several_places_without_exposing_other_places(): void
+    {
+        $first = $this->createPlace('첫 장소');
+        $second = $this->createPlace('둘째 장소');
+        $one = $this->path('/'.$first['id'].'/animals');
+        $two = $this->path('/'.$second['id'].'/animals');
+        $animal = $this->withToken($this->tokens[1])->postJson($one, ['name' => '나비'])->assertCreated()->json('data');
+        $this->withToken($this->tokens[1])->getJson($two.'/available')->assertOk()->assertJsonCount(1, 'data.animals');
+        $this->withToken($this->tokens[1])->postJson($two.'/link', ['animal_id' => $animal['id'], 'version' => 1])
+            ->assertOk()->assertJsonPath('data.version', 2);
+        $this->grant($first, 3, 'view')->assertOk();
+        $response = $this->withToken($this->tokens[3])->getJson($one)->assertOk();
+        $this->assertStringNotContainsString($second['id'], $response->getContent());
+        $this->withToken($this->tokens[3])->getJson($two)->assertNotFound();
+        $this->withToken($this->tokens[1])->deleteJson($one.'/'.$animal['id'], ['version' => 2])->assertNoContent();
+        $this->withToken($this->tokens[1])->getJson($one)->assertOk()->assertJsonCount(0, 'data.animals');
+        $this->withToken($this->tokens[1])->getJson($two)->assertOk()->assertJsonPath('data.animals.0.version', 3);
+        $this->withToken($this->tokens[1])->getJson($one.'/available')->assertOk()->assertJsonCount(1, 'data.animals');
+    }
+
+    public function test_foreign_group_friend_and_client_project_overrides_are_rejected(): void
+    {
+        $place = $this->createPlace();
+        $path = $this->path('/'.$place['id'].'/animals');
+        $this->withToken($this->tokens[1])->postJson($path, ['name' => '나비', 'project_id' => 2])->assertUnprocessable();
+        $foreign = $this->withToken($this->tokens[4])->postJson($this->base.'/groups', [
+            'name' => '다른 그룹', 'region_code' => '0000000000', 'region_label' => '다른 동네',
+        ])->assertCreated()->json('data.id');
+        $foreignPlace = $this->withToken($this->tokens[4])->postJson($this->base."/groups/$foreign/places", ['name' => '다른 장소'])->assertCreated()->json('data.id');
+        $other = $this->withToken($this->tokens[4])->postJson($this->base."/groups/$foreign/places/$foreignPlace/animals", ['name' => '다른 친구'])->assertCreated()->json('data.id');
+        $this->withToken($this->tokens[1])->postJson($path.'/link', ['animal_id' => $other, 'version' => 1])->assertNotFound();
+        $this->withToken($this->tokens[1])->patchJson($path.'/'.$other, ['version' => 1, 'name' => '변경'])->assertNotFound();
+    }
+
     public function test_group_approval_does_not_grant_places_or_leak_coordinates(): void
     {
         $place = $this->createPlace();

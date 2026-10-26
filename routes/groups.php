@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\CareGroupController;
 use App\Http\Controllers\GroupPlaceController;
+use App\Http\Controllers\GroupAnimalController;
 use Illuminate\Support\Facades\Route;
 
 // Loaded inside the authenticated, project-scoped API route group.
@@ -13,6 +14,14 @@ Route::post('groups', [CareGroupController::class, 'create'])->middleware('throt
 Route::post('invitations/preview', [CareGroupController::class, 'previewInvitation'])->middleware('throttle:group-invite');
 
 Route::prefix('groups/{group}')->whereUuid('group')->group(function () {
+    Route::prefix('places/{place}/animals')->whereUuid('place')->group(function () {
+        Route::get('/', [GroupAnimalController::class, 'index']);
+        Route::get('available', [GroupAnimalController::class, 'available']);
+        Route::post('/', [GroupAnimalController::class, 'create']);
+        Route::post('link', [GroupAnimalController::class, 'link']);
+        Route::patch('{animal}', [GroupAnimalController::class, 'update'])->whereUuid('animal');
+        Route::delete('{animal}', [GroupAnimalController::class, 'unlink'])->whereUuid('animal');
+    });
     Route::get('places', [GroupPlaceController::class, 'index']);
     Route::post('places', [GroupPlaceController::class, 'create']);
     Route::get('places/{place}', [GroupPlaceController::class, 'show'])->whereUuid('place');
