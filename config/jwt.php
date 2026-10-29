@@ -115,7 +115,8 @@ return [
     'required_claims' => [
         'iss',
         'iat',
-        'exp',
+        // StreetCat tokens use server-side 90-day inactivity expiry. Tokens that
+        // do include exp are still validated by the JWT claim validator.
         'nbf',
         'sub',
         'jti',

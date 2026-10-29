@@ -126,6 +126,26 @@ class ProjectIsolationTest extends TestCase
         $this->withToken($token)->getJson('/api/v1/projects/streetcat/me')->assertForbidden();
     }
 
+    public function test_streetcat_session_stays_signed_in_with_activity_and_expires_after_90_idle_days(): void
+    {
+        $token = $this->tokenFor();
+        $this->assertSame(1, DB::connection('test_streetcat')->table('project_auth_sessions')->count());
+        $this->travel(89)->days();
+        $this->withToken($token)->getJson('/api/v1/projects/streetcat/me')->assertOk();
+        $this->travel(89)->days();
+        $this->withToken($token)->getJson('/api/v1/projects/streetcat/me')->assertOk();
+        $this->travel(90)->days();
+        $this->withToken($token)->getJson('/api/v1/projects/streetcat/me')->assertUnauthorized();
+    }
+
+    public function test_streetcat_logout_revokes_persistent_session(): void
+    {
+        $token = $this->tokenFor();
+        $this->withToken($token)->postJson('/api/v1/projects/streetcat/auth/logout')->assertNoContent();
+        $this->assertSame(0, DB::connection('test_streetcat')->table('project_auth_sessions')->count());
+        $this->withToken($token)->getJson('/api/v1/projects/streetcat/me')->assertUnauthorized();
+    }
+
     public function test_database_and_project_parameters_cannot_override_route(): void
     {
         foreach (['project_id', 'project_code', 'database', 'connection'] as $field) {
