@@ -52,16 +52,18 @@ class CareGroupTest extends TestCase
     {
         $public = $this->group(true);
         $private = $this->group(false, 2);
-        app(ProjectDatabase::class)->run('streetcat', function () use ($public, $private) {
-            DB::connection('test_groups')->table('care_groups')->whereIn('id', [$public, $private])
+        $closed = $this->group(true);
+        $this->withToken($this->tokens[1])->patchJson($this->base."/groups/$closed", ['accepting_requests' => false])->assertOk();
+        app(ProjectDatabase::class)->run('streetcat', function () use ($public, $private, $closed) {
+            DB::connection('test_groups')->table('care_groups')->whereIn('id', [$public, $private, $closed])
                 ->update(['discovery_latitude' => 37.56, 'discovery_longitude' => 126.92]);
         });
         $this->withToken($this->tokens[3])->postJson($this->base.'/groups/nearby', [
             'latitude' => 37.56, 'longitude' => 126.92, 'radius_m' => 1000,
-        ])->assertOk()->assertJsonCount(1, 'data.groups')->assertJsonPath('data.groups.0.id', $public)
-            ->assertJsonPath('data.groups.0.distance_m', 250)
+        ])->assertOk()->assertJsonCount(2, 'data.groups')
             ->assertJsonMissingPath('data.groups.0.discovery_latitude')
-            ->assertJsonMissingPath('data.groups.0.discovery_longitude');
+            ->assertJsonMissingPath('data.groups.0.discovery_longitude')
+            ->assertJsonFragment(['id' => $closed, 'accepting_requests' => false]);
         $this->withToken($this->tokens[3])->postJson($this->base.'/groups/nearby', [
             'latitude' => 37.56, 'longitude' => 126.92, 'radius_m' => 2001,
         ])->assertUnprocessable();

@@ -140,7 +140,7 @@ class CareGroupService
         // Only coarse public reference points, never group_places or a member's GPS.
         $latitudeBand = $radius / 110000 + 0.00001;
         $rows = $this->table('care_groups')->where('project_id', $actor->project_id)
-            ->where('is_discoverable', true)->where('accepting_requests', true)
+            ->where('is_discoverable', true)
             ->whereNotNull('discovery_latitude')->whereNotNull('discovery_longitude')
             ->whereBetween('discovery_latitude', [max(-90, $latitude - $latitudeBand), min(90, $latitude + $latitudeBand)])
             ->get()->map(function ($group) use ($latitude, $longitude) {
