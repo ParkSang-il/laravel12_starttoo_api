@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 
 class CareGroupService
 {
-    public function __construct(private ProjectDatabase $database) {}
+    public function __construct(private ProjectDatabase $database, private GroupProfile $profiles) {}
 
     private function table(string $table): Builder
     {
@@ -66,6 +66,15 @@ class CareGroupService
             'is_discoverable' => (bool) $group->is_discoverable,
             'accepting_requests' => (bool) $group->accepting_requests,
             'has_discovery_center' => $group->discovery_latitude !== null && $group->discovery_longitude !== null];
+    }
+
+    private function memberPreviews(ProjectAccount $actor, string $group): array
+    {
+        return $this->table('group_memberships as m')->join('project_accounts as a', 'a.id', '=', 'm.account_id')
+            ->where('m.project_id', $actor->project_id)->where('a.project_id', $actor->project_id)
+            ->where('m.group_id', $group)->where('m.status', 'active')->orderBy('m.id')->limit(4)
+            ->select('m.account_id', 'a.display_name', 'a.avatar_url', 'a.avatar_thumbnail_url')->get()
+            ->map(fn ($row) => $this->profiles->summary($row))->all();
     }
 
     private function memberSummary(object $member): array
@@ -168,6 +177,7 @@ class CareGroupService
             ->where('m.project_id', $actor->project_id)->where('m.account_id', $actor->id)
             ->where('m.status', 'active')->select('g.*', 'm.role')->orderBy('g.created_at')
             ->get()->map(fn ($g) => [...$this->summary($g), 'my_role' => $g->role,
+                'member_previews' => $this->memberPreviews($actor, $g->id),
                 'can_view_locations' => $this->hasPlaceAccess($g->id, $actor->id, $g->role)])->all();
     }
 
@@ -181,6 +191,7 @@ class CareGroupService
             || ($request && $request->status === 'pending'), 404);
 
         return [...$this->summary($group),
+            ...($member && $member->status === 'active' ? ['member_previews' => $this->memberPreviews($actor, $id)] : []),
             'my_membership' => $member && $member->status === 'active' ? $this->memberSummary($member) : null,
             'my_request' => $request ? $this->requestSummary($request) : null];
     }
@@ -321,9 +332,8 @@ class CareGroupService
 
         return $this->table('group_join_requests as r')->join('project_accounts as a', 'a.id', '=', 'r.account_id')
             ->where('r.group_id', $id)->where('r.status', 'pending')
-            ->select('r.*', 'a.display_name')->orderBy('r.submitted_at')->limit(100)->get()
-            ->map(fn ($row) => [...$this->requestSummary($row), 'account_id' => (int) $row->account_id,
-                'display_name' => $row->display_name])->all();
+            ->select('r.*', 'a.display_name', 'a.avatar_url', 'a.avatar_thumbnail_url')->orderBy('r.submitted_at')->limit(100)->get()
+            ->map(fn ($row) => [...$this->requestSummary($row), ...$this->profiles->summary($row)])->all();
     }
 
     public function review(ProjectAccount $actor, string $id, int $requestId, array $data): array
@@ -380,8 +390,8 @@ class CareGroupService
 
         return $this->table('group_memberships as m')->join('project_accounts as a', 'a.id', '=', 'm.account_id')
             ->where('m.group_id', $id)->where('m.status', 'active')
-            ->select('m.*', 'a.display_name')->orderBy('m.id')->limit(100)->get()
-            ->map(fn ($row) => [...$this->memberSummary($row), 'display_name' => $row->display_name])->all();
+            ->select('m.*', 'a.display_name', 'a.avatar_url', 'a.avatar_thumbnail_url')->orderBy('m.id')->limit(100)->get()
+            ->map(fn ($row) => [...$this->memberSummary($row), ...$this->profiles->summary($row)])->all();
     }
 
     public function leave(ProjectAccount $actor, string $id, ?int $target = null): void

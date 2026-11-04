@@ -454,4 +454,73 @@ class GroupPlaceTest extends TestCase
             ->assertJsonPath('data.life_status_at', null)->assertJsonPath('data.tnr_dates', []);
     }
 
+    public function test_group_profile_fields_match_previews_members_and_activity_by_account_id(): void
+    {
+        app(ProjectDatabase::class)->run('streetcat', function () {
+            $db = app(ProjectDatabase::class)->database();
+            foreach ([1, 2] as $id) {
+                $db->table('project_accounts')->where('id', $id)->update([
+                    'display_name' => '같은 닉네임', 'avatar_url' => "https://profiles.test/$id.jpg",
+                    'avatar_thumbnail_url' => "https://profiles.test/$id-small.jpg",
+                ]);
+            }
+        });
+        $place = $this->createPlace();
+        $this->grant($place, 2, 'care')->assertOk();
+        $expected = ['account_id' => 2, 'display_name' => '같은 닉네임',
+            'avatar_url' => 'https://profiles.test/2.jpg', 'avatar_thumbnail_url' => 'https://profiles.test/2-small.jpg'];
+        $groups = $this->withToken($this->tokens[2])->getJson($this->base.'/me/groups')->assertOk()->json('data');
+        $this->assertSame($expected, collect($groups[0]['member_previews'])->firstWhere('account_id', 2));
+        $detail = $this->withToken($this->tokens[2])->getJson($this->base."/groups/{$this->group}")->assertOk()->json('data');
+        $this->assertSame($expected, collect($detail['member_previews'])->firstWhere('account_id', 2));
+        $members = $this->withToken($this->tokens[1])->getJson($this->base."/groups/{$this->group}/members")->assertOk()->json('data');
+        $member = collect($members)->firstWhere('account_id', 2);
+        foreach ($expected as $key => $value) $this->assertSame($value, $member[$key]);
+        $withoutPhoto = collect($members)->firstWhere('account_id', 3);
+        $this->assertNull($withoutPhoto['avatar_url']);
+        $this->assertNull($withoutPhoto['avatar_thumbnail_url']);
+        $path = $this->path('/'.$place['id'].'/care-records');
+        $this->withToken($this->tokens[2])->postJson($path, [
+            'request_id' => (string) \Illuminate\Support\Str::uuid(), 'fed_at' => now()->subMinute()->toIso8601String(),
+            'cost' => 0, 'tags' => [], 'sightings' => [],
+        ])->assertCreated()->assertJsonPath('data.author_account_id', 2)->assertJsonPath('data.created_by', 2)
+            ->assertJsonPath('data.avatar_url', $expected['avatar_url']);
+        $this->withToken($this->tokens[1])->getJson($path)->assertOk()
+            ->assertJsonPath('data.records.0.author_account_id', 2)
+            ->assertJsonPath('data.records.0.display_name', $expected['display_name'])
+            ->assertJsonPath('data.records.0.avatar_thumbnail_url', $expected['avatar_thumbnail_url']);
+        // Nickname changes do not change identity; historical activity uses the same current profile.
+        app(ProjectDatabase::class)->run('streetcat', fn () => app(ProjectDatabase::class)->database()
+            ->table('project_accounts')->where('id', 2)->update(['display_name' => '변경된 닉네임']));
+        $this->withToken($this->tokens[1])->getJson($path)->assertOk()
+            ->assertJsonPath('data.records.0.display_name', '변경된 닉네임')->assertJsonPath('data.records.0.author_account_id', 2);
+    }
+
+    public function test_public_groups_do_not_expose_member_avatars_or_pending_applicants(): void
+    {
+        app(ProjectDatabase::class)->run('streetcat', fn () => app(ProjectDatabase::class)->database()
+            ->table('project_accounts')->update(['avatar_url' => 'https://profiles.test/private.jpg']));
+        $this->withToken($this->tokens[4])->getJson($this->base."/groups/{$this->group}")->assertOk()
+            ->assertJsonMissingPath('data.member_previews');
+        $public = $this->withToken($this->tokens[4])->getJson($this->base.'/groups/discover?region_code=0000000000')->assertOk();
+        $this->assertStringNotContainsString('private.jpg', $public->getContent());
+        $this->withToken($this->tokens[4])->postJson($this->base."/groups/{$this->group}/join-requests", ['message' => '가입 신청'])->assertOk();
+        $detail = $this->withToken($this->tokens[1])->getJson($this->base."/groups/{$this->group}")->assertOk()->json('data');
+        $this->assertLessThanOrEqual(4, count($detail['member_previews']));
+        $this->assertFalse(collect($detail['member_previews'])->contains('account_id', 4));
+        $this->assertArrayNotHasKey('phone', $detail['member_previews'][0]);
+        $this->withToken($this->tokens[1])->getJson($this->base."/groups/{$this->group}/join-requests")->assertOk()
+            ->assertJsonPath('data.0.avatar_url', 'https://profiles.test/private.jpg');
+        $this->withToken($this->tokens[2])->getJson($this->base."/groups/{$this->group}/members")->assertForbidden();
+        $this->withToken($this->tokens[2])->getJson($this->base."/groups/{$this->group}/join-requests")->assertForbidden();
+    }
+
+    public function test_avatar_serializer_does_not_publish_local_paths_or_non_image_schemes(): void
+    {
+        app(ProjectDatabase::class)->run('streetcat', fn () => app(ProjectDatabase::class)->database()
+            ->table('project_accounts')->where('id', 1)->update(['avatar_url' => '/private/photos/me.jpg', 'avatar_thumbnail_url' => 'file:///private/me.jpg']));
+        $this->withToken($this->tokens[1])->getJson($this->base."/groups/{$this->group}/members")->assertOk()
+            ->assertJsonPath('data.0.avatar_url', null)->assertJsonPath('data.0.avatar_thumbnail_url', null);
+    }
+
 }
