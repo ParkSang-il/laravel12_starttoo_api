@@ -12,10 +12,7 @@ services:
       - starttoo_bootstrap_cache:/var/www/html/bootstrap/cache
     networks:
       - starttoo_network
-    depends_on:
-      - mysql
-      - redis
-      - soketi
+      - db_network
 
   nginx:
     image: nginx:alpine
@@ -36,81 +33,18 @@ services:
     depends_on:
       - app
 
-  mysql:
-    image: mysql:8.0
-    container_name: starttoo_mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_DATABASE: starttoo
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_PASSWORD: root
-      MYSQL_USER: starttoo
-
-    ports:
-      - "3306:3306"
-    volumes:
-      - starttoo_mysql_data:/var/lib/mysql
-    networks:
-      - starttoo_network
-
-  redis:
-    image: redis:7-alpine
-    container_name: starttoo_redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - starttoo_redis_data:/data
-    networks:
-      - starttoo_network
-    command: redis-server --appendonly yes
-
-
-  soketi:
-    image: quay.io/soketi/soketi:1.6.1-16-alpine
-    container_name: starttoo_soketi
-    restart: unless-stopped
-    environment:
-      SOKETI_DEFAULT_APP_ID: "app-id"
-      SOKETI_DEFAULT_APP_KEY: "app-key"
-      SOKETI_DEFAULT_APP_SECRET: "app-secret"
-      SOKETI_PORT: "6001"
-      SOKETI_DEBUG: "1"
-      # (권장) scale-out/동기화용 Redis
-      SOKETI_REDIS_HOST: "redis"
-      SOKETI_REDIS_PORT: "6379"
-    ports:
-      - "6001:6001"
-    networks:
-      - starttoo_network
-    depends_on:
-      - redis
-
-
-  # Node.js 채팅 서버 (선택사항 - Laravel Broadcasting 대신 사용 가능)
-  # nodejs:
-  #   build:
-
-  #     context: ./docker/nodejs
-  #     dockerfile: Dockerfile
-  #   container_name: starttoo_nodejs
-  #   restart: unless-stopped
-  #   ports:
-  #     - "3000:3000"
-  #   volumes:
-  #     - ./chat-server:/app
-  #   networks:
-  #     - starttoo_network
-  #   depends_on:
-  #     - redis
-  #   environment:
-  #     - REDIS_HOST=redis
-  #     - REDIS_PORT=6379
-  #     - JWT_SECRET=${JWT_SECRET}
+  # 아래 서비스는 사용하지 않음. DB는 별도 mysql 컨테이너(startoo_network) 사용.
+  # 주석을 풀면 3306/6379/6001이 외부에 공개되므로 주의.
+  # mysql:     (원본은 /root/backup/streetcat-chat-20261104-1808/docker-compose.yml)
+  # redis:
+  # soketi:
 
 networks:
   starttoo_network:
     driver: bridge
+  db_network:
+    external: true
+    name: startoo_network
 
 volumes:
   starttoo_mysql_data:
