@@ -10,6 +10,8 @@ class GroupProfile
         return [
             'account_id' => (int) $account->account_id,
             'display_name' => $account->display_name,
+            'nickname_tag' => isset($account->nickname_tag) ? (string) $account->nickname_tag : null,
+            'nickname' => $account->display_name === null ? null : $account->display_name.(isset($account->nickname_tag) ? '#'.$account->nickname_tag : ''),
             'avatar_url' => $this->imageUrl($account->avatar_disk ?? null, $account->avatar_path ?? null, $account->avatar_url ?? null),
             'avatar_thumbnail_url' => $this->imageUrl($account->avatar_disk ?? null, $account->avatar_thumbnail_path ?? null, $account->avatar_thumbnail_url ?? null),
         ];

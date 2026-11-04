@@ -460,14 +460,14 @@ class GroupPlaceTest extends TestCase
             $db = app(ProjectDatabase::class)->database();
             foreach ([1, 2] as $id) {
                 $db->table('project_accounts')->where('id', $id)->update([
-                    'display_name' => '같은 닉네임', 'avatar_url' => "https://profiles.test/$id.jpg",
+                    'display_name' => '같은 닉네임', 'nickname_tag' => $id, 'avatar_url' => "https://profiles.test/$id.jpg",
                     'avatar_thumbnail_url' => "https://profiles.test/$id-small.jpg",
                 ]);
             }
         });
         $place = $this->createPlace();
         $this->grant($place, 2, 'care')->assertOk();
-        $expected = ['account_id' => 2, 'display_name' => '같은 닉네임',
+        $expected = ['account_id' => 2, 'display_name' => '같은 닉네임', 'nickname_tag' => '2', 'nickname' => '같은 닉네임#2',
             'avatar_url' => 'https://profiles.test/2.jpg', 'avatar_thumbnail_url' => 'https://profiles.test/2-small.jpg'];
         $groups = $this->withToken($this->tokens[2])->getJson($this->base.'/me/groups')->assertOk()->json('data');
         $this->assertSame($expected, collect($groups[0]['member_previews'])->firstWhere('account_id', 2));
@@ -521,6 +521,50 @@ class GroupPlaceTest extends TestCase
             ->table('project_accounts')->where('id', 1)->update(['avatar_url' => '/private/photos/me.jpg', 'avatar_thumbnail_url' => 'file:///private/me.jpg']));
         $this->withToken($this->tokens[1])->getJson($this->base."/groups/{$this->group}/members")->assertOk()
             ->assertJsonPath('data.0.avatar_url', null)->assertJsonPath('data.0.avatar_thumbnail_url', null);
+    }
+
+    public function test_status_endpoint_saves_all_tnr_stages_and_life_dates_without_overwriting_other_fields(): void
+    {
+        $place = $this->createPlace();
+        $path = $this->path('/'.$place['id'].'/animals');
+        $animal = $this->withToken($this->tokens[1])->postJson($path, ['name' => '상태 친구', 'note' => '보존할 메모'])->assertCreated()->json('data');
+        $url = $path.'/'.$animal['id'].'/status';
+        $version = 1;
+        foreach (['trapScheduled', 'surgery', 'released', 'done'] as $stage) {
+            $date = today()->toDateString();
+            $response = $this->withToken($this->tokens[1])->patchJson($url, ['version' => $version++,
+                'tnr_stage' => $stage, 'tnr_dates' => [$stage => $date]])->assertOk()
+                ->assertJsonPath('data.tnr_stage', $stage)->assertJsonPath('data.tnr_dates.'.$stage, $date)
+                ->assertJsonPath('data.note', '보존할 메모')->assertJsonPath('data.life_status', 'active');
+            $this->assertSame($stage !== 'trapScheduled', $response->json('data.neutered'));
+        }
+        foreach (['missing', 'rescued', 'moved', 'passedAway'] as $status) {
+            $this->withToken($this->tokens[1])->patchJson($url, ['version' => $version++,
+                'life_status' => $status, 'life_status_at' => today()->subDay()->toDateString()])->assertOk()
+                ->assertJsonPath('data.life_status', $status)->assertJsonPath('data.tnr_stage', 'done')
+                ->assertJsonPath('data.note', '보존할 메모');
+        }
+        $this->withToken($this->tokens[1])->patchJson($url, ['version' => $version++, 'life_status' => 'active', 'life_status_at' => null])
+            ->assertOk()->assertJsonPath('data.life_status_at', null);
+        $this->withToken($this->tokens[1])->patchJson($url, ['version' => $version, 'tnr_stage' => 'needed', 'tnr_dates' => []])
+            ->assertOk()->assertJsonPath('data.neutered', false)->assertJsonPath('data.tnr_dates', []);
+        $this->withToken($this->tokens[1])->getJson($path.'/'.$animal['id'])->assertOk()->assertJsonPath('data.tnr_stage', 'needed');
+    }
+
+    public function test_status_endpoint_rejects_missing_dates_stale_versions_unrelated_fields_and_nonowners(): void
+    {
+        $place = $this->createPlace();
+        $animal = $this->withToken($this->tokens[1])->postJson($this->path('/'.$place['id'].'/animals'), ['name' => '검증 친구'])
+            ->assertCreated()->json('data');
+        $url = $this->path('/'.$place['id'].'/animals/'.$animal['id'].'/status');
+        foreach ([['version' => 1], ['version' => 1, 'tnr_stage' => 'surgery'],
+            ['version' => 1, 'life_status' => 'missing'], ['version' => 1, 'life_status' => 'active', 'name' => '덮어쓰기']] as $data) {
+            $this->withToken($this->tokens[1])->patchJson($url, $data)->assertUnprocessable();
+        }
+        $this->withToken($this->tokens[1])->patchJson($url, ['version' => 1, 'tnr_stage' => 'needed'])->assertOk();
+        $this->withToken($this->tokens[1])->patchJson($url, ['version' => 1, 'tnr_stage' => 'needed'])->assertConflict();
+        $this->grant($place, 2, 'care')->assertOk();
+        $this->withToken($this->tokens[2])->patchJson($url, ['version' => 2, 'tnr_stage' => 'needed'])->assertForbidden();
     }
 
 }

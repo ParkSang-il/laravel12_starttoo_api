@@ -9,12 +9,13 @@ class GroupCareService {
     private function records() {
         return $this->table('group_care_records as r')->leftJoin('project_accounts as author', function ($join) {
             $join->on('author.id', '=', 'r.created_by')->on('author.project_id', '=', 'r.project_id');
-        })->select('r.*', 'r.created_by as account_id', 'author.display_name', 'author.avatar_url', 'author.avatar_thumbnail_url', 'author.avatar_disk', 'author.avatar_path', 'author.avatar_thumbnail_path');
+        })->select('r.*', 'r.created_by as account_id', 'author.display_name', 'author.nickname_tag', 'author.avatar_url', 'author.avatar_thumbnail_url', 'author.avatar_disk', 'author.avatar_path', 'author.avatar_thumbnail_path');
     }
     private function summary(object $row): array {
         $profile = $this->profiles->summary($row);
         return ['id'=>$row->id,'place_id'=>$row->place_id,'group_id'=>$row->group_id,'created_by'=>(int)$row->created_by,
             'author_account_id'=>$profile['account_id'], 'display_name'=>$profile['display_name'],
+            'nickname_tag'=>$profile['nickname_tag'], 'nickname'=>$profile['nickname'],
             'avatar_url'=>$profile['avatar_url'], 'avatar_thumbnail_url'=>$profile['avatar_thumbnail_url'],
             'fed_at'=>CarbonImmutable::parse($row->fed_at,'UTC')->toIso8601String(),
             'food_amount_gram'=>$row->food_amount_gram === null ? null : (int)$row->food_amount_gram,

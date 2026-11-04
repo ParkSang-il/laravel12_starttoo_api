@@ -23,7 +23,7 @@ class GroupAnimalController extends Controller
     {
         return [$request->user(), (string) $request->route('group'), (string) $request->route('place')];
     }
-    private function fields(Request $request, bool $edit, bool $import = false): array
+    private function fields(Request $request, bool $edit, bool $import = false, bool $stateOnly = false): array
     {
         $rules = ['name' => [$edit ? 'sometimes' : 'required', 'required', 'string', 'max:80'],
             'coat' => ['sometimes', 'nullable', 'string', 'max:80'],
@@ -36,6 +36,14 @@ class GroupAnimalController extends Controller
             'life_status_at' => ['sometimes', 'nullable', 'date_format:Y-m-d', 'after_or_equal:2000-01-01', 'before_or_equal:today'],
             'life_status' => ['sometimes', Rule::in(['active', 'missing', 'rescued', 'moved', 'passedAway'])],
             'note' => ['sometimes', 'nullable', 'string', 'max:500']];
+        if ($stateOnly) {
+            $rules = array_intersect_key($rules, array_flip(['tnr_stage', 'tnr_dates', 'tnr_dates.*', 'life_status', 'life_status_at']));
+            $rules['tnr_stage'] = ['required_without:life_status', Rule::in(GroupAnimalState::STAGES)];
+            $rules['life_status'] = ['required_without:tnr_stage', Rule::in(['active', 'missing', 'rescued', 'moved', 'passedAway'])];
+            array_unshift($rules['life_status_at'], Rule::requiredIf(fn () => $request->filled('life_status') && $request->input('life_status') !== 'active'));
+            // A required rule must run even when the date field is absent.
+            $rules['life_status_at'] = array_values(array_filter($rules['life_status_at'], fn ($rule) => $rule !== 'sometimes'));
+        }
         if ($import) $rules['source_local_id'] = ['required', 'string', 'max:80'];
         if ($edit) $rules['version'] = ['required', 'integer', 'min:1'];
         $data = $this->input($request, $rules);
@@ -72,6 +80,12 @@ class GroupAnimalController extends Controller
     {
         return response()->json(['data' => $this->animals->update(...[...$this->ids($request), (string) $request->route('animal'), $this->fields($request, true)])]);
     }
+    public function updateState(Request $request)
+    {
+        return response()->json(['data' => $this->animals->update(...[...$this->ids($request),
+            (string) $request->route('animal'), $this->fields($request, true, false, true)])]);
+    }
+
     public function link(Request $request)
     {
         $data = $this->input($request, ['animal_id' => ['required', 'uuid'], 'version' => ['required', 'integer', 'min:1']]);

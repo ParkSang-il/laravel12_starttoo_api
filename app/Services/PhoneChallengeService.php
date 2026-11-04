@@ -80,8 +80,11 @@ class PhoneChallengeService
             }
             $account->phone_verified_at = now();
             $account->save();
-            if ($isNew && $project->code === 'streetcat') {
-                $account->display_name = app(NicknameGenerator::class)->forAccount($account);
+            if ($project->code === 'streetcat') {
+                $account->nickname_tag ??= (string) $account->id;
+                if ($isNew || trim($account->display_name ?? '') === '') {
+                    $account->display_name = app(NicknameGenerator::class)->generate();
+                }
                 $account->save();
             }
             $this->projectDatabase->database()->table('project_phone_challenges')->where('id', $id)->update([

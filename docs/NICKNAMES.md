@@ -1,34 +1,46 @@
-# 스트릿캣 신규 가입 자동 닉네임
+# 표시 이름과 고정 닉네임 번호
 
-## 동작
+## 최종 계약
 
-휴대폰 인증번호 검증에 성공해 신규 `project_accounts` 행을 만드는 시점에 `display_name`을 `{수식어} {명사}#{계정ID}`로 저장한다. 예: `다정한 밥지기#123`. 단어를 선택할 때 `nickname_words.is_active=true`만 사용한다. 숫자는 난수 재시도가 아닌 DB의 고유한 계정 PK이며, 같은 조합을 고른 신규 가입자끼리도 숫자가 달라진다. 고유성 범위는 프로젝트 전용 DB이다.
+- `display_name`: 표시 이름 본문. 중복 가능, 사용자가 1~50자로 변경 가능하다.
+- `nickname_tag`: 별도의 unsigned bigint 고유 필드. 프로젝트 DB 안에서 UNIQUE 인덱스로 중복을 차단한다. 생성된 계정 ID를 최초 번호로 사용하고 이후에는 바꾸지 않는다. API에서는 큰 번호도 손실되지 않게 문자열로 반환한다.
+- `nickname`: 화면 표시용 `display_name#nickname_tag`. 서버에서 조합하는 읽기 전용 값이다.
 
-계정 생성·닉네임 저장·인증번호 소비는 같은 트랜잭션이다. 재로그인은 생성 로직을 실행하지 않는다. 기존 회원의 사용자 지정 이름과 이름이 null인 계정도 변경하지 않는다. 현재 등록된 스트릿캣 프로젝트에만 자동 생성을 적용하고, 다른 프로젝트의 가입 동작은 유지한다. 사용자가 이후 이름을 직접 변경하는 기존 기능과 중복 허용 정책은 변경하지 않는다. 숫자 태그는 자동 생성 시점의 구분자이며 별도 로그인 ID가 아니다.
+예: 표시 이름이 같은 두 계정도 `다정한 밥지기#123`, `다정한 밥지기#124`로 구분한다. 첫 번째 계정이 이름을 바꾸면 `말랑한 젤리#123`이며 번호는 그대로다. 이전 문서의 “display_name 자체에 #번호를 저장하고 이름 변경 시 태그를 없앨 수 있음” 계약을 이 구조로 대체한다.
 
-수식어 222개·명사 146개는 제공된 목록 그대로이며 `(type, word)` unique 인덱스로 중복 등록을 방지한다. 기본 조합은 최대 11자, 뒤에 `#`와 계정 ID를 붙여도 기존 `display_name` 50자 제한 이내다. 단어 유형이 모두 비활성화되거나 비어 있으면 `다정한`/`밥지기`를 해당 유형의 대체값으로 사용해 가입을 유지한다.
+휴대폰 인증 후 신규 계정을 생성하는 트랜잭션에서 수식어 222개·명사 146개 중 활성 단어를 조합해 이름 본문을 만들고 고정 번호를 저장한다. 단어 유형이 비어 있으면 `다정한`/`밥지기`를 대체값으로 사용한다. 인증번호 재검증·재로그인 때 기존 이름과 번호는 유지한다. 번호나 이름이 누락된 이전 계정은 로그인 시에도 보완한다. 자동 생성은 현재 스트릿캣 프로젝트에 적용한다.
+
+`PATCH /api/v1/projects/streetcat/me`는 `display_name`만 변경한다. `nickname_tag`, `nickname` 입력은 거부한다. 구버전 앱이 `변경 이름#본인번호`를 보내면 본문만 저장하고, 다른 번호를 붙여 바꾸려 하면 422를 반환한다. 표시 이름의 중복 검사는 하지 않는다.
+
+인증·계정 응답과 홈/그룹/활동/멤버 프로필 응답은 본문 `display_name`, 고정 `nickname_tag`, 표시용 `nickname`을 제공한다. 앱은 목록에 `nickname`을 표시하고, 이름 편집창에는 본문만 입력받으며 `#번호`는 수정할 수 없는 suffix로 표시한다. 오래된 응답에 `nickname`이 없으면 기존 표시 이름으로 동작한다.
+
+## 기존 계정 보정
+
+프로젝트 migration `2026_11_04_000014_add_fixed_nickname_tags.php`는 번호 컬럼을 추가하고 기존 계정을 200개씩 처리한다.
+
+1. 기존 계정 ID를 고정 번호로 저장한다. 이미 존재하는 회원을 복제하거나 새 계정을 만들지 않는다.
+2. 기존 표시 이름은 유지하되, 이전 자동 생성 형식의 마지막 `#본인ID`만 분리한다.
+3. 이름이 비어 있으면 조합 이름을 채운다. 사진·전화번호·권한·그룹 소속은 변경하지 않는다.
+
+번호 UNIQUE 인덱스가 실제 DB의 중복 번호 쓰기도 거부한다. 표시 이름에는 UNIQUE 인덱스를 추가하지 않는다. 000014를 롤백하면 번호 컬럼이 삭제되므로 운영 적용 전 DB 백업이 필요하다.
 
 ## 배포
 
-새 파일 `app/Services/NicknameGenerator.php`, `database/seeders/NicknameWordSeeder.php`, `database/project-migrations/2026_11_04_000013_create_nickname_words.php`와 수정한 `PhoneChallengeService.php`, `routes/console.php`를 함께 커밋·배포한다.
-
-DB 백업 후 서버 컨테이너에서:
+닉네임 관련 서비스·모델·컨트롤러·그룹 응답 변경과 migration 000013/000014, `database/seeders/NicknameWordSeeder.php`를 함께 배포한다. 번호 컬럼을 조회하므로 앱 사용 전에 프로젝트 마이그레이션을 적용해야 한다.
 
 ```bash
-php artisan project:migrate streetcat --pretend
-php artisan project:migrate streetcat --force
+docker exec -w /var/www/html starttoo_app php artisan project:migrate streetcat --pretend
+docker exec -w /var/www/html starttoo_app php artisan project:migrate streetcat --force
 ```
 
-000013은 프로젝트 전용 DB에 `nickname_words`를 생성하고 기본 단어를 자동 등록한다. 별도 시더 실행은 필요하지 않다. 기본 목록을 명시적으로 다시 적용하려면:
+000013은 프로젝트 전용 DB에 `nickname_words`를 만들고 제공된 단어를 자동 등록한다. 별도 시더 실행은 필요하지 않다. 기본 목록을 다시 적용할 때만 다음 명령을 사용한다.
 
 ```bash
-php artisan project:seed-nicknames streetcat
+docker exec -w /var/www/html starttoo_app php artisan project:seed-nicknames streetcat
 ```
 
-시더는 `(type, word)` 기준 upsert하며 기존 단어의 `created_at`은 보존한다. 재실행하면 기본 목록의 `is_active`는 true로 재설정된다. 비활성 상태를 운영 중 수동 관리한다면 재실행 전에 유의한다. `php artisan db:seed --class=NicknameWordSeeder`처럼 프로젝트 문맥 없이 실행하면 실패하도록 하여 기존 서비스 DB에 실수로 저장하는 것을 방지했다.
-
-응답 필드는 기존 `account.display_name`이므로 Flutter 수정 없이 설정·공동돌봄에 표시된다. 기존 회원에 대한 일괄 닉네임 배정은 수행하지 않는다. 실제 운영 DB 적용·신규 실회원 가입 테스트는 별도 확인한다.
+시더는 `(type, word)` 기준 upsert하며 기존 생성 시각은 보존하지만 기본 단어의 `is_active`는 true로 되돌린다. 프로젝트 문맥 없이 기본 DB에 시더를 실행하지 않는다. 서버의 실제 DB 적용·운영 배포는 이번 로컬 구현에서 실행하지 않았다.
 
 ## 검증
 
-격리된 PHP 8.3/SQLite 전체 테스트 73개(874 assertions) 통과. 신규 생성과 조회, 동일 단어 조합의 서로 다른 ID 태그, 비활성 단어 제외, 재로그인과 사용자 수정 이름 보존, 기존 null 이름 보존, 시더 반복 실행 및 기존 DB 격리, 빈 목록 대체값을 확인했다.
+격리 PHP 8.3/SQLite 테스트로 이름 중복 허용, 이름 변경 후 번호 유지, 번호 변경 거부, 기존 계정/이름 보정, 번호 UNIQUE 인덱스, 기존 조합 이름 보존, 시더 중복 방지와 프로젝트 DB 격리를 확인한다. 앱 테스트는 편집창의 고정 번호 표시와 본문만 보내는 요청을 확인한다.

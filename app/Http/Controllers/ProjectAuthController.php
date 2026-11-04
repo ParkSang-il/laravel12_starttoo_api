@@ -55,8 +55,17 @@ class ProjectAuthController extends Controller
 
     public function updateProfile(Request $request)
     {
-        $data = $request->validate(['display_name' => ['required', 'string', 'max:50']]);
         $account = Auth::guard('api')->user();
+        $name = $request->input('display_name');
+        if ($account->nickname_tag !== null && is_string($name) && preg_match('/#([0-9]+)$/u', $name, $match)) {
+            if ($match[1] !== (string) $account->nickname_tag) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['display_name' => '#번호는 변경할 수 없습니다.']);
+            }
+            // Compatibility with older apps that edited the previously combined name.
+            $request->merge(['display_name' => substr($name, 0, -strlen($match[0]))]);
+        }
+        $data = $request->validate(['display_name' => ['required', 'string', 'max:50'],
+            'nickname_tag' => ['prohibited'], 'nickname' => ['prohibited']]);
         $account->fill($data)->save();
 
         return response()->json(['data' => $account]);

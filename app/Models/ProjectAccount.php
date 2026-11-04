@@ -11,7 +11,7 @@ class ProjectAccount extends Authenticatable implements JWTSubject
 {
     use UsesProjectDatabase;
 
-    protected $appends = ['project_code'];
+    protected $appends = ['project_code', 'nickname'];
 
     public function getProjectCodeAttribute(): string
     {
@@ -22,6 +22,12 @@ class ProjectAccount extends Authenticatable implements JWTSubject
     protected $fillable = ['display_name'];
 
     protected $hidden = ['phone', 'avatar_disk', 'avatar_path', 'avatar_thumbnail_path'];
+
+    public function getNicknameAttribute(): ?string
+    {
+        $name = $this->display_name;
+        return $name === null ? null : $name.($this->nickname_tag === null ? '' : '#'.$this->nickname_tag);
+    }
 
     public function getAvatarUrlAttribute($value): ?string
     {
@@ -37,7 +43,7 @@ class ProjectAccount extends Authenticatable implements JWTSubject
 
     protected function casts(): array
     {
-        return ['phone_verified_at' => 'datetime'];
+        return ['phone_verified_at' => 'datetime', 'nickname_tag' => 'string'];
     }
 
     public function getJWTIdentifier()
