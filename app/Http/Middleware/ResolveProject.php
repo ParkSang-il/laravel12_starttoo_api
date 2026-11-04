@@ -19,6 +19,7 @@ class ResolveProject
         return app(ProjectDatabase::class)->run($code, function () use ($request, $next, $code) {
             // Avoid retaining an account fetched from a previous project's database.
             Auth::forgetGuards();
+            Auth::guard('api')->unsetToken();
             try {
                 $project = Project::where('code', $code)->where('is_active', true)->firstOrFail();
                 $request->attributes->set('project', $project);

@@ -44,8 +44,8 @@ class CareGroupController extends Controller
         $data = $this->input($request, [
             'name' => ['required', 'string', 'max:80'],
             'description' => ['sometimes', 'nullable', 'string', 'max:500'],
-            'region_code' => ['required', 'string', 'regex:/^[0-9]{10}$/D'],
-            'region_label' => ['required', 'string', 'max:80'],
+            'region_code' => ['sometimes', 'nullable', 'string', 'regex:/^[0-9]{10}$/D'],
+            'region_label' => ['sometimes', 'nullable', 'string', 'max:80'],
             'is_discoverable' => ['sometimes', 'boolean'],
             'accepting_requests' => ['sometimes', 'boolean'],
             'discovery_latitude' => ['sometimes', 'nullable', 'numeric', 'between:-90,90'],

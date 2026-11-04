@@ -21,6 +21,7 @@ Route::prefix('groups/{group}')->whereUuid('group')->group(function () {
         Route::post('/', [GroupAnimalController::class, 'create']);
         Route::post('import', [GroupAnimalController::class, 'importLocal']);
         Route::post('link', [GroupAnimalController::class, 'link']);
+        Route::get('{animal}', [GroupAnimalController::class, 'show'])->whereUuid('animal');
         Route::patch('{animal}', [GroupAnimalController::class, 'update'])->whereUuid('animal');
         Route::delete('{animal}', [GroupAnimalController::class, 'unlink'])->whereUuid('animal');
     });

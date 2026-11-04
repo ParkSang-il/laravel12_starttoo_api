@@ -35,6 +35,10 @@ class CareGroupTest extends TestCase
                     'phone' => '010'.str_pad((string) $i, 8, '0', STR_PAD_LEFT),
                     'phone_verified_at' => now(), 'display_name' => '테스트 '.$i])->save();
                 $this->tokens[$i] = Auth::guard('api')->login($account);
+                app(ProjectDatabase::class)->database()->table('project_auth_sessions')->insert([
+                    'id' => hash('sha256', Auth::guard('api')->payload()->get('jti')),
+                    'account_id' => $account->id, 'last_seen_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+                ]);
                 Auth::forgetGuards();
             }
         });

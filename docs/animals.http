@@ -58,3 +58,31 @@ Content-Type: application/json
 {"source_local_id":"animal-http-import-test-1","name":"로컬 나비","coat":"삼색이","sex":"unknown","age":"약 2살","neutered":false,"life_status":"active","note":""}
 
 > {% client.test('그룹 등록', function () { client.assert(response.status === 200, 'Expected 200'); client.assert(!!response.body.data.animal.id, '그룹 친구 ID 필요'); }); %}
+
+
+### 친구 단독 상세 (현재 장소 권한 및 연결 확인)
+GET {{baseUrl}}/api/v1/projects/streetcat/groups/{{group}}/places/{{place}}/animals/{{sc_animal}}
+Authorization: Bearer {{sc_token}}
+Accept: application/json
+
+> {% if(response.status === 200) client.global.set('sc_animal_version', response.body.data.version); %}
+
+### TNR 단계 변경 (날짜를 실제 선택한 값으로 변경; neutered는 서버 계산)
+PATCH {{baseUrl}}/api/v1/projects/streetcat/groups/{{group}}/places/{{place}}/animals/{{sc_animal}}
+Authorization: Bearer {{sc_token}}
+Accept: application/json
+Content-Type: application/json
+
+{"version":{{sc_animal_version}},"tnr_stage":"surgery","tnr_dates":{"surgery":"2026-11-04"}}
+
+> {% if(response.status === 200) client.global.set('sc_animal_version', response.body.data.version); %}
+
+### 생애 상태와 변경 날짜
+PATCH {{baseUrl}}/api/v1/projects/streetcat/groups/{{group}}/places/{{place}}/animals/{{sc_animal}}
+Authorization: Bearer {{sc_token}}
+Accept: application/json
+Content-Type: application/json
+
+{"version":{{sc_animal_version}},"life_status":"missing","life_status_at":"2026-11-04"}
+
+> {% if(response.status === 200) client.global.set('sc_animal_version', response.body.data.version); %}

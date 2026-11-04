@@ -1,6 +1,6 @@
 # 그룹 친구 공유
 
-배포 후 `php artisan project:migrate streetcat --force` (000005, 000006).
+배포 후 `php artisan project:migrate streetcat --force` (000005~000009 및 후속 지역 필드 000010).
 개인 SQLite 친구를 전송하지 않습니다. 그룹 친구는 서버에 별도로 등록합니다.
 
 기준 경로: `/api/v1/projects/streetcat/groups/{group}/places/{place}/animals`
@@ -11,15 +11,17 @@ JWT 인증 필요. 모든 조회는 현재 그룹 가입 상태, 계정 활성 �
 | 메서드 | 경로 | 본문/쿼리 |
 |---|---|---|
 | GET | 기준 경로 | page=1 (20개) |
+| GET | /{animal} | 친구 단독 상세, 현재 장소 열람 권한 필요 |
 | GET | /available | page=1, 현재 장소에 미연결인 같은 그룹 친구 (운영자) |
-| POST | 기준 경로 | name 필수; coat, age(추정 나이, 최대80자), sex(unknown/male/female), neutered, life_status, note 선택 |
+| POST | 기준 경로 | name 필수; coat, age(추정 나이, 최대80자), sex(unknown/male/female), neutered, tnr_stage, tnr_dates, life_status, life_status_at, note 선택 |
 | PATCH | /{animal} | version 필수, 수정할 필드 |
 | POST | /link | animal_id, version |
 | DELETE | /{animal} | version |
 
 life_status: active / missing / rescued / moved / passedAway.
 조회 응답 data: animals, can_manage, page, has_more.
-생성/수정/연결 응답 data: id, group_id, name, coat, age, sex, neutered, life_status, note, version.
+생성/수정/연결 응답 data: id, group_id, name, coat, age, sex, neutered, tnr_stage, tnr_dates, life_status, life_status_at, note, version.
+단독 상세 응답에는 can_manage도 포함한다.
 같은 그룹의 여러 장소에 동일 친구를 연결합니다. 수정은 연결된 모든 장소에 반영됩니다.
 DELETE는 해당 장소 연결만 해제합니다. 친구와 다른 연결은 보존되며 available에서 다시 연결할 수 있습니다.
 장소 중지 시 친구 데이터는 보존하고 장소 권한으로 조회를 차단합니다.
@@ -33,7 +35,7 @@ Flutter: 그룹 장소 → 이 장소의 친구들. 운영자는 친구 등록 /
 현재 사진 업로드, 상태 변경 제안·승인, 돌봄 기록 공유는 포함하지 않습니다.
 
 검증: `php artisan test --filter=GroupPlaceTest`.
-로컬 PHP 런타임이 없어 서버 Feature 테스트는 작성만 했으며 미실행입니다.
+2026-11-04: PHP 8.3 컨테이너와 격리 SQLite 메모리 DB에서 전체 테스트 59개(708 assertions) 통과. 실제 MySQL/운영 배포는 미실행입니다.
 
 ## 로컬 친구 가져오기 (000007)
 POST 기준 경로/import, 동일 기본 필드 + source_local_id(필수, 최대80자).
@@ -43,3 +45,10 @@ POST 기준 경로/import, 동일 기본 필드 + source_local_id(필수, 최대
 동일 이름은 자동 병합하지 않습니다. 기존 친구 연결 기능으로 먼저 중복 여부를 확인합니다.
 사진·메모를 제외한 기본 정보가 기본 공유 범위이며 메모는 사용자가 선택해야 합니다. 사진·위치·기록 파일은 이 API로 전송할 수 없습니다.
 원본 로컬 친구를 삭제하거나 자동 동기화하지 않습니다. 서버 source 식별자는 열람자 응답에 노출하지 않습니다.
+
+
+## TNR·상태 항목 수정
+
+계약·호환성·배포 순서는 [v2 API 변경 정리](STREETPET_V2_API_CHANGES.md)를 참고합니다.
+TNR 단계는 needed / trapScheduled / surgery / released / done, 상태는 active / missing / rescued / moved / passedAway입니다.
+수정은 version과 바꿀 필드만 보내도 됩니다. 새 단계 API에서는 neutered를 보내지 않고 서버가 계산하도록 합니다.

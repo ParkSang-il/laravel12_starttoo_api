@@ -31,6 +31,10 @@ class GroupPlaceTest extends TestCase
                 $account->forceFill(['project_id' => $project->id, 'status' => 'active', 'phone_verified_at' => now(),
                     'phone' => '010'.str_pad((string) $id, 8, '0', STR_PAD_LEFT), 'display_name' => '회원 '.$id])->save();
                 $this->tokens[$id] = Auth::guard('api')->login($account);
+                app(ProjectDatabase::class)->database()->table('project_auth_sessions')->insert([
+                    'id' => hash('sha256', Auth::guard('api')->payload()->get('jti')),
+                    'account_id' => $account->id, 'last_seen_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+                ]);
                 Auth::forgetGuards();
             }
         });
@@ -331,4 +335,123 @@ class GroupPlaceTest extends TestCase
         $this->assertStringNotContainsString('37.1234567', $audit);
         $this->assertStringNotContainsString('비공개 장소 주의사항', $audit);
     }
+    public function test_animal_tnr_stages_dates_partial_updates_and_legacy_boolean_are_compatible(): void
+    {
+        $place = $this->createPlace();
+        $path = $this->path('/'.$place['id'].'/animals');
+        $animal = $this->withToken($this->tokens[1])->postJson($path, ['name' => '단계 친구', 'note' => '보존할 메모'])
+            ->assertCreated()->assertJsonPath('data.tnr_stage', 'needed')->assertJsonPath('data.neutered', false)->json('data');
+        $date = today()->toDateString();
+        foreach (['trapScheduled' => false, 'surgery' => true, 'released' => true, 'done' => true] as $stage => $neutered) {
+            $animal = $this->withToken($this->tokens[1])->patchJson($path.'/'.$animal['id'], [
+                'version' => $animal['version'], 'tnr_stage' => $stage, 'tnr_dates' => [$stage => $date],
+            ])->assertOk()->assertJsonPath('data.tnr_stage', $stage)->assertJsonPath('data.neutered', $neutered)
+                ->assertJsonPath('data.tnr_dates.'.$stage, $date)->assertJsonPath('data.note', '보존할 메모')->json('data');
+        }
+        $animal = $this->withToken($this->tokens[1])->patchJson($path.'/'.$animal['id'], [
+            'version' => $animal['version'], 'tnr_stage' => 'surgery',
+        ])->assertOk()->assertJsonMissingPath('data.tnr_dates.done')->assertJsonMissingPath('data.tnr_dates.released')->json('data');
+        // An older full form echoes true: it must not collapse surgery into done.
+        $animal = $this->withToken($this->tokens[1])->patchJson($path.'/'.$animal['id'], [
+            'version' => $animal['version'], 'neutered' => true, 'name' => '이름 변경',
+        ])->assertOk()->assertJsonPath('data.tnr_stage', 'surgery')->json('data');
+        $animal = $this->withToken($this->tokens[1])->patchJson($path.'/'.$animal['id'], [
+            'version' => $animal['version'], 'neutered' => false,
+        ])->assertOk()->assertJsonPath('data.tnr_stage', 'needed')->assertJsonPath('data.tnr_dates', [])->json('data');
+        $this->withToken($this->tokens[1])->patchJson($path.'/'.$animal['id'], [
+            'version' => $animal['version'], 'neutered' => true,
+        ])->assertOk()->assertJsonPath('data.tnr_stage', 'done')->assertJsonPath('data.tnr_dates', []);
+        $this->withToken($this->tokens[1])->getJson($path)->assertOk()->assertJsonPath('data.animals.0.tnr_stage', 'done');
+    }
+
+    public function test_animal_status_dates_validation_and_conflicts_leave_data_unchanged(): void
+    {
+        $place = $this->createPlace();
+        $path = $this->path('/'.$place['id'].'/animals');
+        $animal = $this->withToken($this->tokens[1])->postJson($path, ['name' => '날짜 친구'])->assertCreated()->json('data');
+        $url = $path.'/'.$animal['id'];
+        foreach ([
+            ['tnr_stage' => 'bad'],
+            ['tnr_stage' => 'surgery'],
+            ['tnr_stage' => 'needed', 'tnr_dates' => ['surgery' => today()->toDateString()]],
+            ['tnr_stage' => 'surgery', 'neutered' => false, 'tnr_dates' => ['surgery' => today()->toDateString()]],
+            ['tnr_stage' => 'surgery', 'tnr_dates' => ['surgery' => '2026-02-30']],
+            ['tnr_stage' => 'surgery', 'tnr_dates' => ['surgery' => today()->addDays(366)->toDateString()]],
+            ['tnr_dates' => ['surgery' => today()->toDateString()]],
+            ['tnr_stage' => 'needed', 'tnr_dates' => ['private' => today()->toDateString()]],
+            ['life_status' => 'missing', 'life_status_at' => today()->addDay()->toDateString()],
+            ['life_status' => 'active', 'life_status_at' => today()->toDateString()],
+        ] as $invalid) {
+            $this->withToken($this->tokens[1])->patchJson($url, ['version' => 1, ...$invalid])->assertUnprocessable();
+        }
+        $this->withToken($this->tokens[1])->getJson($url)->assertOk()->assertJsonPath('data.version', 1);
+        $version = 1;
+        foreach (['missing', 'rescued', 'moved', 'passedAway'] as $status) {
+            $this->withToken($this->tokens[1])->patchJson($url, [
+                'version' => $version++, 'life_status' => $status, 'life_status_at' => today()->subDay()->toDateString(),
+            ])->assertOk()->assertJsonPath('data.life_status', $status)
+                ->assertJsonPath('data.life_status_at', today()->subDay()->toDateString());
+        }
+        $this->withToken($this->tokens[1])->patchJson($url, ['version' => $version, 'life_status' => 'active'])
+            ->assertOk()->assertJsonPath('data.life_status_at', null);
+        $this->withToken($this->tokens[1])->patchJson($url, ['version' => $version, 'life_status' => 'missing'])->assertConflict();
+        $this->withToken($this->tokens[1])->getJson($url)->assertOk()->assertJsonPath('data.life_status', 'active');
+    }
+
+    public function test_single_animal_detail_obeys_place_grants_links_and_edit_permissions(): void
+    {
+        $place = $this->createPlace();
+        $other = $this->createPlace('숨긴 장소');
+        $path = $this->path('/'.$place['id'].'/animals');
+        $animal = $this->withToken($this->tokens[1])->postJson($path, ['name' => '상세 친구'])->assertCreated()->json('data');
+        $url = $path.'/'.$animal['id'];
+        $this->withToken($this->tokens[2])->getJson($url)->assertNotFound();
+        $this->grant($place, 2, 'care')->assertOk();
+        $this->grant($place, 3, 'view')->assertOk();
+        foreach ([2, 3] as $account) {
+            $this->withToken($this->tokens[$account])->getJson($url)->assertOk()
+                ->assertJsonPath('data.id', $animal['id'])->assertJsonPath('data.can_manage', false)
+                ->assertJsonMissingPath('data.place_ids')->assertJsonMissingPath('data.source_local_id');
+            $this->withToken($this->tokens[$account])->patchJson($url, ['version' => 1, 'tnr_stage' => 'needed'])->assertForbidden();
+        }
+        $this->withToken($this->tokens[1])->getJson($this->path('/'.$other['id'].'/animals/'.$animal['id']))->assertNotFound();
+        $this->grant($place, 2, 'none')->assertOk();
+        $this->withToken($this->tokens[2])->getJson($url)->assertNotFound();
+        $this->withToken($this->tokens[4])->getJson($url)->assertForbidden();
+        $this->getJson($url, ['Authorization' => ''])->assertUnauthorized();
+    }
+
+    public function test_regionless_group_creation_and_existing_region_clients_are_supported(): void
+    {
+        $this->withToken($this->tokens[1])->postJson($this->base.'/groups', [
+            'name' => '동 선택 없는 그룹', 'is_discoverable' => false,
+        ])->assertCreated()->assertJsonPath('data.region_code', null)->assertJsonPath('data.region_label', null);
+        $this->withToken($this->tokens[1])->postJson($this->base.'/groups', [
+            'name' => 'GPS 공개 그룹', 'is_discoverable' => true, 'accepting_requests' => true,
+            'discovery_latitude' => 37.123456, 'discovery_longitude' => 127.123456,
+        ])->assertCreated()->assertJsonPath('data.region_code', null);
+    }
+
+    public function test_status_migration_preserves_existing_neutered_values_and_unknown_dates(): void
+    {
+        $place = $this->createPlace();
+        $path = $this->path('/'.$place['id'].'/animals');
+        $animal = $this->withToken($this->tokens[1])->postJson($path, ['name' => '기존 친구', 'neutered' => true])->assertCreated()->json('data');
+        app(ProjectDatabase::class)->run('streetcat', function () use ($animal) {
+            $connection = app(ProjectDatabase::class)->connectionName();
+            $previous = DB::getDefaultConnection();
+            DB::setDefaultConnection($connection);
+            try {
+                $migration = require database_path('project-migrations/2026_11_04_000009_add_group_animal_status_details.php');
+                $migration->down();
+                $migration->up();
+            } finally {
+                DB::setDefaultConnection($previous);
+            }
+        });
+        $this->withToken($this->tokens[1])->getJson($path.'/'.$animal['id'])->assertOk()
+            ->assertJsonPath('data.tnr_stage', 'done')->assertJsonPath('data.neutered', true)
+            ->assertJsonPath('data.life_status_at', null)->assertJsonPath('data.tnr_dates', []);
+    }
+
 }

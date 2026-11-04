@@ -61,3 +61,4 @@ docker-compose.override.yml
 !/docs/GROUP_ANIMALS.md
 
 !/docs/UNIFIED_CARE.md
+!/docs/STREETPET_V2_API_CHANGES.md

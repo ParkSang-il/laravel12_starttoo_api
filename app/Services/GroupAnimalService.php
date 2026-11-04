@@ -8,7 +8,7 @@ use Illuminate\Support\Str;
 
 class GroupAnimalService
 {
-    public function __construct(private ProjectDatabase $database, private GroupPlaceService $places) {}
+    public function __construct(private ProjectDatabase $database, private GroupPlaceService $places, private GroupAnimalState $state) {}
 
     private function table(string $name) { return $this->database->database()->table($name); }
 
@@ -28,7 +28,8 @@ class GroupAnimalService
         // No other place IDs, coordinates or private records are returned.
         return ['id' => $row->id, 'group_id' => $row->group_id, 'name' => $row->name,
             'coat' => $row->coat, 'age' => $row->age, 'sex' => $row->sex, 'neutered' => (bool) $row->neutered,
-            'life_status' => $row->life_status, 'note' => $row->note, 'version' => (int) $row->version];
+            'tnr_stage' => $row->tnr_stage, 'tnr_dates' => (object) json_decode($row->tnr_dates ?? '{}', true, 512, JSON_THROW_ON_ERROR),
+            'life_status_at' => $row->life_status_at, 'life_status' => $row->life_status, 'note' => $row->note, 'version' => (int) $row->version];
     }
 
     private function animal(ProjectAccount $actor, string $group, string $place, string $id): object
@@ -61,14 +62,21 @@ class GroupAnimalService
             'has_more' => $rows->count() > 20, 'page' => $page, 'can_manage' => $context['can_manage']];
     }
 
+    public function show(ProjectAccount $actor, string $group, string $place, string $id): array
+    {
+        $context = $this->places->show($actor, $group, $place);
+        return [...$this->summary($this->animal($actor, $group, $place, $id)), 'can_manage' => $context['can_manage']];
+    }
+
     public function available(ProjectAccount $actor, string $group, string $place, int $page): array
     {
         $context = $this->places->show($actor, $group, $place);
         abort_unless($context['can_manage'], 403);
-        $rows = $this->table('group_animals as a')->where('a.project_id', $actor->project_id)->where('a.group_id', $group)
-            ->whereNotExists(function ($q) use ($place) {
-                $q->selectRaw('1')->from('group_animal_places as link')->whereColumn('link.animal_id', 'a.id')->where('link.place_id', $place);
-            })->orderBy('a.id')->offset(($page - 1) * 20)->limit(21)->get();
+        $rows = $this->table('group_animals as a')
+            ->leftJoin('group_animal_places as link', function ($join) use ($group, $place) {
+                $join->on('link.animal_id', '=', 'a.id')->where('link.group_id', $group)->where('link.place_id', $place);
+            })->whereNull('link.animal_id')->where('a.project_id', $actor->project_id)->where('a.group_id', $group)
+            ->select('a.*')->orderBy('a.id')->offset(($page - 1) * 20)->limit(21)->get();
 
         return ['animals' => $rows->take(20)->map(fn ($row) => $this->summary($row))->all(),
             'has_more' => $rows->count() > 20, 'page' => $page, 'can_manage' => true];
@@ -77,6 +85,7 @@ class GroupAnimalService
     public function create(ProjectAccount $actor, string $group, string $place, array $data): array
     {
         return $this->locked($actor, $group, $place, function () use ($actor, $group, $place, $data) {
+            $data = $this->state->normalize($data);
             $id = (string) Str::uuid();
             $this->table('group_animals')->insert([...$data, 'id' => $id, 'project_id' => $actor->project_id,
                 'group_id' => $group, 'created_by' => $actor->id, 'updated_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
@@ -120,6 +129,7 @@ class GroupAnimalService
             $animal = $this->animal($actor, $group, $place, $id);
             $this->version($animal, $data['version']);
             unset($data['version']);
+            $data = $this->state->normalize($data, $animal);
             $this->table('group_animals')->where('id', $id)->update([...$data, 'version' => $animal->version + 1,
                 'updated_by' => $actor->id, 'updated_at' => now()]);
             $this->audit($actor, $group, $place, $id, 'animal_updated', ['fields' => array_keys($data), 'version' => $animal->version + 1]);

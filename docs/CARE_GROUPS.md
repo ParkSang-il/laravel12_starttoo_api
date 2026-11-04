@@ -104,3 +104,8 @@ php artisan test
 현재 작업 환경에는 PHP/Composer/vendor가 없어 PHP 테스트·문법 검사·서버 DB 적용을 실행하지 못했다. 정적 코드/경로 검토와 HTTP 파일 검증 결과를 실행 통과로 간주하지 않는다. 다음은 Flutter 그룹 화면 → 장소/친구 권한 API 순서다.
 
 공식 참고: [Laravel 입력 검증](https://laravel.com/docs/13.x/validation), [트랜잭션과 행 잠금](https://laravel.com/docs/13.x/queries#pessimistic-locking), [복합 외래키 구성](https://laravel.com/docs/13.x/migrations#foreign-key-constraints).
+
+
+## v2 동 선택 제거 호환성
+
+2026-11-04부터 그룹 생성의 region_code/region_label은 선택 필드입니다. 새 앱은 필드를 보내지 않으며 DB에는 NULL로 저장합니다. 구버전 앱의 유효한 지역 값은 계속 받습니다. 000010 마이그레이션을 먼저 적용해야 합니다. 위치 검색은 기존 nearby API를 사용합니다. 상세 배포 순서는 [v2 API 변경 정리](STREETPET_V2_API_CHANGES.md)를 참고하세요.

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\GroupAnimalService;
+use App\Services\GroupAnimalState;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -29,6 +30,10 @@ class GroupAnimalController extends Controller
             'age' => ['sometimes', 'nullable', 'string', 'max:80'],
             'sex' => ['sometimes', Rule::in(['unknown', 'male', 'female'])],
             'neutered' => ['sometimes', 'boolean'],
+            'tnr_stage' => ['sometimes', Rule::in(GroupAnimalState::STAGES)],
+            'tnr_dates' => ['sometimes', 'array:trapScheduled,surgery,released,done'],
+            'tnr_dates.*' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:2000-01-01', 'before_or_equal:'.today()->addDays(365)->toDateString()],
+            'life_status_at' => ['sometimes', 'nullable', 'date_format:Y-m-d', 'after_or_equal:2000-01-01', 'before_or_equal:today'],
             'life_status' => ['sometimes', Rule::in(['active', 'missing', 'rescued', 'moved', 'passedAway'])],
             'note' => ['sometimes', 'nullable', 'string', 'max:500']];
         if ($import) $rules['source_local_id'] = ['required', 'string', 'max:80'];
@@ -43,6 +48,11 @@ class GroupAnimalController extends Controller
     {
         $data = $this->input($request, ['page' => ['sometimes', 'integer', 'min:1', 'max:1000']]);
         return response()->json(['data' => $this->animals->index(...[...$this->ids($request), (int) ($data['page'] ?? 1)])]);
+    }
+    public function show(Request $request)
+    {
+        $this->input($request, []);
+        return response()->json(['data' => $this->animals->show(...[...$this->ids($request), (string) $request->route('animal')])]);
     }
     public function available(Request $request)
     {

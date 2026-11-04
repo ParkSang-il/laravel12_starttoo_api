@@ -191,6 +191,8 @@ class ProjectIsolationTest extends TestCase
 
     public function test_database_selection_runs_before_authentication(): void
     {
+        // Middleware aliases are registered when the HTTP kernel is resolved.
+        $this->app->make(\Illuminate\Contracts\Http\Kernel::class);
         $router = app('router');
         $route = $router->getRoutes()->match(
             \Illuminate\Http\Request::create('/api/v1/projects/streetcat/me', 'GET'));
