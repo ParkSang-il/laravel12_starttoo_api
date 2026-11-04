@@ -71,7 +71,8 @@ class PhoneChallengeService
             if ($account && $account->status !== 'active') {
                 return null;
             }
-            if (!$account) {
+            $isNew = $account === null;
+            if ($isNew) {
                 $account = new ProjectAccount;
                 $account->project_id = $project->id;
                 $account->phone = $challenge->phone;
@@ -79,6 +80,10 @@ class PhoneChallengeService
             }
             $account->phone_verified_at = now();
             $account->save();
+            if ($isNew && $project->code === 'streetcat') {
+                $account->display_name = app(NicknameGenerator::class)->forAccount($account);
+                $account->save();
+            }
             $this->projectDatabase->database()->table('project_phone_challenges')->where('id', $id)->update([
                 'consumed_at' => now(), 'updated_at' => now(),
             ]);

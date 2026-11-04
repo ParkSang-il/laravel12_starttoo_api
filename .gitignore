@@ -63,3 +63,5 @@ docker-compose.override.yml
 !/docs/UNIFIED_CARE.md
 !/docs/STREETPET_V2_API_CHANGES.md
 !/docs/GROUP_PROFILES.md
+
+!/docs/NICKNAMES.md

@@ -26,3 +26,11 @@ Artisan::command('project:create {code=streetcat} {name?}', function () {
         return 0;
     });
 })->purpose('Register a project inside its own previously migrated database');
+
+Artisan::command('project:seed-nicknames {code=streetcat}', function () {
+    app(ProjectDatabase::class)->run($this->argument('code'), function () {
+        app(\Database\Seeders\NicknameWordSeeder::class)->run();
+    });
+    $this->info('닉네임 단어를 등록했습니다.');
+    return 0;
+})->purpose('Seed nickname words only in the allowlisted project database');
