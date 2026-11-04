@@ -14,6 +14,8 @@ Route::prefix('v1/projects/{projectCode}')
         Route::middleware(['auth:api', 'project.account', 'throttle:project-api'])->group(function () {
             Route::get('me', [ProjectAuthController::class, 'me']);
             Route::patch('me', [ProjectAuthController::class, 'updateProfile']);
+            Route::post('me/avatar', [ProjectAuthController::class, 'uploadAvatar'])->middleware('throttle:10,1');
+            Route::delete('me/avatar', [ProjectAuthController::class, 'deleteAvatar']);
             Route::post('auth/logout', [ProjectAuthController::class, 'logout']);
             require __DIR__.'/groups.php';
         });

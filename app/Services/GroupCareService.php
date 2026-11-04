@@ -9,7 +9,7 @@ class GroupCareService {
     private function records() {
         return $this->table('group_care_records as r')->leftJoin('project_accounts as author', function ($join) {
             $join->on('author.id', '=', 'r.created_by')->on('author.project_id', '=', 'r.project_id');
-        })->select('r.*', 'r.created_by as account_id', 'author.display_name', 'author.avatar_url', 'author.avatar_thumbnail_url');
+        })->select('r.*', 'r.created_by as account_id', 'author.display_name', 'author.avatar_url', 'author.avatar_thumbnail_url', 'author.avatar_disk', 'author.avatar_path', 'author.avatar_thumbnail_path');
     }
     private function summary(object $row): array {
         $profile = $this->profiles->summary($row);

@@ -213,4 +213,16 @@ class ProjectIsolationTest extends TestCase
         $this->expectException(\LogicException::class);
         app(ProjectDatabase::class)->configuredConnection('streetcat');
     }
+    public function test_profile_photo_cannot_be_uploaded_or_deleted_with_another_project_token(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('s3');
+        $token = $this->tokenFor();
+        $this->tokenFor('second-app');
+        $this->withToken($token)->post('/api/v1/projects/second-app/me/avatar', [
+            'photo' => \Illuminate\Http\UploadedFile::fake()->image('profile.png'),
+        ], ['Accept' => 'application/json'])->assertForbidden();
+        $this->withToken($token)->deleteJson('/api/v1/projects/second-app/me/avatar')->assertForbidden();
+        $this->assertSame([], \Illuminate\Support\Facades\Storage::disk('s3')->allFiles('profile'));
+    }
+
 }

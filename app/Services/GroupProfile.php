@@ -10,9 +10,17 @@ class GroupProfile
         return [
             'account_id' => (int) $account->account_id,
             'display_name' => $account->display_name,
-            'avatar_url' => $this->url($account->avatar_url),
-            'avatar_thumbnail_url' => $this->url($account->avatar_thumbnail_url),
+            'avatar_url' => $this->imageUrl($account->avatar_disk ?? null, $account->avatar_path ?? null, $account->avatar_url ?? null),
+            'avatar_thumbnail_url' => $this->imageUrl($account->avatar_disk ?? null, $account->avatar_thumbnail_path ?? null, $account->avatar_thumbnail_url ?? null),
         ];
+    }
+
+    public function imageUrl(?string $disk, ?string $path, ?string $legacy = null): ?string
+    {
+        if ($disk === 's3' && $path && str_starts_with($path, 'profile/')) {
+            return \Illuminate\Support\Facades\Storage::disk('s3')->temporaryUrl($path, now()->addHour());
+        }
+        return $this->url($legacy);
     }
 
     private function url(?string $value): ?string

@@ -62,6 +62,24 @@ class ProjectAuthController extends Controller
         return response()->json(['data' => $account]);
     }
 
+    public function uploadAvatar(Request $request, \App\Services\ProfileAvatar $avatars)
+    {
+        $request->validate(['photo' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp',
+            'max:5120', 'dimensions:max_width=4096,max_height=4096']], [
+            'photo.required' => '사진을 선택해 주세요.',
+            'photo.image' => '이미지 파일만 등록할 수 있습니다.',
+            'photo.mimes' => 'JPG, PNG, WebP 사진을 선택해 주세요.',
+            'photo.max' => '사진은 5MB 이하로 등록해 주세요.',
+            'photo.dimensions' => '사진은 가로·세로 4096px 이하로 등록해 주세요.',
+        ]);
+        return response()->json(['data' => $avatars->upload(Auth::guard('api')->user(), $request->file('photo'))]);
+    }
+
+    public function deleteAvatar(\App\Services\ProfileAvatar $avatars)
+    {
+        return response()->json(['data' => $avatars->delete(Auth::guard('api')->user())]);
+    }
+
     public function logout()
     {
         if (request()->attributes->get('project')->code === 'streetcat') {

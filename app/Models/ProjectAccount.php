@@ -21,7 +21,19 @@ class ProjectAccount extends Authenticatable implements JWTSubject
     // Project and privilege fields must only be assigned by trusted server code.
     protected $fillable = ['display_name'];
 
-    protected $hidden = ['phone'];
+    protected $hidden = ['phone', 'avatar_disk', 'avatar_path', 'avatar_thumbnail_path'];
+
+    public function getAvatarUrlAttribute($value): ?string
+    {
+        return app(\App\Services\GroupProfile::class)->imageUrl(
+            $this->attributes['avatar_disk'] ?? null, $this->attributes['avatar_path'] ?? null, $value);
+    }
+
+    public function getAvatarThumbnailUrlAttribute($value): ?string
+    {
+        return app(\App\Services\GroupProfile::class)->imageUrl(
+            $this->attributes['avatar_disk'] ?? null, $this->attributes['avatar_thumbnail_path'] ?? null, $value);
+    }
 
     protected function casts(): array
     {

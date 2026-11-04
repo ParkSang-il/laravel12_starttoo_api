@@ -73,7 +73,7 @@ class CareGroupService
         return $this->table('group_memberships as m')->join('project_accounts as a', 'a.id', '=', 'm.account_id')
             ->where('m.project_id', $actor->project_id)->where('a.project_id', $actor->project_id)
             ->where('m.group_id', $group)->where('m.status', 'active')->orderBy('m.id')->limit(4)
-            ->select('m.account_id', 'a.display_name', 'a.avatar_url', 'a.avatar_thumbnail_url')->get()
+            ->select('m.account_id', 'a.display_name', 'a.avatar_url', 'a.avatar_thumbnail_url', 'a.avatar_disk', 'a.avatar_path', 'a.avatar_thumbnail_path')->get()
             ->map(fn ($row) => $this->profiles->summary($row))->all();
     }
 
@@ -332,7 +332,7 @@ class CareGroupService
 
         return $this->table('group_join_requests as r')->join('project_accounts as a', 'a.id', '=', 'r.account_id')
             ->where('r.group_id', $id)->where('r.status', 'pending')
-            ->select('r.*', 'a.display_name', 'a.avatar_url', 'a.avatar_thumbnail_url')->orderBy('r.submitted_at')->limit(100)->get()
+            ->select('r.*', 'a.display_name', 'a.avatar_url', 'a.avatar_thumbnail_url', 'a.avatar_disk', 'a.avatar_path', 'a.avatar_thumbnail_path')->orderBy('r.submitted_at')->limit(100)->get()
             ->map(fn ($row) => [...$this->requestSummary($row), ...$this->profiles->summary($row)])->all();
     }
 
@@ -390,7 +390,7 @@ class CareGroupService
 
         return $this->table('group_memberships as m')->join('project_accounts as a', 'a.id', '=', 'm.account_id')
             ->where('m.group_id', $id)->where('m.status', 'active')
-            ->select('m.*', 'a.display_name', 'a.avatar_url', 'a.avatar_thumbnail_url')->orderBy('m.id')->limit(100)->get()
+            ->select('m.*', 'a.display_name', 'a.avatar_url', 'a.avatar_thumbnail_url', 'a.avatar_disk', 'a.avatar_path', 'a.avatar_thumbnail_path')->orderBy('m.id')->limit(100)->get()
             ->map(fn ($row) => [...$this->memberSummary($row), ...$this->profiles->summary($row)])->all();
     }
 
