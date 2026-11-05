@@ -14,3 +14,6 @@ Broadcast::channel(
         && app(CareGroupService::class)->canSubscribe($account, $groupId),
     ['guards' => ['api']],
 );
+Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
+    return (int) $user->id === (int) $id;
+});

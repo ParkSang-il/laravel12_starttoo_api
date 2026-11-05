@@ -1,0 +1,53 @@
+# 채팅용 서비스. 항상 base와 함께 사용:
+#   docker compose -f docker-compose.yml -f docker-compose.chat.yml ...
+# 외부 포트(ports:)는 절대 추가하지 않음. 외부 공개는 nginx 443만.
+
+x-chat-php: &chat-php
+  image: laravel12_starttoo_api-app
+  pull_policy: never
+  working_dir: /var/www/html
+  user: "1000:1000"
+  init: true
+  restart: unless-stopped
+  stop_signal: SIGTERM
+  volumes:
+    - /home/web/laravel12_starttoo_api:/var/www/html
+    - starttoo_storage:/var/www/html/storage
+    - starttoo_bootstrap_cache:/var/www/html/bootstrap/cache
+  networks:
+    - starttoo_network
+    - db_network
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  chat-reverb:
+    <<: *chat-php
+    container_name: starttoo_chat_reverb
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+    stop_grace_period: 30s
+    ulimits:
+      nofile:
+        soft: 10000
+        hard: 10000
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 8080) ? 0 : 1);"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  chat-queue-rt:
+    <<: *chat-php
+    container_name: starttoo_chat_queue_rt
+    command: ["php", "artisan", "queue:work", "database", "--queue=chat-realtime,chat-push", "--sleep=1", "--tries=3", "--backoff=5", "--timeout=30", "--max-time=3600"]
+    stop_grace_period: 60s
+
+  chat-queue-media:
+    <<: *chat-php
+    container_name: starttoo_chat_queue_media
+    command: ["php", "artisan", "queue:work", "database", "--queue=chat-media", "--sleep=3", "--tries=3", "--backoff=5", "--timeout=75", "--max-time=3600"]
+    stop_grace_period: 120s
