@@ -12,6 +12,19 @@ class CareGroupService
 {
     public function __construct(private ProjectDatabase $database, private GroupProfile $profiles) {}
 
+    public function canSubscribe(ProjectAccount $actor, string $groupId): bool
+    {
+        return $this->table('group_memberships as m')
+            ->join('care_groups as g', 'g.id', '=', 'm.group_id')
+            ->where('g.project_id', $actor->project_id)
+            ->where('m.project_id', $actor->project_id)
+            ->where('m.group_id', $groupId)
+            ->where('m.account_id', $actor->id)
+            ->where('m.status', 'active')
+            ->whereIn('m.role', ['owner', 'caregiver'])
+            ->select('m.id')->first() !== null;
+    }
+
     private function table(string $table): Builder
     {
         return $this->database->database()->table($table);
