@@ -21,10 +21,11 @@ class ProjectAuthController extends Controller
     {
         $data = $request->validate([
             'challenge_id' => ['required', 'uuid'],
-            'code' => ['required', 'string', 'regex:/^[0-9]{6}$/D'],
+            'code' => ['nullable', 'string', 'regex:/^[0-9]{6}$/D'],
+            'phone' => ['prohibited'], 'message_text' => ['prohibited'], 'provider' => ['prohibited'],
         ]);
         $account = $service->consume($request->attributes->get('project'),
-            $data['challenge_id'], $data['code']);
+            $data['challenge_id'], $data['code'] ?? null);
         $persistent = $request->attributes->get('project')->code === 'streetcat';
         $guard = Auth::guard('api');
         // The JWT payload factory is shared within a worker. Reset its claims for each login.

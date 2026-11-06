@@ -2,6 +2,8 @@
 
 return [
 
+    'octomo' => ['api_key' => env('OCTOMO_API_KEY')],
+
     /*
     |--------------------------------------------------------------------------
     | Third Party Services
