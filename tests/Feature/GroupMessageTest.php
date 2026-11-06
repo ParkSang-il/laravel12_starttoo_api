@@ -261,9 +261,11 @@ class GroupMessageTest extends TestCase
             'longitude' => 127.1234567, 'interval_hours' => 24])->assertCreated()->json('data');
         $this->withToken($this->tokens[1])->patchJson($this->base."/groups/$group/places/{$place['id']}/permissions/2",
             ['version' => $place['version'], 'access' => 'care'])->assertOk();
+        $animal = $this->withToken($this->tokens[1])->postJson($this->base."/groups/$group/places/{$place['id']}/animals",
+            ['name' => '현재 연결된 친구'])->assertCreated()->json('data.id');
         $this->override($group, 2, 'deny');
         $data = ['request_id' => (string) Str::uuid(), 'fed_at' => now()->subMinute()->toIso8601String(),
-            'tags' => ['물 갈아줌'], 'sightings' => [], 'cost' => 98765, 'food_amount_gram' => 123,
+            'tags' => ['물 갈아줌'], 'sightings' => [$animal => 'seen'], 'cost' => 98765, 'food_amount_gram' => 123,
             'memo' => 'PRIVATE_CARE_MEMO', 'latitude' => 37.1234567, 'longitude' => 127.1234567];
         $path = $this->base."/groups/$group/places/{$place['id']}/care-records";
         $record = $this->withToken($this->tokens[2])->postJson($path, $data)->assertCreated()->json('data.id');
@@ -278,6 +280,12 @@ class GroupMessageTest extends TestCase
         foreach (['PRIVATE_CARE_MEMO', 'food_amount_gram', 'latitude', 'longitude', '"cost"'] as $private) {
             $this->assertStringNotContainsString($private, $owner->getContent());
         }
+        $this->table('group_animals')->where('id', $animal)->update(['life_status' => 'passedAway']);
+        $this->withToken($this->tokens[1])->getJson($this->path($group))->assertOk()
+            ->assertJsonPath('data.messages.0.care_record.seen_animals.0', '현재 연결된 친구');
+        $this->table('group_animal_places')->where('place_id', $place['id'])->where('animal_id', $animal)->delete();
+        $this->withToken($this->tokens[1])->getJson($this->path($group))->assertOk()
+            ->assertJsonCount(0, 'data.messages.0.care_record.seen_animals');
         $hidden = $this->withToken($this->tokens[3])->getJson($this->path($group))->assertOk()
             ->assertJsonPath('data.messages.0.care_record', null);
         $this->assertStringNotContainsString($place['name'], $hidden->getContent());

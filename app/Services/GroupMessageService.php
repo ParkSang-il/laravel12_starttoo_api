@@ -69,7 +69,7 @@ class GroupMessageService
                 'p.name as record_place_name', 'p.deleted_at as place_deleted_at', 'perm.access as place_access');
     }
 
-    private function present(object $row, ProjectAccount $actor, object $member, bool $canSend, array $animals = []): array
+    private function present(object $row, ProjectAccount $actor, object $member, bool $canSend, array $animals = [], array $links = []): array
     {
         $deleted = $row->deleted_at !== null;
         $mine = (int) $row->author_id === $actor->id;
@@ -79,7 +79,7 @@ class GroupMessageService
         if (!$deleted && $this->canSeeCare($row, $member)) {
             $seen = [];
             foreach ((json_decode($row->record_sightings, true) ?? []) as $id => $status) {
-                if ($status === 'seen' && isset($animals[$id])) $seen[] = $animals[$id];
+                if ($status === 'seen' && isset($animals[$id], $links[$row->record_place_id.':'.$id])) $seen[] = $animals[$id];
             }
             $care = ['id' => $row->record_id, 'place_id' => $row->record_place_id, 'place_name' => $row->record_place_name,
                 'tags' => json_decode($row->record_tags, true) ?? [], 'seen_animals' => $seen];
@@ -107,7 +107,15 @@ class GroupMessageService
         }
         $animals = $ids ? $this->table('group_animals')->where('project_id', $actor->project_id)
             ->where('group_id', $member->group_id)->whereIn('id', array_unique($ids))->pluck('name', 'id')->all() : [];
-        return $rows->map(fn ($r) => $this->present($r, $actor, $member, $canSend, $animals))->values()->all();
+        $places = $rows->filter(fn ($r) => $r->deleted_at === null && $this->canSeeCare($r, $member))->pluck('record_place_id')->unique()->all();
+        $links = [];
+        if ($ids && $places) {
+            foreach ($this->table('group_animal_places')->where('group_id', $member->group_id)
+                ->whereIn('place_id', $places)->whereIn('animal_id', array_unique($ids))->get(['place_id', 'animal_id']) as $link) {
+                $links[$link->place_id.':'.$link->animal_id] = true;
+            }
+        }
+        return $rows->map(fn ($r) => $this->present($r, $actor, $member, $canSend, $animals, $links))->values()->all();
     }
 
     public function index(ProjectAccount $actor, string $group, ?int $before, int $limit): array
