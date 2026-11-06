@@ -27,6 +27,24 @@ class GroupCareService {
             ->orderByDesc('r.fed_at')->orderBy('r.id')->offset(($page-1)*20)->limit(21)->get();
         return ['records'=>$rows->take(20)->map(fn($r)=>$this->summary($r))->all(),'page'=>$page,'has_more'=>$rows->count()>20];
     }
+    public function show(ProjectAccount $actor, string $group, string $place, string $record): array {
+        // Reuse the same active membership and place grant checks as record lists.
+        $access = $this->places->show($actor, $group, $place);
+        $row = $this->records()->where('r.project_id', $actor->project_id)
+            ->where('r.group_id', $group)->where('r.place_id', $place)->where('r.id', $record)->first();
+        abort_unless($row, 404, '돌봄 기록을 찾을 수 없습니다.');
+        $summary = $this->summary($row);
+        $animals = $this->table('group_animals as a')
+            ->join('group_animal_places as l', function ($join) {
+                $join->on('l.animal_id', '=', 'a.id')->on('l.group_id', '=', 'a.group_id');
+            })
+            ->where('a.project_id', $actor->project_id)->where('a.group_id', $group)
+            ->where('l.place_id', $place)->whereIn('a.id', array_keys((array) $summary['sightings']))
+            ->select('a.id', 'a.name')->get();
+        return ['record' => $summary, 'place' => $access,
+            'group_name' => $this->table('care_groups')->where('project_id', $actor->project_id)->where('id', $group)->value('name'),
+            'animals' => $animals->map(fn ($animal) => ['id' => $animal->id, 'name' => $animal->name])->all()];
+    }
     public function create(ProjectAccount $actor,string $group,string $place,array $data): array {
         [$result, $messageId] = $this->database->database()->transaction(function()use($actor,$group,$place,$data) {
             $this->table('care_groups')->where('project_id',$actor->project_id)->where('id',$group)->lockForUpdate()->firstOrFail();

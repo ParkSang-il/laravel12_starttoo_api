@@ -14,6 +14,10 @@ class GroupCareController extends Controller {
         $d=$this->input($r,['page'=>['sometimes','integer','min:1','max:1000']]);
         return response()->json(['data'=>$this->care->index($r->user(),$r->route('group'),$r->route('place'),(int)($d['page']??1))]);
     }
+    public function show(Request $r) {
+        $this->input($r, []);
+        return response()->json(['data' => $this->care->show($r->user(), $r->route('group'), $r->route('place'), $r->route('record'))]);
+    }
     public function create(Request $r) {
         $d=$this->input($r,['request_id'=>['required','uuid'],'fed_at'=>['required','date','before_or_equal:'.now()->addMinute()->toIso8601String()],
             'food_amount_gram'=>['nullable','integer','min:1','max:1000000'],'cost'=>['required','integer','min:0','max:100000000'],

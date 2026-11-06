@@ -36,6 +36,7 @@ Route::prefix('groups/{group}')->whereUuid('group')->group(function () {
         Route::delete('{animal}', [GroupAnimalController::class, 'unlink'])->whereUuid('animal');
     });
     Route::get('places/{place}/care-records', [GroupCareController::class, 'index'])->whereUuid('place');
+    Route::get('places/{place}/care-records/{record}', [GroupCareController::class, 'show'])->whereUuid('place')->whereUuid('record');
     Route::post('places/{place}/care-records', [GroupCareController::class, 'create'])->whereUuid('place');
     Route::get('places', [GroupPlaceController::class, 'index']);
     Route::post('places', [GroupPlaceController::class, 'create']);
