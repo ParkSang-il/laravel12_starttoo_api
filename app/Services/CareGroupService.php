@@ -90,6 +90,36 @@ class CareGroupService
             ->map(fn ($row) => $this->profiles->summary($row))->all();
     }
 
+    /** Fetch four profiles per group without one query per returned group. */
+    private function memberPreviewsForGroups(ProjectAccount $actor, array $groups): array
+    {
+        if (!$groups) return [];
+        // Rank only membership identifiers, before joining the profile columns.
+        $ranked = $this->table('group_memberships as m')->where('m.project_id', $actor->project_id)
+            ->whereIn('m.group_id', $groups)->where('m.status', 'active')
+            ->select('m.id', 'm.group_id', 'm.account_id')
+            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY m.group_id ORDER BY m.id) as preview_rank');
+        $rows = $this->database->database()->query()->fromSub($ranked, 'preview')
+            ->join('project_accounts as a', 'a.id', '=', 'preview.account_id')
+            ->where('a.project_id', $actor->project_id)->where('preview.preview_rank', '<=', 4)->orderBy('preview.id')
+            ->get(['preview.group_id', 'preview.account_id', 'a.display_name', 'a.nickname_tag',
+                'a.avatar_url', 'a.avatar_thumbnail_url', 'a.avatar_disk', 'a.avatar_path', 'a.avatar_thumbnail_path']);
+        $result = [];
+        foreach ($rows as $row) $result[$row->group_id][] = $this->profiles->summary($row);
+        return $result;
+    }
+
+    private function accessibleGroups(ProjectAccount $actor, array $groups): array
+    {
+        if (!$groups) return [];
+        return $this->table('group_place_permissions as access')->join('group_places as p', function ($join) {
+            $join->on('p.id', '=', 'access.place_id')->on('p.group_id', '=', 'access.group_id')
+                ->on('p.project_id', '=', 'access.project_id');
+        })->where('access.project_id', $actor->project_id)->where('access.account_id', $actor->id)
+            ->whereIn('access.group_id', $groups)->whereIn('access.access', ['view', 'care'])->whereNull('p.deleted_at')
+            ->distinct()->pluck('access.group_id')->flip()->all();
+    }
+
     private function memberSummary(object $member): array
     {
         return ['account_id' => (int) $member->account_id, 'role' => $member->role,
@@ -187,14 +217,18 @@ class CareGroupService
 
     public function mine(ProjectAccount $actor): array
     {
+        $groups = $this->table('group_memberships as m')->join('care_groups as g', function ($join) {
+            $join->on('g.id', '=', 'm.group_id')->on('g.project_id', '=', 'm.project_id');
+        })->where('m.project_id', $actor->project_id)->where('m.account_id', $actor->id)
+            ->where('m.status', 'active')->select('g.*', 'm.role')->orderBy('g.created_at')->get();
+        if ($groups->isEmpty()) return [];
+        $previews = $this->memberPreviewsForGroups($actor, $groups->pluck('id')->all());
+        $access = $this->accessibleGroups($actor, $groups->where('role', '!=', 'owner')->pluck('id')->all());
         $unread = $this->messages->unreadByGroup($actor);
-        return $this->table('group_memberships as m')->join('care_groups as g', 'g.id', '=', 'm.group_id')
-            ->where('m.project_id', $actor->project_id)->where('m.account_id', $actor->id)
-            ->where('m.status', 'active')->select('g.*', 'm.role')->orderBy('g.created_at')
-            ->get()->map(fn ($g) => [...$this->summary($g), 'my_role' => $g->role,
-                'member_previews' => $this->memberPreviews($actor, $g->id),
-                'has_unread' => in_array($g->role, ['owner', 'caregiver'], true) && (int) ($unread[$g->id] ?? 0) > 0,
-                'can_view_locations' => $this->hasPlaceAccess($g->id, $actor->id, $g->role)])->all();
+        return $groups->map(fn ($g) => [...$this->summary($g), 'my_role' => $g->role,
+            'member_previews' => $previews[$g->id] ?? [],
+            'has_unread' => in_array($g->role, ['owner', 'caregiver'], true) && (int) ($unread[$g->id] ?? 0) > 0,
+            'can_view_locations' => $g->role === 'owner' || isset($access[$g->id])])->all();
     }
 
     public function detail(ProjectAccount $actor, string $id): array

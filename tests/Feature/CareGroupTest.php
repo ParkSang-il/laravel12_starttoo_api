@@ -97,6 +97,98 @@ class CareGroupTest extends TestCase
             $this->base."/groups/$group/join-requests/{$request['id']}/review", $body);
     }
 
+    public function test_my_groups_batches_previews_and_permissions_as_group_count_grows(): void
+    {
+        $db = DB::connection('test_groups');
+        $project = $db->table('projects')->where('code', 'streetcat')->value('id');
+        $groups = [];
+        $counts = [];
+        for ($batch = 0; $batch < 2; $batch++) {
+            for ($i = 0; $i < 3; $i++) {
+                $id = $this->group();
+                $groups[] = $id;
+                $db->table('group_memberships')->insert(['project_id' => $project, 'group_id' => $id,
+                    'account_id' => 2, 'role' => 'caregiver', 'status' => 'active',
+                    'chat_visible_from' => now(), 'created_at' => now(), 'updated_at' => now()]);
+            }
+            $db->flushQueryLog();
+            $db->enableQueryLog();
+            try {
+                $response = $this->withToken($this->tokens[2])->getJson($this->base.'/me/groups')->assertOk();
+                $counts[] = collect($db->getQueryLog())->filter(fn ($query) =>
+                    str_contains(strtolower($query['query']), 'group_memberships') ||
+                    str_contains(strtolower($query['query']), 'group_place_permissions'))->count();
+            } finally {
+                $db->disableQueryLog();
+                $db->flushQueryLog();
+            }
+            $response->assertJsonCount(count($groups), 'data');
+            foreach ($response->json('data') as $group) {
+                $this->assertSame('caregiver', $group['my_role']);
+                $this->assertFalse($group['can_view_locations']);
+                $this->assertFalse($group['has_unread']);
+                $this->assertSame([1, 2], array_column($group['member_previews'], 'account_id'));
+                $this->assertArrayNotHasKey('phone', $group['member_previews'][0]);
+            }
+        }
+        $this->assertSame($counts[0], $counts[1], 'Queries must not increase with the number of groups.');
+        $this->assertLessThanOrEqual(4, $counts[1]);
+    }
+
+    public function test_batched_previews_keep_four_active_members_in_membership_order(): void
+    {
+        $first = $this->group();
+        $second = $this->group();
+        $db = DB::connection('test_groups');
+        $project = $db->table('projects')->where('code', 'streetcat')->value('id');
+        $extra = [];
+        for ($i = 4; $i <= 6; $i++) {
+            $extra[] = $db->table('project_accounts')->insertGetId(['project_id' => $project,
+                'phone' => '0190000000'.$i, 'display_name' => '추가 회원 '.$i,
+                'status' => 'active', 'phone_verified_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+        }
+        foreach ([2, 3, ...$extra] as $account) {
+            $db->table('group_memberships')->insert(['project_id' => $project, 'group_id' => $first,
+                'account_id' => $account, 'role' => 'caregiver', 'status' => $account === $extra[0] ? 'left' : 'active',
+                'chat_visible_from' => now(), 'created_at' => now(), 'updated_at' => now()]);
+        }
+        $db->table('group_memberships')->insert(['project_id' => $project, 'group_id' => $second,
+            'account_id' => $extra[2], 'role' => 'caregiver', 'status' => 'active',
+            'chat_visible_from' => now(), 'created_at' => now(), 'updated_at' => now()]);
+        $groups = collect($this->withToken($this->tokens[1])->getJson($this->base.'/me/groups')->assertOk()->json('data'))->keyBy('id');
+        $this->assertSame([1, 2, 3, $extra[1]], array_column($groups[$first]['member_previews'], 'account_id'));
+        $this->assertSame([1, $extra[2]], array_column($groups[$second]['member_previews'], 'account_id'));
+        $this->withToken($this->tokens[2])->getJson($this->base.'/me/groups')->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $first);
+    }
+
+    public function test_group_read_indexes_are_migrated(): void
+    {
+        $schema = DB::connection('test_groups')->getSchemaBuilder();
+        $this->assertTrue($schema->hasIndex('group_memberships', ['project_id', 'account_id', 'status', 'group_id']));
+        $this->assertTrue($schema->hasIndex('group_memberships', ['group_id', 'status', 'id']));
+        $this->assertTrue($schema->hasIndex('group_messages', ['project_id', 'group_id', 'deleted_at', 'id', 'author_id', 'created_at']));
+    }
+
+    public function test_read_index_migration_can_retry_and_roll_back_without_removing_existing_indexes(): void
+    {
+        $previous = DB::getDefaultConnection();
+        DB::setDefaultConnection('test_groups');
+        try {
+            $migration = require database_path('project-migrations/2026_11_06_000018_add_group_read_indexes.php');
+            $migration->up();
+            $migration->down();
+            $schema = DB::connection('test_groups')->getSchemaBuilder();
+            $this->assertFalse($schema->hasIndex('group_messages', 'group_messages_unread_lookup_idx'));
+            $this->assertTrue($schema->hasIndex('group_messages', ['group_id', 'id']));
+            $migration->up();
+            $migration->up();
+            $this->assertTrue($schema->hasIndex('group_messages', 'group_messages_unread_lookup_idx'));
+        } finally {
+            DB::setDefaultConnection($previous);
+        }
+    }
+
     public function test_creation_defaults_to_private_and_creates_owner_atomically(): void
     {
         $id = $this->group();

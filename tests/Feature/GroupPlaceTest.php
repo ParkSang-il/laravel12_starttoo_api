@@ -92,6 +92,77 @@ class GroupPlaceTest extends TestCase
         $this->withToken($this->tokens[2])->getJson($path)->assertNotFound();
     }
 
+    public function test_place_list_reads_grants_once_without_duplicating_or_leaking_places(): void
+    {
+        for ($i = 0; $i < 21; $i++) {
+            $place = $this->createPlace('열람 장소 '.$i);
+            $this->grant($place, 2, $i % 2 ? 'care' : 'view')->assertOk();
+        }
+        $hidden = $this->createPlace('권한 없는 장소');
+        $this->grant($hidden, 3, 'view')->assertOk();
+        $db = DB::connection('test_places');
+        $db->flushQueryLog();
+        $db->enableQueryLog();
+        try {
+            $response = $this->withToken($this->tokens[2])->getJson($this->path())->assertOk()
+                ->assertJsonCount(20, 'data.places')->assertJsonPath('data.has_more', true);
+            $queries = collect($db->getQueryLog())->filter(fn ($query) => str_contains(strtolower($query['query']), 'group_place_permissions'));
+            $this->assertCount(1, $queries, 'A page must join grants once instead of reading each place grant.');
+        } finally {
+            $db->disableQueryLog();
+            $db->flushQueryLog();
+        }
+        $places = $response->json('data.places');
+        $this->assertCount(20, array_unique(array_column($places, 'id')));
+        $this->assertNotContains($hidden['id'], array_column($places, 'id'));
+        $this->assertSame([], array_diff(array_column($places, 'access'), ['view', 'care']));
+        $this->withToken($this->tokens[2])->getJson($this->path().'?page=2')->assertOk()
+            ->assertJsonCount(1, 'data.places')->assertJsonPath('data.has_more', false);
+    }
+
+    public function test_batched_group_access_ignores_archived_places_and_revoked_grants(): void
+    {
+        $place = $this->createPlace();
+        $this->grant($place, 2, 'view')->assertOk();
+        $this->withToken($this->tokens[2])->getJson($this->base.'/me/groups')->assertOk()
+            ->assertJsonPath('data.0.can_view_locations', true);
+        $this->grant($place, 2, 'none')->assertOk();
+        $this->withToken($this->tokens[2])->getJson($this->base.'/me/groups')->assertOk()
+            ->assertJsonPath('data.0.can_view_locations', false);
+        $this->grant($place, 2, 'care')->assertOk();
+        DB::connection('test_places')->table('group_places')->where('id', $place['id'])->update(['deleted_at' => now()]);
+        $this->withToken($this->tokens[2])->getJson($this->base.'/me/groups')->assertOk()
+            ->assertJsonPath('data.0.can_view_locations', false);
+        $this->withToken($this->tokens[1])->getJson($this->base.'/me/groups')->assertOk()
+            ->assertJsonPath('data.0.can_view_locations', true);
+    }
+
+    public function test_record_detail_is_scoped_to_place_and_current_permission(): void
+    {
+        $place = $this->createPlace();
+        $other = $this->createPlace('다른 장소');
+        $animal = $this->withToken($this->tokens[1])->postJson($this->path('/'.$place['id'].'/animals'), ['name' => '나비'])
+            ->assertCreated()->json('data.id');
+        $path = $this->path('/'.$place['id'].'/care-records');
+        $data = ['request_id' => (string) \Illuminate\Support\Str::uuid(), 'fed_at' => now()->subMinute()->toIso8601String(),
+            'cost' => 2000, 'food_amount_gram' => 80, 'tags' => ['물 갈아줌'], 'sightings' => [$animal => 'seen'], 'memo' => '선택한 기록'];
+        $record = $this->withToken($this->tokens[1])->postJson($path, $data)->assertCreated()->json('data.id');
+        $url = $path.'/'.$record;
+        $this->withToken($this->tokens[1])->getJson($url)->assertOk()
+            ->assertJsonPath('data.record.id', $record)->assertJsonPath('data.record.memo', '선택한 기록')
+            ->assertJsonPath('data.place.id', $place['id'])->assertJsonPath('data.animals.0.name', '나비');
+        $this->withToken($this->tokens[4])->getJson($url)->assertNotFound();
+        $this->withToken($this->tokens[3])->getJson($url)->assertNotFound();
+        $this->grant($place, 3, 'view')->assertOk();
+        $this->withToken($this->tokens[3])->getJson($url)->assertOk();
+        $this->grant($place, 3, 'none')->assertOk();
+        $this->withToken($this->tokens[3])->getJson($url)->assertNotFound();
+        $this->withToken($this->tokens[1])->getJson($this->path('/'.$other['id'].'/care-records/'.$record))->assertNotFound();
+        $this->withToken($this->tokens[1])->getJson($path.'/'.\Illuminate\Support\Str::uuid())->assertNotFound();
+        $this->withToken($this->tokens[1])->getJson($url.'?account_id=1')->assertUnprocessable();
+        $this->withToken($this->tokens[1])->getJson(str_replace($this->group, (string) \Illuminate\Support\Str::uuid(), $url))->assertNotFound();
+    }
+
     public function test_care_sightings_cannot_include_unlinked_animals_or_client_identity(): void
     {
         $place=$this->createPlace(); $other=$this->createPlace('다른 장소');

@@ -46,13 +46,13 @@ class GroupPlaceService
     private function visiblePlaces(ProjectAccount $actor, array $context): Builder
     {
         $query = $this->table('group_places as p')->where('p.project_id', $actor->project_id)
-            ->where('p.group_id', $context['group']->id)->whereNull('p.deleted_at');
+            ->where('p.group_id', $context['group']->id)->whereNull('p.deleted_at')->select('p.*');
         if (!$context['owner']) {
-            $query->whereExists(function (Builder $q) use ($actor) {
-                $q->selectRaw('1')->from('group_place_permissions as access')
-                    ->whereColumn('access.place_id', 'p.id')->whereColumn('access.group_id', 'p.group_id')
-                    ->where('access.account_id', $actor->id)->whereIn('access.access', ['view', 'care']);
-            });
+            // (place_id, account_id) is unique: one grant cannot duplicate a place.
+            $query->join('group_place_permissions as access', function ($join) use ($actor) {
+                $join->on('access.place_id', '=', 'p.id')->on('access.group_id', '=', 'p.group_id')
+                    ->on('access.project_id', '=', 'p.project_id')->where('access.account_id', '=', $actor->id);
+            })->whereIn('access.access', ['view', 'care'])->addSelect('access.access as granted_access');
         }
 
         return $query;
@@ -60,8 +60,7 @@ class GroupPlaceService
 
     private function summary(ProjectAccount $actor, array $context, object $place): array
     {
-        $access = $context['owner'] ? 'manage' : $this->table('group_place_permissions')
-            ->where('place_id', $place->id)->where('account_id', $actor->id)->value('access');
+        $access = $context['owner'] ? 'manage' : $place->granted_access;
         abort_unless($context['owner'] || in_array($access, ['view', 'care'], true), 404);
 
         return ['id' => $place->id, 'group_id' => $place->group_id, 'name' => $place->name,
