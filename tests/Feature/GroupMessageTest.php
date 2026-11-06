@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Events\GroupMessageChanged;
+use App\Events\GroupChatReadChanged;
 use App\Models\Project;
 use App\Models\ProjectAccount;
 use App\Services\ProjectDatabase;
@@ -50,7 +51,7 @@ class GroupMessageTest extends TestCase
 
     private function group(): string
     {
-        Event::fake([GroupMessageChanged::class]);
+        Event::fake([GroupMessageChanged::class, GroupChatReadChanged::class]);
         return $this->withToken($this->tokens[1])->postJson($this->base.'/groups', [
             'name' => '대화 테스트팀', 'region_code' => '0000000000', 'region_label' => '테스트 동네',
             'is_discoverable' => true, 'accepting_requests' => true,
@@ -229,6 +230,132 @@ class GroupMessageTest extends TestCase
         $this->withToken($this->tokens[2])->getJson($this->path($group, "/$before"))->assertNotFound();
         $this->withToken($this->tokens[2])->getJson($this->path($group))->assertOk()
             ->assertJsonCount(1, 'data.messages')->assertJsonPath('data.messages.0.id', $after);
+    }
+
+
+    public function test_notification_failure_reports_error_without_rejecting_committed_writes(): void
+    {
+        $dispatcher = Event::getFacadeRoot();
+        $group = $this->group();
+        Event::swap($dispatcher);
+        \Illuminate\Support\Facades\Exceptions::fake();
+        $this->mock(\Illuminate\Contracts\Broadcasting\Factory::class, function ($mock) {
+            $mock->shouldReceive('queue')->twice()->andThrow(new \RuntimeException('Broadcast queue unavailable'));
+        });
+        $request = (string) Str::uuid();
+        $created = $this->send($group, 1, '저장되는 메시지', $request)->assertCreated()->json('data');
+        $this->assertSame(1, $this->table('group_messages')->count());
+        $this->send($group, 1, '저장되는 메시지', $request)->assertCreated()->assertJsonPath('data.id', $created['id']);
+        $this->withToken($this->tokens[1])->patchJson($this->path($group, '/'.$created['id']), ['body' => '수정된 메시지'])
+            ->assertOk()->assertJsonPath('data.body', '수정된 메시지');
+        \Illuminate\Support\Facades\Exceptions::assertReported(\RuntimeException::class);
+        $this->assertSame(1, $this->table('group_message_revisions')->count());
+    }
+
+
+    public function test_care_records_create_one_private_card_even_when_sending_is_blocked(): void
+    {
+        $group = $this->group(); $this->join($group, 2); $this->join($group, 3);
+        $place = $this->withToken($this->tokens[1])->postJson($this->base."/groups/$group/places", [
+            'name' => '권한 없는 사람에게 비공개인 장소', 'note' => '개인 안내', 'latitude' => 37.1234567,
+            'longitude' => 127.1234567, 'interval_hours' => 24])->assertCreated()->json('data');
+        $this->withToken($this->tokens[1])->patchJson($this->base."/groups/$group/places/{$place['id']}/permissions/2",
+            ['version' => $place['version'], 'access' => 'care'])->assertOk();
+        $this->override($group, 2, 'deny');
+        $data = ['request_id' => (string) Str::uuid(), 'fed_at' => now()->subMinute()->toIso8601String(),
+            'tags' => ['물 갈아줌'], 'sightings' => [], 'cost' => 98765, 'food_amount_gram' => 123,
+            'memo' => 'PRIVATE_CARE_MEMO', 'latitude' => 37.1234567, 'longitude' => 127.1234567];
+        $path = $this->base."/groups/$group/places/{$place['id']}/care-records";
+        $record = $this->withToken($this->tokens[2])->postJson($path, $data)->assertCreated()->json('data.id');
+        $this->withToken($this->tokens[2])->postJson($path, $data)->assertCreated()->assertJsonPath('data.id', $record);
+        $this->assertSame(1, $this->table('group_messages')->where('care_record_id', $record)->count());
+        $message = $this->table('group_messages')->where('care_record_id', $record)->first();
+        $this->assertNotSame($record, $message->request_id);
+        $owner = $this->withToken($this->tokens[1])->getJson($this->path($group))->assertOk()
+            ->assertJsonPath('data.messages.0.kind', 'care_record')
+            ->assertJsonPath('data.messages.0.care_record.place_name', $place['name'])
+            ->assertJsonPath('data.messages.0.can_edit', false);
+        foreach (['PRIVATE_CARE_MEMO', 'food_amount_gram', 'latitude', 'longitude', '"cost"'] as $private) {
+            $this->assertStringNotContainsString($private, $owner->getContent());
+        }
+        $hidden = $this->withToken($this->tokens[3])->getJson($this->path($group))->assertOk()
+            ->assertJsonPath('data.messages.0.care_record', null);
+        $this->assertStringNotContainsString($place['name'], $hidden->getContent());
+        $this->withToken($this->tokens[1])->patchJson($this->path($group, '/'.$message->id), ['body' => '수정'])->assertConflict();
+        $this->withToken($this->tokens[1])->deleteJson($this->path($group, '/'.$message->id))->assertOk()->assertJsonPath('data.deleted', true);
+        $this->assertSame('', $this->table('group_message_revisions')->value('body'));
+        $this->assertSame(1, $this->table('group_care_records')->where('id', $record)->count());
+        Event::assertDispatchedTimes(GroupMessageChanged::class, 2);
+    }
+
+    public function test_read_counts_badges_and_membership_rules_share_the_same_scope(): void
+    {
+        $group = $this->group(); $this->join($group, 2); $this->join($group, 3); $this->join($group, 4, 'viewer');
+        $a = $this->send($group, 1, '첫째')->assertCreated()->json('data.id');
+        $b = $this->send($group, 1, '둘째')->assertCreated()->json('data.id');
+        $c = $this->send($group, 2, '돌보미 메시지')->assertCreated()->json('data.id');
+        $counts = $this->withToken($this->tokens[1])->getJson($this->path($group, '/unread-counts?from=0'))->assertOk()->json('data.counts');
+        $this->assertSame(2, collect($counts)->firstWhere('id', $a)['unread']);
+        $this->withToken($this->tokens[2])->getJson($this->base."/groups/$group")->assertOk()->assertJsonPath('data.chat_unread_count', 2);
+        $this->withToken($this->tokens[2])->postJson($this->path($group, '/read'), ['message_id' => $b])->assertOk()->assertJsonPath('data.read_through', $b);
+        $this->withToken($this->tokens[2])->getJson($this->base."/groups/$group")->assertOk()->assertJsonPath('data.chat_unread_count', 0);
+        $this->withToken($this->tokens[2])->getJson($this->base.'/me/groups')->assertOk()->assertJsonPath('data.0.has_unread', false);
+        $this->withToken($this->tokens[3])->postJson($this->path($group, '/read'), ['message_id' => $c])->assertOk();
+        $counts = $this->withToken($this->tokens[1])->getJson($this->path($group, '/unread-counts?from=0'))->assertOk()->json('data.counts');
+        $this->assertNull(collect($counts)->firstWhere('id', $a));
+        $this->assertSame(1, collect($counts)->firstWhere('id', $c)['unread']);
+        $this->withToken($this->tokens[4])->postJson($this->path($group, '/read'), ['message_id' => $c])->assertForbidden();
+        $this->withToken($this->tokens[4])->getJson($this->path($group, '/unread-counts?from=0'))->assertForbidden();
+        $this->withToken($this->tokens[4])->getJson($this->base."/groups/$group")->assertOk()->assertJsonPath('data.chat_unread_count', null);
+        $this->withToken($this->tokens[4])->getJson($this->base.'/me/groups')->assertOk()->assertJsonPath('data.0.has_unread', false);
+    }
+
+    public function test_read_cursor_is_monotonic_clamped_and_reset_on_reapproval(): void
+    {
+        $this->travelTo(now()->startOfSecond());
+        $group = $this->group(); $this->join($group, 2);
+        $a = $this->send($group, 1)->assertCreated()->json('data.id');
+        $b = $this->send($group, 1)->assertCreated()->json('data.id');
+        $this->withToken($this->tokens[2])->postJson($this->path($group, '/read'), ['message_id' => $b + 100])->assertOk()->assertJsonPath('data.read_through', $b);
+        $this->withToken($this->tokens[2])->postJson($this->path($group, '/read'), ['message_id' => $a])->assertOk()->assertJsonPath('data.read_through', $b);
+        Event::assertDispatchedTimes(GroupChatReadChanged::class, 1);
+        $this->withToken($this->tokens[2])->postJson($this->base."/groups/$group/leave")->assertOk();
+        $this->travel(1)->seconds(); $this->join($group, 2);
+        $this->assertNull($this->table('group_memberships')->where('group_id', $group)->where('account_id', 2)->value('chat_read_message_id'));
+        $this->withToken($this->tokens[2])->postJson($this->path($group, '/read'), ['message_id' => $b])->assertOk()->assertJsonPath('data.read_through', 0);
+        $this->withToken($this->tokens[2])->getJson($this->path($group, '/unread-counts?from=0'))->assertOk()->assertJsonCount(0, 'data.counts');
+    }
+
+    public function test_request_ids_are_private_and_care_request_collisions_do_not_return_other_kinds(): void
+    {
+        $group = $this->group(); $this->join($group, 2);
+        $request = (string) Str::uuid();
+        $id = $this->send($group, 1, '내 메시지', $request)->assertCreated()->assertJsonPath('data.request_id', $request)->json('data.id');
+        $this->withToken($this->tokens[2])->getJson($this->path($group, "/$id"))->assertOk()->assertJsonPath('data.request_id', null);
+        $this->table('group_messages')->where('id', $id)->update(['kind' => 'care_record', 'body' => null]);
+        $this->send($group, 1, '내 메시지', $request)->assertConflict();
+    }
+
+    public function test_unread_counts_are_limited_to_recent_300_but_badge_counts_all_messages(): void
+    {
+        $group = $this->group(); $this->join($group, 2);
+        $time = now()->format('Y-m-d H:i:s.u'); $rows = [];
+        for ($i = 1; $i <= 301; $i++) $rows[] = ['project_id' => 1, 'group_id' => $group,
+            'author_id' => 1, 'request_id' => (string) Str::uuid(), 'payload_hash' => hash('sha256', "m$i"),
+            'kind' => 'text', 'body' => "m$i", 'change_seq' => $i, 'created_at' => $time, 'updated_at' => $time];
+        foreach (array_chunk($rows, 50) as $chunk) $this->table('group_messages')->insert($chunk);
+        $response = $this->withToken($this->tokens[1])->getJson($this->path($group, '/unread-counts?from=0'))->assertOk()->assertJsonCount(300, 'data.counts');
+        $this->assertSame(2, $response->json('data.from'));
+        $this->withToken($this->tokens[2])->getJson($this->base."/groups/$group")->assertOk()->assertJsonPath('data.chat_unread_count', 301);
+    }
+
+    public function test_read_event_has_no_account_or_message_content(): void
+    {
+        $event = new GroupChatReadChanged('streetcat', 'group-id');
+        $this->assertSame(['group_id' => 'group-id'], $event->broadcastWith());
+        $this->assertSame('group.chat.read', $event->broadcastAs());
+        $this->assertSame('database', $event->connection);
+        $this->assertSame('chat-realtime', $event->queue);
     }
 
 }

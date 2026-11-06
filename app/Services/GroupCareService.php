@@ -4,7 +4,7 @@ use App\Models\ProjectAccount;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 class GroupCareService {
-    public function __construct(private ProjectDatabase $database, private GroupPlaceService $places, private GroupProfile $profiles) {}
+    public function __construct(private ProjectDatabase $database, private GroupPlaceService $places, private GroupProfile $profiles, private GroupMessageService $messages) {}
     private function table(string $name) { return $this->database->database()->table($name); }
     private function records() {
         return $this->table('group_care_records as r')->leftJoin('project_accounts as author', function ($join) {
@@ -28,7 +28,7 @@ class GroupCareService {
         return ['records'=>$rows->take(20)->map(fn($r)=>$this->summary($r))->all(),'page'=>$page,'has_more'=>$rows->count()>20];
     }
     public function create(ProjectAccount $actor,string $group,string $place,array $data): array {
-        return $this->database->database()->transaction(function()use($actor,$group,$place,$data) {
+        [$result, $messageId] = $this->database->database()->transaction(function()use($actor,$group,$place,$data) {
             $this->table('care_groups')->where('project_id',$actor->project_id)->where('id',$group)->lockForUpdate()->firstOrFail();
             $access=$this->places->show($actor,$group,$place);
             abort_unless($access['can_manage'] || $access['access']==='care',403,'이 장소에 돌봄 기록을 남길 권한이 없습니다.');
@@ -37,7 +37,7 @@ class GroupCareService {
             ksort($data);
             $hash=hash('sha256',json_encode($data,JSON_THROW_ON_ERROR));
             $existing=$this->table('group_care_records')->where('group_id',$group)->where('created_by',$actor->id)->where('request_id',$data['request_id'])->first();
-            if($existing) { abort_unless(hash_equals($existing->payload_hash,$hash) && $existing->place_id===$place,409,'요청 내용이 바뀌었습니다. 새 요청으로 저장해 주세요.'); return $this->summary($this->records()->where('r.id', $existing->id)->firstOrFail()); }
+            if($existing) { abort_unless(hash_equals($existing->payload_hash,$hash) && $existing->place_id===$place,409,'요청 내용이 바뀌었습니다. 새 요청으로 저장해 주세요.'); return [$this->summary($this->records()->where('r.id', $existing->id)->firstOrFail()), null]; }
             $allowed=$this->table('group_animals as a')->join('group_animal_places as l','l.animal_id','=','a.id')
                 ->where('a.project_id',$actor->project_id)->where('a.group_id',$group)->where('l.group_id',$group)->where('l.place_id',$place)
                 ->whereIn('a.life_status',['active','missing'])->pluck('a.id')->all();
@@ -48,7 +48,10 @@ class GroupCareService {
                 'group_id'=>$group,'place_id'=>$place,'created_by'=>$actor->id,'payload_hash'=>$hash,'created_at'=>now(),'updated_at'=>now()]);
             $this->table('group_audit_events')->insert(['project_id'=>$actor->project_id,'group_id'=>$group,'actor_id'=>$actor->id,
                 'event'=>'care_record_created','metadata'=>json_encode(['record_id'=>$id,'place_id'=>$place],JSON_THROW_ON_ERROR),'created_at'=>now()]);
-            return $this->summary($this->records()->where('r.id',$id)->firstOrFail());
+            return [$this->summary($this->records()->where('r.id',$id)->firstOrFail()),
+                $this->messages->insertCareRecord((int) $actor->project_id, $group, (int) $actor->id, $id)];
         },3);
+        if ($messageId !== null) $this->messages->announce($group, $messageId);
+        return $result;
     }
 }

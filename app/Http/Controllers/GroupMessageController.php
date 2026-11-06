@@ -30,6 +30,18 @@ class GroupMessageController extends Controller
         return response()->json(['data' => $this->messages->changes($r->user(), $r->route('group'), (int) $d['since'], (int) ($d['limit'] ?? 50))]);
     }
 
+    public function markRead(Request $r)
+    {
+        $d = $this->input($r, ['message_id' => ['required', 'integer', 'min:1']]);
+        return response()->json(['data' => $this->messages->markRead($r->user(), $r->route('group'), (int) $d['message_id'])]);
+    }
+
+    public function unreadCounts(Request $r)
+    {
+        $d = $this->input($r, ['from' => ['required', 'integer', 'min:0']]);
+        return response()->json(['data' => $this->messages->unreadCounts($r->user(), $r->route('group'), (int) $d['from'])]);
+    }
+
     public function show(Request $r)
     {
         $this->input($r, []);

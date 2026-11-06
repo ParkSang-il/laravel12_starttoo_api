@@ -18,6 +18,8 @@ Route::post('invitations/preview', [CareGroupController::class, 'previewInvitati
 Route::prefix('groups/{group}')->whereUuid('group')->group(function () {
     Route::get('messages', [GroupMessageController::class, 'index']);
     Route::get('messages/changes', [GroupMessageController::class, 'changes']);
+    Route::get('messages/unread-counts', [GroupMessageController::class, 'unreadCounts']);
+    Route::post('messages/read', [GroupMessageController::class, 'markRead'])->middleware('throttle:group-chat-read');
     Route::post('messages', [GroupMessageController::class, 'create'])->middleware('throttle:group-message');
     Route::get('messages/{message}', [GroupMessageController::class, 'show'])->whereNumber('message');
     Route::patch('messages/{message}', [GroupMessageController::class, 'update'])->whereNumber('message')->middleware('throttle:group-message');

@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 
 class CareGroupService
 {
-    public function __construct(private ProjectDatabase $database, private GroupProfile $profiles) {}
+    public function __construct(private ProjectDatabase $database, private GroupProfile $profiles, private GroupMessageService $messages) {}
 
     public function canSubscribe(ProjectAccount $actor, string $groupId): bool
     {
@@ -187,11 +187,13 @@ class CareGroupService
 
     public function mine(ProjectAccount $actor): array
     {
+        $unread = $this->messages->unreadByGroup($actor);
         return $this->table('group_memberships as m')->join('care_groups as g', 'g.id', '=', 'm.group_id')
             ->where('m.project_id', $actor->project_id)->where('m.account_id', $actor->id)
             ->where('m.status', 'active')->select('g.*', 'm.role')->orderBy('g.created_at')
             ->get()->map(fn ($g) => [...$this->summary($g), 'my_role' => $g->role,
                 'member_previews' => $this->memberPreviews($actor, $g->id),
+                'has_unread' => in_array($g->role, ['owner', 'caregiver'], true) && (int) ($unread[$g->id] ?? 0) > 0,
                 'can_view_locations' => $this->hasPlaceAccess($g->id, $actor->id, $g->role)])->all();
     }
 
@@ -204,7 +206,9 @@ class CareGroupService
         abort_unless($group->is_discoverable || ($member && $member->status === 'active')
             || ($request && $request->status === 'pending'), 404);
 
-        return [...$this->summary($group),
+        $canChat = $member && $member->status === 'active' && in_array($member->role, ['owner', 'caregiver'], true);
+        $unread = $canChat ? $this->messages->unreadByGroup($actor, $id) : [];
+        return [...$this->summary($group), 'chat_unread_count' => $canChat ? (int) ($unread[$id] ?? 0) : null,
             ...($member && $member->status === 'active' ? ['member_previews' => $this->memberPreviews($actor, $id)] : []),
             'my_membership' => $member && $member->status === 'active' ? $this->memberSummary($member) : null,
             'my_request' => $request ? $this->requestSummary($request) : null];
@@ -369,7 +373,7 @@ class CareGroupService
                 $this->table('group_memberships')->updateOrInsert(
                     ['group_id' => $group->id, 'account_id' => $row->account_id],
                     ['project_id' => $actor->project_id, 'role' => $data['role'], 'status' => 'active',
-                        'chat_visible_from' => now()->format('Y-m-d H:i:s.u'),
+                        'chat_visible_from' => now()->format('Y-m-d H:i:s.u'), 'chat_read_message_id' => null,
                         'created_at' => $member?->created_at ?? now(), 'updated_at' => now()]);
             }
             $status = $data['decision'] === 'approve' ? 'approved' : 'rejected';
