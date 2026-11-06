@@ -17,6 +17,9 @@ Route::prefix('v1/projects/{projectCode}')
             Route::post('me/avatar', [ProjectAuthController::class, 'uploadAvatar'])->middleware('throttle:10,1');
             Route::delete('me/avatar', [ProjectAuthController::class, 'deleteAvatar']);
             Route::post('auth/logout', [ProjectAuthController::class, 'logout']);
+            Route::get('support-messages', [\App\Http\Controllers\SupportMessageController::class, 'index']);
+            Route::post('support-messages', [\App\Http\Controllers\SupportMessageController::class, 'store'])
+                ->middleware('throttle:5,1');
             require __DIR__.'/groups.php';
         });
     });
