@@ -29,7 +29,7 @@ class GroupMediaService
         $find = fn () => $this->table()->where('project_id', $actor->project_id)->where('group_id', $group)
             ->where('uploader_id', $actor->id)->where('upload_id', $data['upload_id'])->first();
         if ($row = $find()) return $this->matching($row, $data, $hash);
-        abort_unless(extension_loaded('gd'), 503, '사진 처리 기능을 사용할 수 없습니다.');
+        abort_unless(extension_loaded('gd') && function_exists('imagejpeg'), 503, '사진 처리 기능을 사용할 수 없습니다.');
         $source = @imagecreatefromstring($file->get());
         if (!$source) throw ValidationException::withMessages(['photo' => '사진을 읽을 수 없어요.']);
         try {
