@@ -86,6 +86,19 @@ class GroupAnimalController extends Controller
             (string) $request->route('animal'), $this->fields($request, true, false, true)])]);
     }
 
+    public function setPhoto(Request $request)
+    {
+        $data = $this->input($request, ['media_id' => ['required', 'uuid'], 'version' => ['required', 'integer', 'min:1']]);
+        return response()->json(['data' => $this->animals->setPhoto(...[...$this->ids($request),
+            (string) $request->route('animal'), $data['media_id'], (int) $data['version']])]);
+    }
+    public function deletePhoto(Request $request)
+    {
+        $data = $this->input($request, ['version' => ['required', 'integer', 'min:1']]);
+        return response()->json(['data' => $this->animals->setPhoto(...[...$this->ids($request),
+            (string) $request->route('animal'), null, (int) $data['version']])]);
+    }
+
     public function link(Request $request)
     {
         $data = $this->input($request, ['animal_id' => ['required', 'uuid'], 'version' => ['required', 'integer', 'min:1']]);

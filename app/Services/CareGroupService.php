@@ -365,6 +365,7 @@ class CareGroupService
             $this->audit($actor, $group->id, 'join_requested', ['request_id' => $requestId,
                 'version' => $values['version']]);
 
+            if (config('services.fcm.enabled', false)) \App\Jobs\SendGroupPush::dispatch($this->database->code(), $group->id, 'join_request', (int) $requestId, (int) $values['version'], 'pending');
             return $this->requestSummary($this->table('group_join_requests')->where('id', $requestId)->firstOrFail());
         });
     }
@@ -419,6 +420,7 @@ class CareGroupService
             $this->audit($actor, $group->id, 'join_'.$status,
                 ['request_id' => $row->id, 'account_id' => $row->account_id, 'version' => $row->version + 1]);
 
+            if (config('services.fcm.enabled', false)) \App\Jobs\SendGroupPush::dispatch($this->database->code(), $group->id, 'join_result', $requestId, (int) $row->version + 1, $data['decision'] === 'approve' ? 'approved' : 'rejected');
             return $this->requestSummary($this->table('group_join_requests')->where('id', $row->id)->firstOrFail());
         });
     }

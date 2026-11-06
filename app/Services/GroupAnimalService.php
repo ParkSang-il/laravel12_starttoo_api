@@ -23,13 +23,38 @@ class GroupAnimalService
         }, 3);
     }
 
-    private function summary(object $row): array
+    private function summary(object $row, ?array $photos = null): array
     {
+        $photoId = $row->photo_media_id ?? null;
+        $photos ??= app(GroupMediaService::class)->presentMany('id', $photoId ? [$photoId] : []);
         // No other place IDs, coordinates or private records are returned.
-        return ['id' => $row->id, 'group_id' => $row->group_id, 'name' => $row->name,
+        return ['photo' => $photos[$photoId][0] ?? null, 'id' => $row->id, 'group_id' => $row->group_id, 'name' => $row->name,
             'coat' => $row->coat, 'age' => $row->age, 'sex' => $row->sex, 'neutered' => (bool) $row->neutered,
             'tnr_stage' => $row->tnr_stage, 'tnr_dates' => (object) json_decode($row->tnr_dates ?? '{}', true, 512, JSON_THROW_ON_ERROR),
             'life_status_at' => $row->life_status_at, 'life_status' => $row->life_status, 'note' => $row->note, 'version' => (int) $row->version];
+    }
+
+    private function summaries($rows): array
+    {
+        $photos = app(GroupMediaService::class)->presentMany('id', $rows->pluck('photo_media_id')->filter()->unique()->all());
+        return $rows->map(fn ($row) => $this->summary($row, $photos))->all();
+    }
+
+    public function setPhoto(ProjectAccount $actor, string $group, string $place, string $id, ?string $mediaId, int $version): array
+    {
+        return $this->locked($actor, $group, $place, function () use ($actor, $group, $place, $id, $mediaId, $version) {
+            $animal = $this->animal($actor, $group, $place, $id);
+            if (($animal->photo_media_id ?? null) === $mediaId) return $this->summary($animal);
+            $this->version($animal, $version);
+            $media = app(GroupMediaService::class);
+            $rows = $mediaId === null ? [] : $media->claim($actor, $group, 'animal', $place, [$mediaId]);
+            $media->release($animal->photo_media_id ? [$animal->photo_media_id] : [], (int) $actor->id);
+            $media->attach($rows, 'animal_id', $id);
+            $this->table('group_animals')->where('id', $id)->where('group_id', $group)
+                ->update(['photo_media_id' => $mediaId, 'version' => $version + 1, 'updated_by' => $actor->id, 'updated_at' => now()]);
+            $this->audit($actor, $group, $place, $id, 'animal_photo_updated');
+            return $this->summary($this->animal($actor, $group, $place, $id));
+        });
     }
 
     private function animal(ProjectAccount $actor, string $group, string $place, string $id): object
@@ -58,7 +83,7 @@ class GroupAnimalService
             ->where('a.project_id', $actor->project_id)->where('a.group_id', $group)->where('link.group_id', $group)
             ->where('link.place_id', $place)->select('a.*')->orderBy('a.id')->offset(($page - 1) * 20)->limit(21)->get();
 
-        return ['animals' => $rows->take(20)->map(fn ($row) => $this->summary($row))->all(),
+        return ['animals' => $this->summaries($rows->take(20)),
             'has_more' => $rows->count() > 20, 'page' => $page, 'can_manage' => $context['can_manage']];
     }
 
@@ -78,7 +103,7 @@ class GroupAnimalService
             })->whereNull('link.animal_id')->where('a.project_id', $actor->project_id)->where('a.group_id', $group)
             ->select('a.*')->orderBy('a.id')->offset(($page - 1) * 20)->limit(21)->get();
 
-        return ['animals' => $rows->take(20)->map(fn ($row) => $this->summary($row))->all(),
+        return ['animals' => $this->summaries($rows->take(20)),
             'has_more' => $rows->count() > 20, 'page' => $page, 'can_manage' => true];
     }
 

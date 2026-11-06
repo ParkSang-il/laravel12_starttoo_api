@@ -17,6 +17,9 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->app->singleton(\App\Services\FcmClient::class);
+        RateLimiter::for('push-device', fn (Request $r) => Limit::perMinute(20)->by('push-device:'.$r->route('projectCode').':'.$r->user()->id));
+        RateLimiter::for('group-media', fn (Request $r) => Limit::perMinute(30)->by('group-media:'.$r->route('projectCode').':'.$r->user()->id));
         // IP limits span projects: changing project codes must not reset the quota.
         RateLimiter::for('phone-send', fn (Request $request) =>
             Limit::perMinute(5)->by('phone-send:'.$request->ip()));

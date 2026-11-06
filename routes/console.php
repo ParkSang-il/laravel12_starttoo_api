@@ -34,3 +34,11 @@ Artisan::command('project:seed-nicknames {code=streetcat}', function () {
     $this->info('닉네임 단어를 등록했습니다.');
     return 0;
 })->purpose('Seed nickname words only in the allowlisted project database');
+
+Artisan::command('project:purge-group-media {code=streetcat} {--limit=500}', function () {
+    $limit = max(1, min(1000, (int) $this->option('limit')));
+    $count = app(ProjectDatabase::class)->run($this->argument('code'), fn () => app(\App\Services\GroupMediaService::class)->purge($limit));
+    $this->info('Purged media count: '.$count);
+    return 0;
+});
+\Illuminate\Support\Facades\Schedule::command('project:purge-group-media streetcat')->hourly()->withoutOverlapping();

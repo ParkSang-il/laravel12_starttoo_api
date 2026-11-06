@@ -16,6 +16,8 @@ Route::post('groups', [CareGroupController::class, 'create'])->middleware('throt
 Route::post('invitations/preview', [CareGroupController::class, 'previewInvitation'])->middleware('throttle:group-invite');
 
 Route::prefix('groups/{group}')->whereUuid('group')->group(function () {
+    Route::post('media', [\App\Http\Controllers\GroupMediaController::class, 'upload'])->middleware('throttle:group-media');
+    Route::post('messages/photos', [GroupMessageController::class, 'photos'])->middleware('throttle:group-message');
     Route::get('messages', [GroupMessageController::class, 'index']);
     Route::get('messages/changes', [GroupMessageController::class, 'changes']);
     Route::get('messages/unread-counts', [GroupMessageController::class, 'unreadCounts']);
@@ -31,6 +33,8 @@ Route::prefix('groups/{group}')->whereUuid('group')->group(function () {
         Route::post('import', [GroupAnimalController::class, 'importLocal']);
         Route::post('link', [GroupAnimalController::class, 'link']);
         Route::get('{animal}', [GroupAnimalController::class, 'show'])->whereUuid('animal');
+        Route::put('{animal}/photo', [GroupAnimalController::class, 'setPhoto'])->whereUuid('animal');
+        Route::delete('{animal}/photo', [GroupAnimalController::class, 'deletePhoto'])->whereUuid('animal');
         Route::patch('{animal}/status', [GroupAnimalController::class, 'updateState'])->whereUuid('animal');
         Route::patch('{animal}', [GroupAnimalController::class, 'update'])->whereUuid('animal');
         Route::delete('{animal}', [GroupAnimalController::class, 'unlink'])->whereUuid('animal');

@@ -21,8 +21,8 @@ class ProfileAvatar
             throw ValidationException::withMessages(['photo' => '사진을 읽을 수 없습니다.']);
         }
         try {
-            $original = $this->encode($source, 1080);
-            $thumbnail = $this->encode($source, 192);
+            $original = app(ImageEncoder::class)->encode($source, 1080);
+            $thumbnail = app(ImageEncoder::class)->encode($source, 192);
         } finally {
             imagedestroy($source);
         }
@@ -67,30 +67,6 @@ class ProfileAvatar
         $this->cleanup($old);
 
         return $saved;
-    }
-
-    private function encode(\GdImage $source, int $limit): string
-    {
-        $width = imagesx($source);
-        $height = imagesy($source);
-        $scale = min(1, $limit / max($width, $height));
-        $target = imagecreatetruecolor(max(1, (int) round($width * $scale)), max(1, (int) round($height * $scale)));
-        try {
-            imagefill($target, 0, 0, imagecolorallocate($target, 255, 255, 255));
-            imagecopyresampled($target, $source, 0, 0, 0, 0, imagesx($target), imagesy($target), $width, $height);
-            ob_start();
-            try {
-                if (! (function_exists('imagejpeg') ? imagejpeg($target, null, 82) : imagepng($target, null, 6))) {
-                    throw new RuntimeException('Profile image encoding failed.');
-                }
-
-                return ob_get_contents();
-            } finally {
-                ob_end_clean();
-            }
-        } finally {
-            imagedestroy($target);
-        }
     }
 
     private function cleanup(array $attributes): void

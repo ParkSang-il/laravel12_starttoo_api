@@ -12,6 +12,8 @@ Route::prefix('v1/projects/{projectCode}')
             ->middleware('throttle:phone-verify');
 
         Route::middleware(['auth:api', 'project.account', 'throttle:project-api'])->group(function () {
+            Route::put('me/push-device', [\App\Http\Controllers\PushDeviceController::class, 'put'])->middleware('throttle:push-device');
+            Route::delete('me/push-device', [\App\Http\Controllers\PushDeviceController::class, 'delete']);
             Route::get('me', [ProjectAuthController::class, 'me']);
             Route::patch('me', [ProjectAuthController::class, 'updateProfile']);
             Route::post('me/avatar', [ProjectAuthController::class, 'uploadAvatar'])->middleware('throttle:10,1');

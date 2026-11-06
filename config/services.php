@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'fcm' => ['enabled' => (bool) env('STREETCAT_PUSH_ENABLED', false), 'credentials' => env('STREETCAT_FCM_CREDENTIALS', '/run/secrets/streetcat-fcm.json')],
 
     'octomo' => ['api_key' => env('OCTOMO_API_KEY')],
 

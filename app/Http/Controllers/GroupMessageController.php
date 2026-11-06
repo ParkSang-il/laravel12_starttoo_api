@@ -63,6 +63,13 @@ class GroupMessageController extends Controller
         return response()->json(['data' => $this->messages->create($r->user(), $r->route('group'), $this->text($r, true))], 201);
     }
 
+    public function photos(Request $r)
+    {
+        $data = $this->input($r, ['request_id' => ['required', 'uuid'],
+            'media_ids' => ['required', 'array', 'min:1', 'max:4'], 'media_ids.*' => ['required', 'uuid', 'distinct']]);
+        return response()->json(['data' => $this->messages->createPhotos($r->user(), $r->route('group'), $data)], 201);
+    }
+
     public function update(Request $r)
     {
         $d = $this->text($r, false);

@@ -1,0 +1,5 @@
+# Optional overlay; use only after preparing the host service account file.
+services:
+  chat-queue-rt:
+    volumes:
+      - ${STREETCAT_FCM_HOST_PATH:?Set the host FCM credentials path}:/run/secrets/streetcat-fcm.json:ro

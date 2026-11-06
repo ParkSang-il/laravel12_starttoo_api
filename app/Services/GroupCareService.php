@@ -11,9 +11,10 @@ class GroupCareService {
             $join->on('author.id', '=', 'r.created_by')->on('author.project_id', '=', 'r.project_id');
         })->select('r.*', 'r.created_by as account_id', 'author.display_name', 'author.nickname_tag', 'author.avatar_url', 'author.avatar_thumbnail_url', 'author.avatar_disk', 'author.avatar_path', 'author.avatar_thumbnail_path');
     }
-    private function summary(object $row): array {
+    private function summary(object $row, ?array $photos = null): array {
+        $photos ??= app(GroupMediaService::class)->presentMany('care_record_id', [$row->id]);
         $profile = $this->profiles->summary($row);
-        return ['id'=>$row->id,'place_id'=>$row->place_id,'group_id'=>$row->group_id,'created_by'=>(int)$row->created_by,
+        return ['photos' => $photos[$row->id] ?? [], 'id'=>$row->id,'place_id'=>$row->place_id,'group_id'=>$row->group_id,'created_by'=>(int)$row->created_by,
             'author_account_id'=>$profile['account_id'], 'display_name'=>$profile['display_name'],
             'nickname_tag'=>$profile['nickname_tag'], 'nickname'=>$profile['nickname'],
             'avatar_url'=>$profile['avatar_url'], 'avatar_thumbnail_url'=>$profile['avatar_thumbnail_url'],
@@ -25,7 +26,8 @@ class GroupCareService {
         $this->places->show($actor,$group,$place);
         $rows=$this->records()->where('r.project_id',$actor->project_id)->where('r.group_id',$group)->where('r.place_id',$place)
             ->orderByDesc('r.fed_at')->orderBy('r.id')->offset(($page-1)*20)->limit(21)->get();
-        return ['records'=>$rows->take(20)->map(fn($r)=>$this->summary($r))->all(),'page'=>$page,'has_more'=>$rows->count()>20];
+        $photos = app(GroupMediaService::class)->presentMany('care_record_id', $rows->take(20)->pluck('id')->all());
+        return ['records'=>$rows->take(20)->map(fn($r)=>$this->summary($r, $photos))->all(),'page'=>$page,'has_more'=>$rows->count()>20];
     }
     public function show(ProjectAccount $actor, string $group, string $place, string $record): array {
         // Reuse the same active membership and place grant checks as record lists.
@@ -46,6 +48,7 @@ class GroupCareService {
             'animals' => $animals->map(fn ($animal) => ['id' => $animal->id, 'name' => $animal->name])->all()];
     }
     public function create(ProjectAccount $actor,string $group,string $place,array $data): array {
+        if (empty($data['photo_ids'])) unset($data['photo_ids']);
         [$result, $messageId] = $this->database->database()->transaction(function()use($actor,$group,$place,$data) {
             $this->table('care_groups')->where('project_id',$actor->project_id)->where('id',$group)->lockForUpdate()->firstOrFail();
             $access=$this->places->show($actor,$group,$place);
@@ -60,10 +63,14 @@ class GroupCareService {
                 ->where('a.project_id',$actor->project_id)->where('a.group_id',$group)->where('l.group_id',$group)->where('l.place_id',$place)
                 ->whereIn('a.life_status',['active','missing'])->pluck('a.id')->all();
             abort_if(array_diff(array_keys($data['sightings']),$allowed),422,'현재 장소에서 돌보는 친구만 선택할 수 있습니다. 새로 조회해 주세요.');
+            $media = app(GroupMediaService::class);
+            $photoRows = $media->claim($actor, $group, 'care_record', $place, $data['photo_ids'] ?? []);
+            $rowData = $data; unset($rowData['photo_ids']);
             $id=(string)Str::uuid();
-            $this->table('group_care_records')->insert([...$data,'tags'=>json_encode($data['tags'],JSON_THROW_ON_ERROR),
+            $this->table('group_care_records')->insert([...$rowData,'tags'=>json_encode($data['tags'],JSON_THROW_ON_ERROR),
                 'sightings'=>json_encode((object)$data['sightings'],JSON_THROW_ON_ERROR),'id'=>$id,'project_id'=>$actor->project_id,
                 'group_id'=>$group,'place_id'=>$place,'created_by'=>$actor->id,'payload_hash'=>$hash,'created_at'=>now(),'updated_at'=>now()]);
+            $media->attach($photoRows, 'care_record_id', $id);
             $sightings = [];
             foreach ($data['sightings'] as $animalId => $status) {
                 $sightings[] = ['project_id' => $actor->project_id, 'group_id' => $group, 'animal_id' => $animalId,

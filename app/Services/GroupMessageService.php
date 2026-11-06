@@ -69,7 +69,7 @@ class GroupMessageService
                 'p.name as record_place_name', 'p.deleted_at as place_deleted_at', 'perm.access as place_access');
     }
 
-    private function present(object $row, ProjectAccount $actor, object $member, bool $canSend, array $animals = [], array $links = []): array
+    private function present(object $row, ProjectAccount $actor, object $member, bool $canSend, array $animals = [], array $links = [], array $photos = []): array
     {
         $deleted = $row->deleted_at !== null;
         $mine = (int) $row->author_id === $actor->id;
@@ -87,8 +87,8 @@ class GroupMessageService
         return ['id' => (int) $row->id, 'group_id' => $row->group_id, 'kind' => $row->kind,
             'body' => $deleted ? null : $row->body, 'created_at' => $this->iso($row->created_at),
             'edited_at' => $deleted ? null : $this->iso($row->edited_at), 'deleted' => $deleted, 'is_mine' => $mine,
-            'request_id' => $mine && $row->kind === 'text' ? $row->request_id : null,
-            'care_record' => $care, 'can_edit' => !$deleted && $mine && $canSend && $row->kind === 'text',
+            'request_id' => $mine && in_array($row->kind, ['text', 'photo'], true) ? $row->request_id : null,
+            'photos' => $deleted ? [] : $photos, 'care_record' => $care, 'can_edit' => !$deleted && $mine && $canSend && $row->kind === 'text',
             'can_delete' => !$deleted && $canSend && ($mine || $member->role === 'owner'), 'author' => $author];
     }
 
@@ -115,7 +115,8 @@ class GroupMessageService
                 $links[$link->place_id.':'.$link->animal_id] = true;
             }
         }
-        return $rows->map(fn ($r) => $this->present($r, $actor, $member, $canSend, $animals, $links))->values()->all();
+        $photos = app(GroupMediaService::class)->presentMany('message_id', $rows->filter(fn ($r) => $r->kind === 'photo' && $r->deleted_at === null)->pluck('id')->all());
+        return $rows->map(fn ($r) => $this->present($r, $actor, $member, $canSend, $animals, $links, $photos[$r->id] ?? []))->values()->all();
     }
 
     public function index(ProjectAccount $actor, string $group, ?int $before, int $limit): array
@@ -170,6 +171,9 @@ class GroupMessageService
         [$message, $changed] = $result;
         if ($changed) {
             try {
+                if ($change === 'created' && config('services.fcm.enabled', false)) {
+                    \App\Jobs\SendGroupPush::dispatch($this->database->code(), $group, 'message', (int) $message['id']);
+                }
                 event(new GroupMessageChanged($this->database->code(), $group, $message['id'], $change));
             } catch (\Throwable $e) {
                 // The write has committed; report notification failures without rejecting it.
@@ -199,6 +203,34 @@ class GroupMessageService
         return $this->publish($group, $result, 'created');
     }
 
+    public function authorizePhotoUpload(ProjectAccount $actor, string $group): void
+    {
+        $member = $this->reader($actor, $group);
+        abort_unless($this->canSend($group, $member), 403, '그룹 사진을 보낼 권한이 없습니다.');
+    }
+
+    public function createPhotos(ProjectAccount $actor, string $group, array $data): array
+    {
+        $result = $this->locked($actor, $group, function ($member, $canSend) use ($actor, $group, $data) {
+            abort_unless($canSend, 403, '그룹 사진을 보낼 권한이 없습니다.');
+            $hash = hash('sha256', 'photo:'.implode(',', $data['media_ids']));
+            $existing = $this->table('group_messages')->where('group_id', $group)->where('author_id', $actor->id)->where('request_id', $data['request_id'])->first();
+            if ($existing) {
+                abort_unless($existing->kind === 'photo' && hash_equals($existing->payload_hash, $hash), 409, '같은 메시지 요청의 내용이 바뀌었습니다.');
+                return [$this->show($actor, $group, (int) $existing->id), false];
+            }
+            $media = app(GroupMediaService::class);
+            $rows = $media->claim($actor, $group, 'chat', null, $data['media_ids']);
+            $time = $this->stamp();
+            $id = $this->table('group_messages')->insertGetId(['project_id' => $actor->project_id, 'group_id' => $group,
+                'author_id' => $actor->id, 'request_id' => $data['request_id'], 'payload_hash' => $hash, 'body' => null,
+                'kind' => 'photo', 'change_seq' => $this->nextSeq((int) $actor->project_id, $group), 'created_at' => $time, 'updated_at' => $time]);
+            $media->attach($rows, 'message_id', $id);
+            return [$this->show($actor, $group, (int) $id), true];
+        });
+        return $this->publish($group, $result, 'created');
+    }
+
     private function revision(ProjectAccount $actor, string $group, object $message, string $action): void
     {
         // Only a future, separately authorized platform-admin feature may read this table.
@@ -223,6 +255,10 @@ class GroupMessageService
             $this->revision($actor, $group, $message, $body === null ? 'deleted' : 'edited');
             $time = $this->stamp();
             $values = ['body' => $body, 'change_seq' => $this->nextSeq((int) $actor->project_id, $group), 'updated_at' => $time];
+            if ($body === null && $message->kind === 'photo') {
+                $ids = $this->table('group_media')->where('project_id', $actor->project_id)->where('group_id', $group)->where('message_id', $id)->pluck('id')->all();
+                app(GroupMediaService::class)->release($ids, (int) $actor->id);
+            }
             if ($body === null) $values += ['deleted_at' => $time, 'deleted_by' => $actor->id];
             else $values['edited_at'] = $time;
             $this->table('group_messages')->where('id', $id)->where('group_id', $group)->update($values);
