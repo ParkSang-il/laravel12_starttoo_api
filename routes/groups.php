@@ -35,6 +35,7 @@ Route::prefix('groups/{group}')->whereUuid('group')->group(function () {
         Route::patch('{animal}', [GroupAnimalController::class, 'update'])->whereUuid('animal');
         Route::delete('{animal}', [GroupAnimalController::class, 'unlink'])->whereUuid('animal');
     });
+    Route::get('animals/{animal}/detail', [\App\Http\Controllers\GroupAnimalDetailController::class, 'show'])->whereUuid('animal');
     Route::get('places/{place}/care-records', [GroupCareController::class, 'index'])->whereUuid('place');
     Route::get('places/{place}/care-records/{record}', [GroupCareController::class, 'show'])->whereUuid('place')->whereUuid('record');
     Route::post('places/{place}/care-records', [GroupCareController::class, 'create'])->whereUuid('place');

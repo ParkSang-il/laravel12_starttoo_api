@@ -99,6 +99,16 @@ class GroupPlaceService
             'page' => $page, 'has_more' => $rows->count() > 20, 'can_manage' => $context['owner']];
     }
 
+    public function linkedAnimalPlaces(ProjectAccount $actor, string $groupId, string $animal): array
+    {
+        $context = $this->context($actor, $groupId);
+        $rows = $this->visiblePlaces($actor, $context)->join('group_animal_places as link', function ($join) use ($animal) {
+            $join->on('link.place_id', '=', 'p.id')->on('link.group_id', '=', 'p.group_id')->where('link.animal_id', '=', $animal);
+        })->orderBy('p.id')->get();
+        return ['group' => ['id' => $context['group']->id, 'name' => $context['group']->name],
+            'places' => $rows->map(fn ($row) => $this->summary($actor, $context, $row))->all()];
+    }
+
     public function show(ProjectAccount $actor, string $groupId, string $id): array
     {
         $context = $this->context($actor, $groupId);

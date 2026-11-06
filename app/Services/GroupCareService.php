@@ -64,6 +64,12 @@ class GroupCareService {
             $this->table('group_care_records')->insert([...$data,'tags'=>json_encode($data['tags'],JSON_THROW_ON_ERROR),
                 'sightings'=>json_encode((object)$data['sightings'],JSON_THROW_ON_ERROR),'id'=>$id,'project_id'=>$actor->project_id,
                 'group_id'=>$group,'place_id'=>$place,'created_by'=>$actor->id,'payload_hash'=>$hash,'created_at'=>now(),'updated_at'=>now()]);
+            $sightings = [];
+            foreach ($data['sightings'] as $animalId => $status) {
+                $sightings[] = ['project_id' => $actor->project_id, 'group_id' => $group, 'animal_id' => $animalId,
+                    'place_id' => $place, 'record_id' => $id, 'fed_at' => $data['fed_at'], 'status' => $status];
+            }
+            foreach (array_chunk($sightings, 100) as $batch) $this->table('group_animal_sightings')->insert($batch);
             $this->table('group_audit_events')->insert(['project_id'=>$actor->project_id,'group_id'=>$group,'actor_id'=>$actor->id,
                 'event'=>'care_record_created','metadata'=>json_encode(['record_id'=>$id,'place_id'=>$place],JSON_THROW_ON_ERROR),'created_at'=>now()]);
             return [$this->summary($this->records()->where('r.id',$id)->firstOrFail()),
