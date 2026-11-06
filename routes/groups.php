@@ -3,6 +3,7 @@
 use App\Http\Controllers\CareGroupController;
 use App\Http\Controllers\GroupPlaceController;
 use App\Http\Controllers\GroupCareController;
+use App\Http\Controllers\GroupMessageController;
 use App\Http\Controllers\GroupAnimalController;
 use Illuminate\Support\Facades\Route;
 
@@ -15,6 +16,12 @@ Route::post('groups', [CareGroupController::class, 'create'])->middleware('throt
 Route::post('invitations/preview', [CareGroupController::class, 'previewInvitation'])->middleware('throttle:group-invite');
 
 Route::prefix('groups/{group}')->whereUuid('group')->group(function () {
+    Route::get('messages', [GroupMessageController::class, 'index']);
+    Route::get('messages/changes', [GroupMessageController::class, 'changes']);
+    Route::post('messages', [GroupMessageController::class, 'create'])->middleware('throttle:group-message');
+    Route::get('messages/{message}', [GroupMessageController::class, 'show'])->whereNumber('message');
+    Route::patch('messages/{message}', [GroupMessageController::class, 'update'])->whereNumber('message')->middleware('throttle:group-message');
+    Route::delete('messages/{message}', [GroupMessageController::class, 'delete'])->whereNumber('message')->middleware('throttle:group-message');
     Route::prefix('places/{place}/animals')->whereUuid('place')->group(function () {
         Route::get('/', [GroupAnimalController::class, 'index']);
         Route::get('available', [GroupAnimalController::class, 'available']);

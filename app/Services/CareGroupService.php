@@ -139,6 +139,7 @@ class CareGroupService
             $this->table('group_memberships')->insert([
                 'project_id' => $actor->project_id, 'group_id' => $id,
                 'account_id' => $actor->id, 'role' => 'owner', 'status' => 'active',
+                'chat_visible_from' => now()->format('Y-m-d H:i:s.u'),
                 'created_at' => now(), 'updated_at' => now(),
             ]);
             $this->audit($actor, $id, 'group_created');
@@ -368,6 +369,7 @@ class CareGroupService
                 $this->table('group_memberships')->updateOrInsert(
                     ['group_id' => $group->id, 'account_id' => $row->account_id],
                     ['project_id' => $actor->project_id, 'role' => $data['role'], 'status' => 'active',
+                        'chat_visible_from' => now()->format('Y-m-d H:i:s.u'),
                         'created_at' => $member?->created_at ?? now(), 'updated_at' => now()]);
             }
             $status = $data['decision'] === 'approve' ? 'approved' : 'rejected';

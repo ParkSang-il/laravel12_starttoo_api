@@ -24,6 +24,8 @@ class AppServiceProvider extends ServiceProvider
             Limit::perMinute(20)->by('phone-verify:'.$request->ip()));
         RateLimiter::for('project-api', fn (Request $request) =>
             Limit::perMinute(120)->by('account:'.$request->route('projectCode').':'.$request->user()->id));
+        RateLimiter::for('group-message', fn (Request $request) =>
+            Limit::perMinute(30)->by('group-message:'.$request->route('projectCode').':'.$request->user()->id));
         RateLimiter::for('group-create', fn (Request $request) =>
             Limit::perHour(3)->by('group-create:'.$request->route('projectCode').':'.$request->user()->id));
         RateLimiter::for('group-discover', fn (Request $request) =>
