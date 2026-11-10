@@ -78,7 +78,7 @@ class CareGroupController extends Controller
         $data = $this->input($request, [
             'latitude' => ['required', 'numeric', 'between:-90,90'],
             'longitude' => ['required', 'numeric', 'between:-180,180'],
-            'radius_m' => ['required', 'integer', 'min:500', 'max:2000'],
+            'radius_m' => ['required', 'integer', 'min:500', 'max:5000'],
             'page' => ['sometimes', 'integer', 'min:1', 'max:1000'],
         ]);
 
