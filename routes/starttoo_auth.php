@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\StarttooAuthController;
+use App\Http\Controllers\StarttooTermsController;
 use App\Http\Middleware\StarttooDatabase;
 use Illuminate\Support\Facades\Route;
 
@@ -10,5 +11,7 @@ Route::prefix('v1/projects/starttoo/auth')->middleware([StarttooDatabase::class]
     Route::post('google', [StarttooAuthController::class, 'google']);
     Route::post('refresh', [StarttooAuthController::class, 'refresh']);
     Route::get('me', [StarttooAuthController::class, 'me']);
+    Route::get('terms', [StarttooTermsController::class, 'index']);
+    Route::post('terms', [StarttooTermsController::class, 'store']);
     Route::post('logout', [StarttooAuthController::class, 'logout']);
 });
