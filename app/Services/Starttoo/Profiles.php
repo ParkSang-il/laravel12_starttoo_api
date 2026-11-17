@@ -22,6 +22,7 @@ class Profiles
         $user = app(ProjectDatabase::class)->database()->table('starttoo_users')->where('id', $identity['account']['id'])->first();
 
         return [...$this->options(), 'account' => $identity['account'],
+            'social' => app(Follows::class)->state((int) $user->id, (int) $user->id),
             'connected_providers' => app(ProjectDatabase::class)->database()->table('starttoo_auth_identities')
                 ->where('user_id', $user->id)->orderBy('provider')->distinct()->pluck('provider')->all(),
             'profile' => $this->values($user),

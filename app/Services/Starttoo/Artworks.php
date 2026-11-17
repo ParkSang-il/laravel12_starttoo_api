@@ -36,7 +36,7 @@ class Artworks
         $validator = Validator::make($input, [
             'style' => ['nullable', 'string', Rule::in(array_column($options['styles'], 'id'))],
             'cursor' => ['nullable', 'string', 'max:512'],
-            'scope' => ['nullable', Rule::in(['public', 'mine', 'saved'])],
+            'scope' => ['nullable', Rule::in(['public', 'mine', 'saved', 'following'])],
         ]);
         if ($validator->fails()) $this->fail(422, 'INVALID_ARTWORK_FILTER', '작품 목록 조회 조건을 확인해주세요.');
         $scope = $input['scope'] ?? 'public';
@@ -63,6 +63,8 @@ class Artworks
         if ($scope === 'mine') $query->where('a.user_id', $viewerId);
         else $query->where('a.visibility', 'public');
         if ($authorId !== null) $query->where('a.user_id', $authorId);
+        if ($scope === 'following') $query->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_follows as f')
+            ->whereColumn('f.target_user_id', 'a.user_id')->where('f.user_id', $viewerId));
         $orderColumn = 'a.created_at';
         if ($scope === 'saved') {
             $query->join('starttoo_artwork_interactions as s', function ($join) use ($viewerId) {
@@ -91,11 +93,12 @@ class Artworks
             ->whereIn('artwork_id', $page->pluck('id')->all())->orderBy('position')->get()->groupBy('artwork_id');
         $items = [];
         $states = app(ArtworkInteractions::class)->states($page->pluck('id')->all(), $viewerId);
+        $following = app(Follows::class)->following($page->pluck('author_id')->all(), $viewerId);
         foreach ($page as $row) {
             $author = (object) ['id' => $row->author_id, 'nickname' => $row->author_nickname,
                 'display_name' => $row->author_display_name, 'interest_region' => $row->author_region, 'avatar_path' => $row->author_avatar];
             $photos = $images->get($row->id, collect());
-            if ($photos->isNotEmpty()) $items[] = $this->format($row, $author, $photos, $options, $viewerId, $states[$row->id]);
+            if ($photos->isNotEmpty()) $items[] = $this->format($row, $author, $photos, $options, $viewerId, $states[$row->id], in_array((int) $author->id, $following, true));
         }
         $encode = fn ($row, $d) => $row ? rtrim(strtr(base64_encode(json_encode([
             'at' => $scope === 'saved' ? $row->saved_at : $row->created_at, 'id' => $row->id, 'd' => $d,
@@ -206,7 +209,7 @@ class Artworks
         return $this->format($row, $author, $images, $this->options(), $viewerId);
     }
 
-    private function format(object $row, object $author, iterable $images, array $options, ?int $viewerId = null, ?array $state = null): array
+    private function format(object $row, object $author, iterable $images, array $options, ?int $viewerId = null, ?array $state = null, ?bool $following = null): array
     {
         $styles = json_decode($row->styles, true, 512, JSON_THROW_ON_ERROR);
         $label = fn ($list, $value) => collect($list)->firstWhere('id', $value)['label'] ?? null;
@@ -220,6 +223,7 @@ class Artworks
             'duration_minutes' => $row->duration_minutes, 'price' => $row->price, 'show_in_shop' => (bool) $row->show_in_shop,
             'created_at' => $row->created_at,
             'author' => ['id' => $author->id, 'nickname' => $author->nickname ?? $author->display_name,
+                'following' => $following ?? in_array((int) $author->id, app(Follows::class)->following([(int) $author->id], $viewerId), true),
                 'region' => $label(app(Profiles::class)->options()['regions'], $author->interest_region),
                 'avatar_url' => $author->avatar_path ? Storage::disk('starttoo')->temporaryUrl($author->avatar_path, now()->addHour()) : null],
             'images' => collect($images)

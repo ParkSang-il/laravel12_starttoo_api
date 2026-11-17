@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\Starttoo\Artworks;
 use App\Services\Starttoo\AuthSessions;
 use App\Services\Starttoo\PublicProfiles;
+use App\Services\Starttoo\Follows;
 use Illuminate\Http\Request;
 use Illuminate\Http\Exceptions\HttpResponseException;
 
@@ -35,6 +36,23 @@ class StarttooPublicProfileController extends Controller
         // scope=mine 등을 받아도 타인의 숨김 작품으로 범위를 넓힐 수 없다.
         return response()->json(['data' => [...$artworks->feed($request->only(['cursor', 'style']),
             isset($identity['account']['id']) ? (int) $identity['account']['id'] : null, (int) $user),
+            'account' => $identity['account'] ?? null]])->header('Cache-Control', 'no-store');
+    }
+
+    public function follow(Request $request, string $user, Follows $follows, AuthSessions $sessions, Artworks $artworks)
+    {
+        return response()->json(['data' => $follows->set((int) $user, $request->bearerToken() ?? '', $request->all(), $sessions, $artworks)])
+            ->header('Cache-Control', 'no-store');
+    }
+
+    public function follows(Request $request, string $user, Follows $follows, AuthSessions $sessions)
+    {
+        $identity = $this->identity($request, $sessions);
+        $viewer = isset($identity['account']['id']) ? (int) $identity['account']['id'] : null;
+        if ($user === 'me' && $viewer === null) {
+            return response()->json(['code' => 'SESSION_EXPIRED', 'message' => '로그인이 필요해요.'], 401);
+        }
+        return response()->json(['data' => [...$follows->listing($user === 'me' ? $viewer : (int) $user, $viewer, $request->query()),
             'account' => $identity['account'] ?? null]])->header('Cache-Control', 'no-store');
     }
 }

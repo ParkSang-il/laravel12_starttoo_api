@@ -33,6 +33,7 @@ class PublicProfiles
             'avatar_url' => $user->avatar_path ? Storage::disk('starttoo')->temporaryUrl($user->avatar_path, now()->addHour()) : null,
             'styles' => array_values(array_filter($options['styles'], fn ($s) => in_array($s['id'], $styles, true))),
             'region' => collect($options['regions'])->firstWhere('id', $user->interest_region)['label'] ?? null,
-            'artwork_count' => $count, 'is_me' => $viewerId === (int) $user->id];
+            'artwork_count' => $count, 'is_me' => $viewerId === (int) $user->id,
+            'social' => app(Follows::class)->state($id, $viewerId)];
     }
 }
