@@ -8,6 +8,13 @@ use Illuminate\Http\Request;
 
 class StarttooArtworkController extends Controller
 {
+    public function index(Request $request, Artworks $artworks, AuthSessions $sessions)
+    {
+        $identity = $sessions->authenticate($request->bearerToken() ?? '', true);
+        return response()->json(['data' => [...$artworks->feed($request->query()), 'account' => $identity['account']]])
+            ->header('Cache-Control', 'no-store');
+    }
+
     public function options(Request $request, Artworks $artworks, AuthSessions $sessions)
     {
         $identity = $artworks->ready($request->bearerToken() ?? '', $sessions);

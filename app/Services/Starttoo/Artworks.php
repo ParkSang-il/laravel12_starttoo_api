@@ -30,6 +30,60 @@ class Artworks
         return $identity;
     }
 
+    public function feed(array $input): array
+    {
+        $options = $this->options();
+        $validator = Validator::make($input, [
+            'style' => ['nullable', 'string', Rule::in(array_column($options['styles'], 'id'))],
+            'cursor' => ['nullable', 'string', 'max:512'],
+        ]);
+        if ($validator->fails()) $this->fail(422, 'INVALID_ARTWORK_FILTER', '작품 목록 조회 조건을 확인해주세요.');
+        $cursor = null;
+        if (!empty($input['cursor'])) {
+            try {
+                $decoded = base64_decode(strtr($input['cursor'], '-_', '+/'), true);
+                $cursor = json_decode($decoded === false ? '' : $decoded, true, 512, JSON_THROW_ON_ERROR);
+                if (!is_array($cursor) || Validator::make($cursor, [
+                    'at' => ['required', 'date_format:Y-m-d H:i:s'], 'id' => ['required', 'uuid'],
+                ])->fails()) throw new \InvalidArgumentException('Invalid artwork cursor.');
+            } catch (\Throwable $e) {
+                $this->fail(422, 'INVALID_ARTWORK_FILTER', '작품 목록 조회 조건을 확인해주세요.');
+            }
+        }
+        $db = app(ProjectDatabase::class)->database();
+        $query = $db->table('starttoo_artworks as a')
+            ->join('starttoo_users as u', 'u.id', '=', 'a.user_id')->where('u.status', 'active')
+            ->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_artwork_images as i')->whereColumn('i.artwork_id', 'a.id'))
+            ->select('a.*', 'u.id as author_id', 'u.nickname as author_nickname', 'u.display_name as author_display_name',
+                'u.interest_region as author_region', 'u.avatar_path as author_avatar');
+        if (!empty($input['style'])) $query->whereJsonContains('a.styles', $input['style']);
+        if ($cursor !== null) {
+            $query->where(function ($q) use ($cursor) {
+                $q->where('a.created_at', '<', $cursor['at'])->orWhere(function ($sameTime) use ($cursor) {
+                    $sameTime->where('a.created_at', $cursor['at'])->where('a.id', '<', $cursor['id']);
+                });
+            });
+        }
+        // 같은 초에 올라온 작품도 UUID로 순서를 고정한다. COUNT/OFFSET 없이 10개씩 조회한다.
+        $rows = $query->orderByDesc('a.created_at')->orderByDesc('a.id')->limit(11)->get();
+        $hasMore = $rows->count() > 10;
+        $page = $rows->take(10)->values();
+        $images = $page->isEmpty() ? collect() : $db->table('starttoo_artwork_images')
+            ->whereIn('artwork_id', $page->pluck('id')->all())->orderBy('position')->get()->groupBy('artwork_id');
+        $items = [];
+        foreach ($page as $row) {
+            $author = (object) ['id' => $row->author_id, 'nickname' => $row->author_nickname,
+                'display_name' => $row->author_display_name, 'interest_region' => $row->author_region, 'avatar_path' => $row->author_avatar];
+            $photos = $images->get($row->id, collect());
+            if ($photos->isNotEmpty()) $items[] = $this->format($row, $author, $photos, $options);
+        }
+        $last = $page->last();
+        $next = $hasMore && $last ? rtrim(strtr(base64_encode(json_encode([
+            'at' => $last->created_at, 'id' => $last->id,
+        ], JSON_THROW_ON_ERROR)), '+/', '-_'), '=') : null;
+        return ['items' => $items, 'next_cursor' => $next, 'styles' => $options['styles']];
+    }
+
     public function create(string $token, array $input, array $files, AuthSessions $sessions): array
     {
         $identity = $this->ready($token, $sessions);
@@ -123,7 +177,12 @@ class Artworks
         if (!$row) $this->fail(404, 'ARTWORK_NOT_FOUND', '작품을 찾을 수 없어요.');
         $author = $db->table('starttoo_users')->where('id', $row->user_id)->first();
         if (!$author || $author->status !== 'active') $this->fail(404, 'ARTWORK_NOT_FOUND', '작품을 찾을 수 없어요.');
-        $options = $this->options();
+        $images = $db->table('starttoo_artwork_images')->where('artwork_id', $row->id)->orderBy('position')->get();
+        return $this->format($row, $author, $images, $this->options());
+    }
+
+    private function format(object $row, object $author, iterable $images, array $options): array
+    {
         $styles = json_decode($row->styles, true, 512, JSON_THROW_ON_ERROR);
         $label = fn ($list, $value) => collect($list)->firstWhere('id', $value)['label'] ?? null;
         return ['id' => $row->id, 'kind' => $row->kind, 'title' => $row->title, 'description' => $row->description ?? '',
@@ -134,7 +193,7 @@ class Artworks
             'author' => ['id' => $author->id, 'nickname' => $author->nickname ?? $author->display_name,
                 'region' => $label(app(Profiles::class)->options()['regions'], $author->interest_region),
                 'avatar_url' => $author->avatar_path ? Storage::disk('starttoo')->temporaryUrl($author->avatar_path, now()->addHour()) : null],
-            'images' => $db->table('starttoo_artwork_images')->where('artwork_id', $row->id)->orderBy('position')->get()
+            'images' => collect($images)
                 ->map(fn ($image) => ['position' => $image->position, 'url' => Storage::disk('starttoo')->temporaryUrl($image->path, now()->addHour())])->all()];
     }
 
