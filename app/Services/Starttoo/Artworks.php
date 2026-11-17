@@ -48,6 +48,7 @@ class Artworks
                 $cursor = json_decode($decoded === false ? '' : $decoded, true, 512, JSON_THROW_ON_ERROR);
                 if (!is_array($cursor) || Validator::make($cursor, [
                     'at' => ['required', 'date_format:Y-m-d H:i:s'], 'id' => ['required', 'uuid'],
+                    'd' => ['sometimes', Rule::in(['next', 'previous'])],
                 ])->fails()) throw new \InvalidArgumentException('Invalid artwork cursor.');
             } catch (\Throwable $e) {
                 $this->fail(422, 'INVALID_ARTWORK_FILTER', '작품 목록 조회 조건을 확인해주세요.');
@@ -70,17 +71,21 @@ class Artworks
         }
         if (!empty($input['style'])) $query->whereJsonContains('a.styles', $input['style']);
         $total = $scope !== 'public' && $cursor === null ? (clone $query)->count() : null;
+        $backward = ($cursor['d'] ?? 'next') === 'previous';
+        $operator = $backward ? '>' : '<';
         if ($cursor !== null) {
-            $query->where(function ($q) use ($cursor, $orderColumn) {
-                $q->where($orderColumn, '<', $cursor['at'])->orWhere(function ($sameTime) use ($cursor, $orderColumn) {
-                    $sameTime->where($orderColumn, $cursor['at'])->where('a.id', '<', $cursor['id']);
+            $query->where(function ($q) use ($cursor, $orderColumn, $operator) {
+                $q->where($orderColumn, $operator, $cursor['at'])->orWhere(function ($sameTime) use ($cursor, $orderColumn, $operator) {
+                    $sameTime->where($orderColumn, $cursor['at'])->where('a.id', $operator, $cursor['id']);
                 });
             });
         }
         // 같은 초에 올라온 작품도 UUID로 순서를 고정한다. COUNT/OFFSET 없이 10개씩 조회한다.
-        $rows = $query->orderByDesc($orderColumn)->orderByDesc('a.id')->limit(11)->get();
+        $direction = $backward ? 'asc' : 'desc';
+        $rows = $query->orderBy($orderColumn, $direction)->orderBy('a.id', $direction)->limit(11)->get();
         $hasMore = $rows->count() > 10;
         $page = $rows->take(10)->values();
+        if ($backward) $page = $page->reverse()->values();
         $images = $page->isEmpty() ? collect() : $db->table('starttoo_artwork_images')
             ->whereIn('artwork_id', $page->pluck('id')->all())->orderBy('position')->get()->groupBy('artwork_id');
         $items = [];
@@ -91,11 +96,12 @@ class Artworks
             $photos = $images->get($row->id, collect());
             if ($photos->isNotEmpty()) $items[] = $this->format($row, $author, $photos, $options, $viewerId, $states[$row->id]);
         }
-        $last = $page->last();
-        $next = $hasMore && $last ? rtrim(strtr(base64_encode(json_encode([
-            'at' => $scope === 'saved' ? $last->saved_at : $last->created_at, 'id' => $last->id,
+        $encode = fn ($row, $d) => $row ? rtrim(strtr(base64_encode(json_encode([
+            'at' => $scope === 'saved' ? $row->saved_at : $row->created_at, 'id' => $row->id, 'd' => $d,
         ], JSON_THROW_ON_ERROR)), '+/', '-_'), '=') : null;
-        return ['items' => $items, 'next_cursor' => $next, 'styles' => $options['styles'], 'total' => $total];
+        $next = ($backward || $hasMore) ? $encode($page->last(), 'next') : null;
+        $previous = ($backward ? $hasMore : $cursor !== null) ? $encode($page->first(), 'previous') : null;
+        return ['items' => $items, 'next_cursor' => $next, 'previous_cursor' => $previous, 'styles' => $options['styles'], 'total' => $total];
     }
 
     public function create(string $token, array $input, array $files, AuthSessions $sessions): array
