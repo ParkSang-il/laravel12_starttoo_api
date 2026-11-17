@@ -5,6 +5,7 @@ namespace App\Services\Starttoo;
 use App\Services\ProjectDatabase;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
@@ -43,9 +44,14 @@ class Profiles
         $this->fail(503, 'NICKNAME_UNAVAILABLE', '닉네임을 준비하지 못했어요. 다시 시도해주세요.');
     }
 
-    public function save(string $token, array $input, AuthSessions $sessions): array
+    public function save(string $token, array $input, AuthSessions $sessions, ?UploadedFile $photo = null): array
     {
-        $sessions->authenticate($token);
+        $identity = $sessions->authenticate($token);
+        if ($photo !== null && Validator::make(['avatar' => $photo], [
+            'avatar' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=4096,max_height=4096'],
+        ])->fails()) {
+            $this->fail(422, 'INVALID_PROFILE_PHOTO', '사진은 JPG·PNG·WebP, 5MB 이하, 가로·세로 4096px 이하로 선택해주세요.');
+        }
         $options = $this->options();
         if (is_string($input['nickname'] ?? null)) {
             $input['nickname'] = strtolower(trim($input['nickname']));
@@ -61,8 +67,15 @@ class Profiles
         }
         $input = $validator->validated();
         $db = app(ProjectDatabase::class)->database();
+        if ($identity['account']['next_action'] === 'terms') {
+            $this->fail(409, 'PROFILE_TERMS_REQUIRED', '필수 약관에 먼저 동의해주세요.');
+        }
+        $photos = app(ProfilePhotos::class);
+        $newPath = $photo === null ? null : $photos->store($identity['account']['id'], $photo);
+        $oldPath = null;
+        $committed = false;
         try {
-            return $db->transaction(function () use ($db, $token, $input, $sessions) {
+            $result = $db->transaction(function () use ($db, $token, $input, $sessions, $newPath, &$oldPath) {
                 $identity = $sessions->authenticate($token);
                 $user = $db->table('starttoo_users')->where('id', $identity['account']['id'])->lockForUpdate()->first();
                 $sessions->authenticate($token);
@@ -72,24 +85,37 @@ class Profiles
                 if ($db->table('starttoo_users')->where('nickname', $input['nickname'])->where('id', '!=', $user->id)->exists()) {
                     $this->fail(409, 'NICKNAME_TAKEN', '이미 사용 중인 닉네임이에요. 다른 닉네임을 입력해주세요.');
                 }
+                $oldPath = $user->avatar_path;
                 $db->table('starttoo_users')->where('id', $user->id)->update([
                     'nickname' => $input['nickname'], 'display_name' => $input['nickname'],
                     'interest_styles' => json_encode(array_values($input['interest_styles']), JSON_THROW_ON_ERROR),
                     'interest_region' => $input['interest_region'],
+                    'avatar_path' => $newPath ?? $user->avatar_path,
                     'profile_completed_at' => $user->profile_completed_at ?? now(), 'updated_at' => now(),
                 ]);
                 // 한 회원 행에 덮어쓰므로 응답 유실 후 같은 요청을 재전송해도 중복 생성하지 않는다.
                 return $sessions->authenticate($token, true)['account'];
             }, 3);
+            $committed = true;
+            if ($newPath !== null) {
+                $photos->delete($oldPath);
+            }
+            return $result;
         } catch (UniqueConstraintViolationException $e) {
             // 서로 다른 회원의 동시 저장도 DB 유일 제약으로 보호한다.
             $this->fail(409, 'NICKNAME_TAKEN', '이미 사용 중인 닉네임이에요. 다른 닉네임을 입력해주세요.');
+        } finally {
+            if (!$committed) {
+                $photos->delete($newPath);
+            }
         }
     }
 
     private function values(object $user): array
     {
         return ['nickname' => $user->nickname,
+            'avatar_url' => $user->avatar_path === null ? null
+                : \Illuminate\Support\Facades\Storage::disk('starttoo')->temporaryUrl($user->avatar_path, now()->addHour()),
             'interest_styles' => $user->interest_styles === null ? [] : json_decode($user->interest_styles, true, 512, JSON_THROW_ON_ERROR),
             'interest_region' => $user->interest_region];
     }
