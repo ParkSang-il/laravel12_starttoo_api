@@ -169,6 +169,7 @@ class Artworks
                 $id = (string) Str::uuid();
                 $db->table('starttoo_artworks')->insert([
                     ...$values, 'styles' => json_encode($values['styles'], JSON_THROW_ON_ERROR),
+                    'tags' => json_encode(ArtworkHashtags::extract($values['description']), JSON_THROW_ON_ERROR),
                     'id' => $id, 'user_id' => $identity['account']['id'], 'request_key' => $valid['request_key'],
                     'payload_hash' => $hash, 'created_at' => now(), 'updated_at' => now(),
                 ]);
@@ -209,6 +210,7 @@ class Artworks
         $styles = json_decode($row->styles, true, 512, JSON_THROW_ON_ERROR);
         $label = fn ($list, $value) => collect($list)->firstWhere('id', $value)['label'] ?? null;
         return ['id' => $row->id, 'kind' => $row->kind, 'title' => $row->title, 'description' => $row->description ?? '',
+            'tags' => isset($row->tags) ? json_decode($row->tags, true, 512, JSON_THROW_ON_ERROR) : ArtworkHashtags::extract($row->description ?? ''),
             'viewer_id' => $viewerId, 'interaction' => $state ?? app(ArtworkInteractions::class)->states([$row->id], $viewerId)[$row->id],
             'size_text' => $row->size_text, 'visibility' => $row->visibility, 'version' => (int) $row->version,
             'can_edit' => $viewerId !== null && (int) $row->user_id === $viewerId,

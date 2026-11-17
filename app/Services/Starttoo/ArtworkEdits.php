@@ -90,6 +90,7 @@ class ArtworkEdits
                 }
                 $db->table('starttoo_artworks')->where('id', $id)->update([
                     'kind' => $input['kind'], 'title' => $input['title'], 'description' => $input['description'] ?? '', 'size_text' => $input['size_text'] ?? null,
+                    'tags' => json_encode(ArtworkHashtags::extract($input['description'] ?? ''), JSON_THROW_ON_ERROR),
                     'styles' => json_encode($input['styles'], JSON_THROW_ON_ERROR), 'body_part' => $input['body_part'] ?? null, 'color' => $input['color'] ?? null,
                     'duration_minutes' => $input['kind'] === 'work' ? ($input['duration_minutes'] ?? null) : null,
                     'price' => $input['kind'] === 'design' ? $input['price'] : null, 'show_in_shop' => $input['show_in_shop'],
