@@ -22,6 +22,8 @@ class Profiles
         $user = app(ProjectDatabase::class)->database()->table('starttoo_users')->where('id', $identity['account']['id'])->first();
 
         return [...$this->options(), 'account' => $identity['account'],
+            'connected_providers' => app(ProjectDatabase::class)->database()->table('starttoo_auth_identities')
+                ->where('user_id', $user->id)->orderBy('provider')->distinct()->pluck('provider')->all(),
             'profile' => $this->values($user),
             'suggested_nickname' => $user->nickname ?? $this->suggestNickname()];
     }
@@ -61,6 +63,7 @@ class Profiles
             'interest_styles' => ['present', 'array', 'max:5'],
             'interest_styles.*' => ['required', 'string', 'distinct', Rule::in(array_column($options['styles'], 'id'))],
             'interest_region' => ['required', 'string', Rule::in(array_column($options['regions'], 'id'))],
+            'bio' => ['sometimes', 'nullable', 'string', 'max:150'],
         ]);
         if ($validator->fails() || !array_is_list($input['interest_styles'] ?? [])) {
             $this->fail(422, 'INVALID_PROFILE', '닉네임(한글·영문·숫자 2~20자), 관심 스타일 최대 5개와 지역을 확인해주세요.');
@@ -91,6 +94,7 @@ class Profiles
                     'interest_styles' => json_encode(array_values($input['interest_styles']), JSON_THROW_ON_ERROR),
                     'interest_region' => $input['interest_region'],
                     'avatar_path' => $newPath ?? $user->avatar_path,
+                    'bio' => array_key_exists('bio', $input) ? ($input['bio'] ?? '') : $user->bio,
                     'profile_completed_at' => $user->profile_completed_at ?? now(), 'updated_at' => now(),
                 ]);
                 // 한 회원 행에 덮어쓰므로 응답 유실 후 같은 요청을 재전송해도 중복 생성하지 않는다.
@@ -114,6 +118,7 @@ class Profiles
     private function values(object $user): array
     {
         return ['nickname' => $user->nickname,
+            'bio' => $user->bio ?? '',
             'avatar_url' => $user->avatar_path === null ? null
                 : \Illuminate\Support\Facades\Storage::disk('starttoo')->temporaryUrl($user->avatar_path, now()->addHour()),
             'interest_styles' => $user->interest_styles === null ? [] : json_decode($user->interest_styles, true, 512, JSON_THROW_ON_ERROR),
