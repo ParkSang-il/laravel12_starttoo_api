@@ -30,7 +30,7 @@ class Artworks
         return $identity;
     }
 
-    public function feed(array $input, ?int $viewerId = null): array
+    public function feed(array $input, ?int $viewerId = null, ?int $authorId = null): array
     {
         $options = $this->options();
         $validator = Validator::make($input, [
@@ -62,6 +62,7 @@ class Artworks
                 'u.interest_region as author_region', 'u.avatar_path as author_avatar');
         if ($scope === 'mine') $query->where('a.user_id', $viewerId);
         else $query->where('a.visibility', 'public');
+        if ($authorId !== null) $query->where('a.user_id', $authorId);
         $orderColumn = 'a.created_at';
         if ($scope === 'saved') {
             $query->join('starttoo_artwork_interactions as s', function ($join) use ($viewerId) {
@@ -70,7 +71,7 @@ class Artworks
             $orderColumn = 's.created_at';
         }
         if (!empty($input['style'])) $query->whereJsonContains('a.styles', $input['style']);
-        $total = $scope !== 'public' && $cursor === null ? (clone $query)->count() : null;
+        $total = ($scope !== 'public' || $authorId !== null) && $cursor === null ? (clone $query)->count() : null;
         $backward = ($cursor['d'] ?? 'next') === 'previous';
         $operator = $backward ? '>' : '<';
         if ($cursor !== null) {

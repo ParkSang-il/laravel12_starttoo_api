@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 
 require __DIR__.'/starttoo_auth.php';
 require __DIR__.'/starttoo_artworks.php';
+require __DIR__.'/starttoo_profiles.php';
 
 Route::prefix('v1/projects/{projectCode}')
     ->where(['projectCode' => '[a-z][a-z0-9-]{1,49}'])
