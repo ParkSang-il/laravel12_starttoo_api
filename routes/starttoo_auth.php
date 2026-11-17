@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\StarttooAuthController;
 use App\Http\Controllers\StarttooTermsController;
+use App\Http\Controllers\StarttooProfileController;
 use App\Http\Middleware\StarttooDatabase;
 use Illuminate\Support\Facades\Route;
 
@@ -13,5 +14,7 @@ Route::prefix('v1/projects/starttoo/auth')->middleware([StarttooDatabase::class]
     Route::get('me', [StarttooAuthController::class, 'me']);
     Route::get('terms', [StarttooTermsController::class, 'index']);
     Route::post('terms', [StarttooTermsController::class, 'store']);
+    Route::get('profile', [StarttooProfileController::class, 'show']);
+    Route::post('profile', [StarttooProfileController::class, 'store']);
     Route::post('logout', [StarttooAuthController::class, 'logout']);
 });
