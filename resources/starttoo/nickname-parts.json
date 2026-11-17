@@ -1,0 +1,1946 @@
+{
+  "adjectives": [
+    {
+      "id": 1,
+      "word": "깊은",
+      "category": "dark"
+    },
+    {
+      "id": 2,
+      "word": "짙은",
+      "category": "dark"
+    },
+    {
+      "id": 3,
+      "word": "어두운",
+      "category": "dark"
+    },
+    {
+      "id": 4,
+      "word": "차가운",
+      "category": "dark"
+    },
+    {
+      "id": 5,
+      "word": "무거운",
+      "category": "dark"
+    },
+    {
+      "id": 6,
+      "word": "날카로운",
+      "category": "bold"
+    },
+    {
+      "id": 7,
+      "word": "거친",
+      "category": "bold"
+    },
+    {
+      "id": 8,
+      "word": "단단한",
+      "category": "bold"
+    },
+    {
+      "id": 9,
+      "word": "강렬한",
+      "category": "bold"
+    },
+    {
+      "id": 10,
+      "word": "거침없는",
+      "category": "bold"
+    },
+    {
+      "id": 11,
+      "word": "묵직한",
+      "category": "bold"
+    },
+    {
+      "id": 12,
+      "word": "선명한",
+      "category": "bold"
+    },
+    {
+      "id": 13,
+      "word": "도드라진",
+      "category": "bold"
+    },
+    {
+      "id": 14,
+      "word": "뚜렷한",
+      "category": "bold"
+    },
+    {
+      "id": 15,
+      "word": "날렵한",
+      "category": "bold"
+    },
+    {
+      "id": 16,
+      "word": "불안한",
+      "category": "dark"
+    },
+    {
+      "id": 17,
+      "word": "위태로운",
+      "category": "dark"
+    },
+    {
+      "id": 18,
+      "word": "뒤틀린",
+      "category": "edgy"
+    },
+    {
+      "id": 19,
+      "word": "뒤엉킨",
+      "category": "edgy"
+    },
+    {
+      "id": 20,
+      "word": "부드러운",
+      "category": "soft"
+    },
+    {
+      "id": 21,
+      "word": "고요한",
+      "category": "soft"
+    },
+    {
+      "id": 22,
+      "word": "잔잔한",
+      "category": "soft"
+    },
+    {
+      "id": 23,
+      "word": "은은한",
+      "category": "soft"
+    },
+    {
+      "id": 24,
+      "word": "조용한",
+      "category": "soft"
+    },
+    {
+      "id": 25,
+      "word": "따뜻한",
+      "category": "soft"
+    },
+    {
+      "id": 26,
+      "word": "가벼운",
+      "category": "soft"
+    },
+    {
+      "id": 27,
+      "word": "포근한",
+      "category": "soft"
+    },
+    {
+      "id": 28,
+      "word": "유연한",
+      "category": "soft"
+    },
+    {
+      "id": 29,
+      "word": "섬세한",
+      "category": "soft"
+    },
+    {
+      "id": 30,
+      "word": "차분한",
+      "category": "soft"
+    },
+    {
+      "id": 31,
+      "word": "아늑한",
+      "category": "soft"
+    },
+    {
+      "id": 32,
+      "word": "고급스러운",
+      "category": "soft"
+    },
+    {
+      "id": 33,
+      "word": "여린",
+      "category": "soft"
+    },
+    {
+      "id": 34,
+      "word": "담담한",
+      "category": "soft"
+    },
+    {
+      "id": 35,
+      "word": "조심스러운",
+      "category": "soft"
+    },
+    {
+      "id": 36,
+      "word": "흐릿한",
+      "category": "mystic"
+    },
+    {
+      "id": 37,
+      "word": "희미한",
+      "category": "mystic"
+    },
+    {
+      "id": 38,
+      "word": "아른한",
+      "category": "mystic"
+    },
+    {
+      "id": 39,
+      "word": "비밀스러운",
+      "category": "mystic"
+    },
+    {
+      "id": 40,
+      "word": "낯선",
+      "category": "mystic"
+    },
+    {
+      "id": 41,
+      "word": "기묘한",
+      "category": "mystic"
+    },
+    {
+      "id": 42,
+      "word": "몽환적인",
+      "category": "mystic"
+    },
+    {
+      "id": 43,
+      "word": "이상한",
+      "category": "mystic"
+    },
+    {
+      "id": 44,
+      "word": "숨겨진",
+      "category": "mystic"
+    },
+    {
+      "id": 45,
+      "word": "감춰진",
+      "category": "mystic"
+    },
+    {
+      "id": 46,
+      "word": "사라지는",
+      "category": "mystic"
+    },
+    {
+      "id": 47,
+      "word": "흐느끼는",
+      "category": "mystic"
+    },
+    {
+      "id": 48,
+      "word": "잠든",
+      "category": "mystic"
+    },
+    {
+      "id": 49,
+      "word": "깨어난",
+      "category": "mystic"
+    },
+    {
+      "id": 50,
+      "word": "타오르는",
+      "category": "fire"
+    },
+    {
+      "id": 51,
+      "word": "식지않는",
+      "category": "fire"
+    },
+    {
+      "id": 52,
+      "word": "뜨거운",
+      "category": "fire"
+    },
+    {
+      "id": 53,
+      "word": "불붙은",
+      "category": "fire"
+    },
+    {
+      "id": 54,
+      "word": "숨막히는",
+      "category": "fire"
+    },
+    {
+      "id": 55,
+      "word": "자유로운",
+      "category": "free"
+    },
+    {
+      "id": 56,
+      "word": "즉흥적인",
+      "category": "free"
+    },
+    {
+      "id": 57,
+      "word": "방황하는",
+      "category": "free"
+    },
+    {
+      "id": 58,
+      "word": "헝클어진",
+      "category": "free"
+    },
+    {
+      "id": 59,
+      "word": "번지는",
+      "category": "extra"
+    },
+    {
+      "id": 60,
+      "word": "흩어진",
+      "category": "extra"
+    },
+    {
+      "id": 61,
+      "word": "남겨진",
+      "category": "extra"
+    },
+    {
+      "id": 62,
+      "word": "메마른",
+      "category": "extra"
+    },
+    {
+      "id": 63,
+      "word": "조각난",
+      "category": "extra"
+    },
+    {
+      "id": 64,
+      "word": "무너진",
+      "category": "extra"
+    },
+    {
+      "id": 65,
+      "word": "비틀린",
+      "category": "extra"
+    },
+    {
+      "id": 66,
+      "word": "스치는",
+      "category": "extra"
+    },
+    {
+      "id": 67,
+      "word": "묶인",
+      "category": "extra"
+    },
+    {
+      "id": 68,
+      "word": "엮인",
+      "category": "extra"
+    },
+    {
+      "id": 69,
+      "word": "부서진",
+      "category": "extra"
+    },
+    {
+      "id": 70,
+      "word": "잔혹한",
+      "category": "extra"
+    },
+    {
+      "id": 71,
+      "word": "쓸쓸한",
+      "category": "extra"
+    },
+    {
+      "id": 72,
+      "word": "침울한",
+      "category": "dark"
+    },
+    {
+      "id": 73,
+      "word": "적막한",
+      "category": "dark"
+    },
+    {
+      "id": 74,
+      "word": "서늘한",
+      "category": "dark"
+    },
+    {
+      "id": 75,
+      "word": "그늘진",
+      "category": "dark"
+    },
+    {
+      "id": 76,
+      "word": "멍든",
+      "category": "dark"
+    },
+    {
+      "id": 77,
+      "word": "얼어붙은",
+      "category": "dark"
+    },
+    {
+      "id": 78,
+      "word": "칠흑같은",
+      "category": "dark"
+    },
+    {
+      "id": 79,
+      "word": "심연의",
+      "category": "dark"
+    },
+    {
+      "id": 80,
+      "word": "고독한",
+      "category": "dark"
+    },
+    {
+      "id": 81,
+      "word": "가라앉은",
+      "category": "dark"
+    },
+    {
+      "id": 82,
+      "word": "비명지르는",
+      "category": "dark"
+    },
+    {
+      "id": 83,
+      "word": "잠긴",
+      "category": "dark"
+    },
+    {
+      "id": 84,
+      "word": "무감각한",
+      "category": "dark"
+    },
+    {
+      "id": 85,
+      "word": "공허한",
+      "category": "dark"
+    },
+    {
+      "id": 86,
+      "word": "잿빛의",
+      "category": "dark"
+    },
+    {
+      "id": 87,
+      "word": "압도적인",
+      "category": "bold"
+    },
+    {
+      "id": 88,
+      "word": "웅장한",
+      "category": "bold"
+    },
+    {
+      "id": 89,
+      "word": "절대적인",
+      "category": "bold"
+    },
+    {
+      "id": 90,
+      "word": "파괴적인",
+      "category": "bold"
+    },
+    {
+      "id": 91,
+      "word": "맹렬한",
+      "category": "bold"
+    },
+    {
+      "id": 92,
+      "word": "견고한",
+      "category": "bold"
+    },
+    {
+      "id": 93,
+      "word": "철벽같은",
+      "category": "bold"
+    },
+    {
+      "id": 94,
+      "word": "광활한",
+      "category": "bold"
+    },
+    {
+      "id": 95,
+      "word": "육중한",
+      "category": "bold"
+    },
+    {
+      "id": 96,
+      "word": "적나라한",
+      "category": "bold"
+    },
+    {
+      "id": 97,
+      "word": "원초적인",
+      "category": "bold"
+    },
+    {
+      "id": 98,
+      "word": "야생의",
+      "category": "bold"
+    },
+    {
+      "id": 99,
+      "word": "무한한",
+      "category": "bold"
+    },
+    {
+      "id": 100,
+      "word": "거대한",
+      "category": "bold"
+    },
+    {
+      "id": 101,
+      "word": "삐딱한",
+      "category": "edgy"
+    },
+    {
+      "id": 102,
+      "word": "날선",
+      "category": "edgy"
+    },
+    {
+      "id": 103,
+      "word": "녹슨",
+      "category": "edgy"
+    },
+    {
+      "id": 104,
+      "word": "찢겨진",
+      "category": "edgy"
+    },
+    {
+      "id": 105,
+      "word": "긁힌",
+      "category": "edgy"
+    },
+    {
+      "id": 106,
+      "word": "중독된",
+      "category": "edgy"
+    },
+    {
+      "id": 107,
+      "word": "미친",
+      "category": "edgy"
+    },
+    {
+      "id": 108,
+      "word": "금지된",
+      "category": "edgy"
+    },
+    {
+      "id": 109,
+      "word": "위험한",
+      "category": "edgy"
+    },
+    {
+      "id": 110,
+      "word": "수줍은",
+      "category": "soft"
+    },
+    {
+      "id": 111,
+      "word": "나른한",
+      "category": "soft"
+    },
+    {
+      "id": 112,
+      "word": "그리운",
+      "category": "soft"
+    },
+    {
+      "id": 113,
+      "word": "애틋한",
+      "category": "soft"
+    },
+    {
+      "id": 114,
+      "word": "설레는",
+      "category": "soft"
+    },
+    {
+      "id": 115,
+      "word": "순수한",
+      "category": "soft"
+    },
+    {
+      "id": 116,
+      "word": "투명한",
+      "category": "soft"
+    },
+    {
+      "id": 117,
+      "word": "맑은",
+      "category": "soft"
+    },
+    {
+      "id": 118,
+      "word": "물든",
+      "category": "soft"
+    },
+    {
+      "id": 119,
+      "word": "번진",
+      "category": "soft"
+    },
+    {
+      "id": 120,
+      "word": "안온한",
+      "category": "soft"
+    },
+    {
+      "id": 121,
+      "word": "평온한",
+      "category": "soft"
+    },
+    {
+      "id": 122,
+      "word": "다정한",
+      "category": "soft"
+    },
+    {
+      "id": 123,
+      "word": "달콤한",
+      "category": "soft"
+    },
+    {
+      "id": 124,
+      "word": "우아한",
+      "category": "soft"
+    },
+    {
+      "id": 125,
+      "word": "오묘한",
+      "category": "mystic"
+    },
+    {
+      "id": 126,
+      "word": "홀린",
+      "category": "mystic"
+    },
+    {
+      "id": 127,
+      "word": "취한",
+      "category": "mystic"
+    },
+    {
+      "id": 128,
+      "word": "감긴",
+      "category": "mystic"
+    },
+    {
+      "id": 129,
+      "word": "보이지않는",
+      "category": "mystic"
+    },
+    {
+      "id": 130,
+      "word": "사라진",
+      "category": "mystic"
+    },
+    {
+      "id": 131,
+      "word": "끝없는",
+      "category": "mystic"
+    },
+    {
+      "id": 132,
+      "word": "무형의",
+      "category": "mystic"
+    },
+    {
+      "id": 133,
+      "word": "초월한",
+      "category": "mystic"
+    },
+    {
+      "id": 134,
+      "word": "심오한",
+      "category": "mystic"
+    },
+    {
+      "id": 135,
+      "word": "신성한",
+      "category": "mystic"
+    },
+    {
+      "id": 136,
+      "word": "폭발하는",
+      "category": "fire"
+    },
+    {
+      "id": 137,
+      "word": "삼키는",
+      "category": "fire"
+    },
+    {
+      "id": 138,
+      "word": "끓어오르는",
+      "category": "fire"
+    },
+    {
+      "id": 139,
+      "word": "성난",
+      "category": "fire"
+    },
+    {
+      "id": 140,
+      "word": "붉은",
+      "category": "fire"
+    },
+    {
+      "id": 141,
+      "word": "열광하는",
+      "category": "fire"
+    },
+    {
+      "id": 142,
+      "word": "버려진",
+      "category": "extra"
+    },
+    {
+      "id": 143,
+      "word": "잊혀진",
+      "category": "extra"
+    },
+    {
+      "id": 144,
+      "word": "잃어버린",
+      "category": "extra"
+    },
+    {
+      "id": 145,
+      "word": "떨어지는",
+      "category": "extra"
+    },
+    {
+      "id": 146,
+      "word": "부유하는",
+      "category": "extra"
+    },
+    {
+      "id": 147,
+      "word": "유일한",
+      "category": "extra"
+    },
+    {
+      "id": 148,
+      "word": "완벽한",
+      "category": "extra"
+    }
+  ],
+  "nouns": [
+    {
+      "id": 1,
+      "word": "잉크",
+      "category": "ink"
+    },
+    {
+      "id": 2,
+      "word": "먹물",
+      "category": "ink"
+    },
+    {
+      "id": 3,
+      "word": "흑잔",
+      "category": "ink"
+    },
+    {
+      "id": 4,
+      "word": "바늘",
+      "category": "tool"
+    },
+    {
+      "id": 5,
+      "word": "니들",
+      "category": "tool"
+    },
+    {
+      "id": 6,
+      "word": "침",
+      "category": "tool"
+    },
+    {
+      "id": 7,
+      "word": "라인",
+      "category": "art"
+    },
+    {
+      "id": 8,
+      "word": "선",
+      "category": "art"
+    },
+    {
+      "id": 9,
+      "word": "점",
+      "category": "art"
+    },
+    {
+      "id": 10,
+      "word": "도트",
+      "category": "art"
+    },
+    {
+      "id": 11,
+      "word": "스케치",
+      "category": "art"
+    },
+    {
+      "id": 12,
+      "word": "드로잉",
+      "category": "art"
+    },
+    {
+      "id": 13,
+      "word": "낙서",
+      "category": "art"
+    },
+    {
+      "id": 14,
+      "word": "실루엣",
+      "category": "art"
+    },
+    {
+      "id": 15,
+      "word": "그림자",
+      "category": "art"
+    },
+    {
+      "id": 16,
+      "word": "문양",
+      "category": "art"
+    },
+    {
+      "id": 17,
+      "word": "패턴",
+      "category": "art"
+    },
+    {
+      "id": 18,
+      "word": "레이어",
+      "category": "art"
+    },
+    {
+      "id": 19,
+      "word": "캔버스",
+      "category": "art"
+    },
+    {
+      "id": 20,
+      "word": "팔레트",
+      "category": "art"
+    },
+    {
+      "id": 21,
+      "word": "레이아웃",
+      "category": "art"
+    },
+    {
+      "id": 22,
+      "word": "이름",
+      "category": "text"
+    },
+    {
+      "id": 23,
+      "word": "단어",
+      "category": "text"
+    },
+    {
+      "id": 24,
+      "word": "문장",
+      "category": "text"
+    },
+    {
+      "id": 25,
+      "word": "메시지",
+      "category": "text"
+    },
+    {
+      "id": 26,
+      "word": "속삭임",
+      "category": "text"
+    },
+    {
+      "id": 27,
+      "word": "약속",
+      "category": "symbol"
+    },
+    {
+      "id": 28,
+      "word": "비밀",
+      "category": "symbol"
+    },
+    {
+      "id": 29,
+      "word": "운명",
+      "category": "symbol"
+    },
+    {
+      "id": 30,
+      "word": "징표",
+      "category": "symbol"
+    },
+    {
+      "id": 31,
+      "word": "상징",
+      "category": "symbol"
+    },
+    {
+      "id": 32,
+      "word": "흔적",
+      "category": "symbol"
+    },
+    {
+      "id": 33,
+      "word": "표식",
+      "category": "symbol"
+    },
+    {
+      "id": 34,
+      "word": "흉장",
+      "category": "symbol"
+    },
+    {
+      "id": 35,
+      "word": "피부",
+      "category": "body"
+    },
+    {
+      "id": 36,
+      "word": "심장",
+      "category": "body"
+    },
+    {
+      "id": 37,
+      "word": "갈비뼈",
+      "category": "body"
+    },
+    {
+      "id": 38,
+      "word": "손목",
+      "category": "body"
+    },
+    {
+      "id": 39,
+      "word": "손등",
+      "category": "body"
+    },
+    {
+      "id": 40,
+      "word": "팔뚝",
+      "category": "body"
+    },
+    {
+      "id": 41,
+      "word": "어깨",
+      "category": "body"
+    },
+    {
+      "id": 42,
+      "word": "쇄골",
+      "category": "body"
+    },
+    {
+      "id": 43,
+      "word": "목선",
+      "category": "body"
+    },
+    {
+      "id": 44,
+      "word": "숨결",
+      "category": "body"
+    },
+    {
+      "id": 45,
+      "word": "눈물",
+      "category": "body"
+    },
+    {
+      "id": 46,
+      "word": "상처",
+      "category": "body"
+    },
+    {
+      "id": 47,
+      "word": "흉터",
+      "category": "body"
+    },
+    {
+      "id": 48,
+      "word": "숨",
+      "category": "body"
+    },
+    {
+      "id": 49,
+      "word": "새벽",
+      "category": "time"
+    },
+    {
+      "id": 50,
+      "word": "밤",
+      "category": "time"
+    },
+    {
+      "id": 51,
+      "word": "한밤",
+      "category": "time"
+    },
+    {
+      "id": 52,
+      "word": "황혼",
+      "category": "time"
+    },
+    {
+      "id": 53,
+      "word": "노을",
+      "category": "time"
+    },
+    {
+      "id": 54,
+      "word": "저녁빛",
+      "category": "time"
+    },
+    {
+      "id": 55,
+      "word": "달빛",
+      "category": "time"
+    },
+    {
+      "id": 56,
+      "word": "별빛",
+      "category": "time"
+    },
+    {
+      "id": 57,
+      "word": "첫빛",
+      "category": "time"
+    },
+    {
+      "id": 58,
+      "word": "어둠",
+      "category": "time"
+    },
+    {
+      "id": 59,
+      "word": "틈새",
+      "category": "time"
+    },
+    {
+      "id": 60,
+      "word": "파도",
+      "category": "nature"
+    },
+    {
+      "id": 61,
+      "word": "바람",
+      "category": "nature"
+    },
+    {
+      "id": 62,
+      "word": "비",
+      "category": "nature"
+    },
+    {
+      "id": 63,
+      "word": "안개",
+      "category": "nature"
+    },
+    {
+      "id": 64,
+      "word": "구름",
+      "category": "nature"
+    },
+    {
+      "id": 65,
+      "word": "꽃잎",
+      "category": "nature"
+    },
+    {
+      "id": 66,
+      "word": "가시",
+      "category": "nature"
+    },
+    {
+      "id": 67,
+      "word": "연기",
+      "category": "nature"
+    },
+    {
+      "id": 68,
+      "word": "불꽃",
+      "category": "nature"
+    },
+    {
+      "id": 69,
+      "word": "불씨",
+      "category": "nature"
+    },
+    {
+      "id": 70,
+      "word": "별자리",
+      "category": "nature"
+    },
+    {
+      "id": 71,
+      "word": "초승달",
+      "category": "nature"
+    },
+    {
+      "id": 72,
+      "word": "로터스",
+      "category": "nature"
+    },
+    {
+      "id": 73,
+      "word": "로즈",
+      "category": "nature"
+    },
+    {
+      "id": 74,
+      "word": "피오니",
+      "category": "nature"
+    },
+    {
+      "id": 75,
+      "word": "사막",
+      "category": "nature"
+    },
+    {
+      "id": 76,
+      "word": "숲",
+      "category": "nature"
+    },
+    {
+      "id": 77,
+      "word": "바다",
+      "category": "nature"
+    },
+    {
+      "id": 78,
+      "word": "조류",
+      "category": "nature"
+    },
+    {
+      "id": 79,
+      "word": "잔디",
+      "category": "nature"
+    },
+    {
+      "id": 80,
+      "word": "골목",
+      "category": "place"
+    },
+    {
+      "id": 81,
+      "word": "지하",
+      "category": "place"
+    },
+    {
+      "id": 82,
+      "word": "옥상",
+      "category": "place"
+    },
+    {
+      "id": 83,
+      "word": "스튜디오",
+      "category": "place"
+    },
+    {
+      "id": 84,
+      "word": "공터",
+      "category": "place"
+    },
+    {
+      "id": 85,
+      "word": "교차로",
+      "category": "place"
+    },
+    {
+      "id": 86,
+      "word": "갤러리",
+      "category": "place"
+    },
+    {
+      "id": 87,
+      "word": "공방",
+      "category": "place"
+    },
+    {
+      "id": 88,
+      "word": "무대",
+      "category": "place"
+    },
+    {
+      "id": 89,
+      "word": "통로",
+      "category": "place"
+    },
+    {
+      "id": 90,
+      "word": "기억",
+      "category": "concept"
+    },
+    {
+      "id": 91,
+      "word": "기록",
+      "category": "concept"
+    },
+    {
+      "id": 92,
+      "word": "조각",
+      "category": "concept"
+    },
+    {
+      "id": 93,
+      "word": "파편",
+      "category": "concept"
+    },
+    {
+      "id": 94,
+      "word": "악몽",
+      "category": "concept"
+    },
+    {
+      "id": 95,
+      "word": "꿈",
+      "category": "concept"
+    },
+    {
+      "id": 96,
+      "word": "환상",
+      "category": "concept"
+    },
+    {
+      "id": 97,
+      "word": "이야기",
+      "category": "concept"
+    },
+    {
+      "id": 98,
+      "word": "고백",
+      "category": "concept"
+    },
+    {
+      "id": 99,
+      "word": "시선",
+      "category": "concept"
+    },
+    {
+      "id": 100,
+      "word": "손길",
+      "category": "concept"
+    },
+    {
+      "id": 101,
+      "word": "질감",
+      "category": "concept"
+    },
+    {
+      "id": 102,
+      "word": "대비",
+      "category": "concept"
+    },
+    {
+      "id": 103,
+      "word": "초점",
+      "category": "concept"
+    },
+    {
+      "id": 104,
+      "word": "경계",
+      "category": "concept"
+    },
+    {
+      "id": 105,
+      "word": "균열",
+      "category": "concept"
+    },
+    {
+      "id": 106,
+      "word": "울림",
+      "category": "concept"
+    },
+    {
+      "id": 107,
+      "word": "속도",
+      "category": "concept"
+    },
+    {
+      "id": 108,
+      "word": "호흡",
+      "category": "concept"
+    },
+    {
+      "id": 109,
+      "word": "흐름",
+      "category": "concept"
+    },
+    {
+      "id": 110,
+      "word": "중력",
+      "category": "concept"
+    },
+    {
+      "id": 111,
+      "word": "공명",
+      "category": "concept"
+    },
+    {
+      "id": 112,
+      "word": "안료",
+      "category": "ink"
+    },
+    {
+      "id": 113,
+      "word": "피그먼트",
+      "category": "ink"
+    },
+    {
+      "id": 114,
+      "word": "명암",
+      "category": "ink"
+    },
+    {
+      "id": 115,
+      "word": "농도",
+      "category": "ink"
+    },
+    {
+      "id": 116,
+      "word": "그라데이션",
+      "category": "ink"
+    },
+    {
+      "id": 117,
+      "word": "블랙",
+      "category": "ink"
+    },
+    {
+      "id": 118,
+      "word": "컬러",
+      "category": "ink"
+    },
+    {
+      "id": 119,
+      "word": "수묵",
+      "category": "ink"
+    },
+    {
+      "id": 120,
+      "word": "머신",
+      "category": "tool"
+    },
+    {
+      "id": 121,
+      "word": "장갑",
+      "category": "tool"
+    },
+    {
+      "id": 122,
+      "word": "전사",
+      "category": "tool"
+    },
+    {
+      "id": 123,
+      "word": "소독",
+      "category": "tool"
+    },
+    {
+      "id": 124,
+      "word": "그립",
+      "category": "tool"
+    },
+    {
+      "id": 125,
+      "word": "팁",
+      "category": "tool"
+    },
+    {
+      "id": 126,
+      "word": "진동",
+      "category": "tool"
+    },
+    {
+      "id": 127,
+      "word": "소음",
+      "category": "tool"
+    },
+    {
+      "id": 128,
+      "word": "도안",
+      "category": "art"
+    },
+    {
+      "id": 129,
+      "word": "작품",
+      "category": "art"
+    },
+    {
+      "id": 130,
+      "word": "걸작",
+      "category": "art"
+    },
+    {
+      "id": 131,
+      "word": "습작",
+      "category": "art"
+    },
+    {
+      "id": 132,
+      "word": "초상",
+      "category": "art"
+    },
+    {
+      "id": 133,
+      "word": "추상",
+      "category": "art"
+    },
+    {
+      "id": 134,
+      "word": "장르",
+      "category": "art"
+    },
+    {
+      "id": 135,
+      "word": "오브제",
+      "category": "art"
+    },
+    {
+      "id": 136,
+      "word": "미학",
+      "category": "art"
+    },
+    {
+      "id": 137,
+      "word": "마무리",
+      "category": "art"
+    },
+    {
+      "id": 138,
+      "word": "터치",
+      "category": "art"
+    },
+    {
+      "id": 139,
+      "word": "이니셜",
+      "category": "text"
+    },
+    {
+      "id": 140,
+      "word": "숫자",
+      "category": "text"
+    },
+    {
+      "id": 141,
+      "word": "레터링",
+      "category": "text"
+    },
+    {
+      "id": 142,
+      "word": "서체",
+      "category": "text"
+    },
+    {
+      "id": 143,
+      "word": "암호",
+      "category": "text"
+    },
+    {
+      "id": 144,
+      "word": "일기",
+      "category": "text"
+    },
+    {
+      "id": 145,
+      "word": "시",
+      "category": "text"
+    },
+    {
+      "id": 146,
+      "word": "가사",
+      "category": "text"
+    },
+    {
+      "id": 147,
+      "word": "명언",
+      "category": "text"
+    },
+    {
+      "id": 148,
+      "word": "나비",
+      "category": "symbol"
+    },
+    {
+      "id": 149,
+      "word": "거미",
+      "category": "symbol"
+    },
+    {
+      "id": 150,
+      "word": "해골",
+      "category": "symbol"
+    },
+    {
+      "id": 151,
+      "word": "십자가",
+      "category": "symbol"
+    },
+    {
+      "id": 152,
+      "word": "왕관",
+      "category": "symbol"
+    },
+    {
+      "id": 153,
+      "word": "다이아",
+      "category": "symbol"
+    },
+    {
+      "id": 154,
+      "word": "단검",
+      "category": "symbol"
+    },
+    {
+      "id": 155,
+      "word": "검",
+      "category": "symbol"
+    },
+    {
+      "id": 156,
+      "word": "활",
+      "category": "symbol"
+    },
+    {
+      "id": 157,
+      "word": "화살",
+      "category": "symbol"
+    },
+    {
+      "id": 158,
+      "word": "닻",
+      "category": "symbol"
+    },
+    {
+      "id": 159,
+      "word": "나침반",
+      "category": "symbol"
+    },
+    {
+      "id": 160,
+      "word": "시계",
+      "category": "symbol"
+    },
+    {
+      "id": 161,
+      "word": "열쇠",
+      "category": "symbol"
+    },
+    {
+      "id": 162,
+      "word": "자물쇠",
+      "category": "symbol"
+    },
+    {
+      "id": 163,
+      "word": "가면",
+      "category": "symbol"
+    },
+    {
+      "id": 164,
+      "word": "인형",
+      "category": "symbol"
+    },
+    {
+      "id": 165,
+      "word": "날개",
+      "category": "symbol"
+    },
+    {
+      "id": 166,
+      "word": "깃털",
+      "category": "symbol"
+    },
+    {
+      "id": 167,
+      "word": "뱀",
+      "category": "symbol"
+    },
+    {
+      "id": 168,
+      "word": "용",
+      "category": "symbol"
+    },
+    {
+      "id": 169,
+      "word": "호랑이",
+      "category": "symbol"
+    },
+    {
+      "id": 170,
+      "word": "사자",
+      "category": "symbol"
+    },
+    {
+      "id": 171,
+      "word": "늑대",
+      "category": "symbol"
+    },
+    {
+      "id": 172,
+      "word": "고래",
+      "category": "symbol"
+    },
+    {
+      "id": 173,
+      "word": "잉어",
+      "category": "symbol"
+    },
+    {
+      "id": 174,
+      "word": "살결",
+      "category": "body"
+    },
+    {
+      "id": 175,
+      "word": "피",
+      "category": "body"
+    },
+    {
+      "id": 176,
+      "word": "뼈",
+      "category": "body"
+    },
+    {
+      "id": 177,
+      "word": "등",
+      "category": "body"
+    },
+    {
+      "id": 178,
+      "word": "허리",
+      "category": "body"
+    },
+    {
+      "id": 179,
+      "word": "허벅지",
+      "category": "body"
+    },
+    {
+      "id": 180,
+      "word": "발목",
+      "category": "body"
+    },
+    {
+      "id": 181,
+      "word": "손가락",
+      "category": "body"
+    },
+    {
+      "id": 182,
+      "word": "입술",
+      "category": "body"
+    },
+    {
+      "id": 183,
+      "word": "눈동자",
+      "category": "body"
+    },
+    {
+      "id": 184,
+      "word": "지문",
+      "category": "body"
+    },
+    {
+      "id": 185,
+      "word": "체온",
+      "category": "body"
+    },
+    {
+      "id": 186,
+      "word": "맥박",
+      "category": "body"
+    },
+    {
+      "id": 187,
+      "word": "고통",
+      "category": "body"
+    },
+    {
+      "id": 188,
+      "word": "신경",
+      "category": "body"
+    },
+    {
+      "id": 189,
+      "word": "영원",
+      "category": "time"
+    },
+    {
+      "id": 190,
+      "word": "찰나",
+      "category": "time"
+    },
+    {
+      "id": 191,
+      "word": "과거",
+      "category": "time"
+    },
+    {
+      "id": 192,
+      "word": "현재",
+      "category": "time"
+    },
+    {
+      "id": 193,
+      "word": "세월",
+      "category": "time"
+    },
+    {
+      "id": 194,
+      "word": "계절",
+      "category": "time"
+    },
+    {
+      "id": 195,
+      "word": "엔딩",
+      "category": "time"
+    },
+    {
+      "id": 196,
+      "word": "시작",
+      "category": "time"
+    },
+    {
+      "id": 197,
+      "word": "주기",
+      "category": "time"
+    },
+    {
+      "id": 198,
+      "word": "우주",
+      "category": "nature"
+    },
+    {
+      "id": 199,
+      "word": "은하수",
+      "category": "nature"
+    },
+    {
+      "id": 200,
+      "word": "행성",
+      "category": "nature"
+    },
+    {
+      "id": 201,
+      "word": "혜성",
+      "category": "nature"
+    },
+    {
+      "id": 202,
+      "word": "심해",
+      "category": "nature"
+    },
+    {
+      "id": 203,
+      "word": "수평선",
+      "category": "nature"
+    },
+    {
+      "id": 204,
+      "word": "번개",
+      "category": "nature"
+    },
+    {
+      "id": 205,
+      "word": "눈",
+      "category": "nature"
+    },
+    {
+      "id": 206,
+      "word": "얼음",
+      "category": "nature"
+    },
+    {
+      "id": 207,
+      "word": "재",
+      "category": "nature"
+    },
+    {
+      "id": 208,
+      "word": "먼지",
+      "category": "nature"
+    },
+    {
+      "id": 209,
+      "word": "이슬",
+      "category": "nature"
+    },
+    {
+      "id": 210,
+      "word": "넝쿨",
+      "category": "nature"
+    },
+    {
+      "id": 211,
+      "word": "뿌리",
+      "category": "nature"
+    },
+    {
+      "id": 212,
+      "word": "잎",
+      "category": "nature"
+    },
+    {
+      "id": 213,
+      "word": "동백",
+      "category": "nature"
+    },
+    {
+      "id": 214,
+      "word": "매화",
+      "category": "nature"
+    },
+    {
+      "id": 215,
+      "word": "난초",
+      "category": "nature"
+    },
+    {
+      "id": 216,
+      "word": "국화",
+      "category": "nature"
+    },
+    {
+      "id": 217,
+      "word": "대나무",
+      "category": "nature"
+    },
+    {
+      "id": 218,
+      "word": "청춘",
+      "category": "concept"
+    },
+    {
+      "id": 219,
+      "word": "낭만",
+      "category": "concept"
+    },
+    {
+      "id": 220,
+      "word": "반항",
+      "category": "concept"
+    },
+    {
+      "id": 221,
+      "word": "자유",
+      "category": "concept"
+    },
+    {
+      "id": 222,
+      "word": "구속",
+      "category": "concept"
+    },
+    {
+      "id": 223,
+      "word": "신념",
+      "category": "concept"
+    },
+    {
+      "id": 224,
+      "word": "집착",
+      "category": "concept"
+    },
+    {
+      "id": 225,
+      "word": "광기",
+      "category": "concept"
+    },
+    {
+      "id": 226,
+      "word": "침묵",
+      "category": "concept"
+    },
+    {
+      "id": 227,
+      "word": "외침",
+      "category": "concept"
+    },
+    {
+      "id": 228,
+      "word": "기도",
+      "category": "concept"
+    },
+    {
+      "id": 229,
+      "word": "저주",
+      "category": "concept"
+    },
+    {
+      "id": 230,
+      "word": "축복",
+      "category": "concept"
+    },
+    {
+      "id": 231,
+      "word": "업보",
+      "category": "concept"
+    },
+    {
+      "id": 232,
+      "word": "카르마",
+      "category": "concept"
+    },
+    {
+      "id": 233,
+      "word": "페르소나",
+      "category": "concept"
+    },
+    {
+      "id": 234,
+      "word": "아이덴티티",
+      "category": "concept"
+    },
+    {
+      "id": 235,
+      "word": "아우라",
+      "category": "concept"
+    },
+    {
+      "id": 236,
+      "word": "바이브",
+      "category": "concept"
+    },
+    {
+      "id": 237,
+      "word": "무드",
+      "category": "concept"
+    },
+    {
+      "id": 238,
+      "word": "센스",
+      "category": "concept"
+    },
+    {
+      "id": 239,
+      "word": "영감",
+      "category": "concept"
+    },
+    {
+      "id": 240,
+      "word": "직관",
+      "category": "concept"
+    }
+  ]
+}
