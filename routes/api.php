@@ -3,6 +3,8 @@
 use App\Http\Controllers\ProjectAuthController;
 use Illuminate\Support\Facades\Route;
 
+require __DIR__.'/starttoo_auth.php';
+
 Route::prefix('v1/projects/{projectCode}')
     ->where(['projectCode' => '[a-z][a-z0-9-]{1,49}'])
     ->middleware(['project.resolve'])->group(function () {

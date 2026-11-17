@@ -52,6 +52,27 @@ return [
             ]) : [],
         ],
 
+        // 기존 DB 서버 접속 설정을 공유하되 STARTTOO 전용 DB를 선택한다.
+        // DB_URL의 DB명이 분리 설정을 덮어쓰지 않도록 이 연결에서는 사용하지 않는다.
+        'starttoo' => [
+            'driver' => 'mysql',
+            'host' => env('STARTTOO_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('STARTTOO_DB_PORT', env('DB_PORT', '3306')),
+            'database' => env('STARTTOO_DB_DATABASE', 'starttoo'),
+            'username' => env('STARTTOO_DB_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('STARTTOO_DB_PASSWORD', env('DB_PASSWORD', '')),
+            'unix_socket' => env('STARTTOO_DB_SOCKET', env('DB_SOCKET', '')),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => 'InnoDB',
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('STARTTOO_MYSQL_SSL_CA', env('MYSQL_ATTR_SSL_CA')),
+            ]) : [],
+        ],
+
         'sqlite' => [
             'driver' => 'sqlite',
             'url' => env('DB_URL'),

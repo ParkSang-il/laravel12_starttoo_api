@@ -42,3 +42,17 @@ Artisan::command('project:purge-group-media {code=streetcat} {--limit=500}', fun
     return 0;
 });
 \Illuminate\Support\Facades\Schedule::command('project:purge-group-media streetcat')->hourly()->withoutOverlapping();
+
+// 갱신 응답 복구 기한이 지난 암호문과 만료된 세션을 정리한다.
+Artisan::command('starttoo:purge-auth', function () {
+    app(ProjectDatabase::class)->run('starttoo', function () {
+        $sessions = app(ProjectDatabase::class)->database()->table('starttoo_auth_sessions');
+        (clone $sessions)->where('retry_until', '<=', now())->update(['previous_result' => null]);
+        (clone $sessions)->where(function ($query) {
+            $query->where('absolute_expires_at', '<=', now())->orWhere('idle_expires_at', '<=', now());
+        })->delete();
+    });
+    $this->info('만료된 STARTTOO 인증 정보를 정리했습니다.');
+    return 0;
+});
+\Illuminate\Support\Facades\Schedule::command('starttoo:purge-auth')->everyMinute()->withoutOverlapping();
