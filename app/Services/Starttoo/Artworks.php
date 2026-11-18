@@ -97,11 +97,12 @@ class Artworks
         $items = [];
         $states = app(ArtworkInteractions::class)->states($page->pluck('id')->all(), $viewerId);
         $following = app(Follows::class)->following($page->pluck('author_id')->all(), $viewerId);
+        $commentCounts = app(ArtworkComments::class)->counts($page->pluck('id')->all(), $viewerId);
         foreach ($page as $row) {
             $author = (object) ['id' => $row->author_id, 'nickname' => $row->author_nickname,
                 'display_name' => $row->author_display_name, 'interest_region' => $row->author_region, 'avatar_path' => $row->author_avatar];
             $photos = $images->get($row->id, collect());
-            if ($photos->isNotEmpty()) $items[] = $this->format($row, $author, $photos, $options, $viewerId, $states[$row->id], in_array((int) $author->id, $following, true));
+            if ($photos->isNotEmpty()) $items[] = $this->format($row, $author, $photos, $options, $viewerId, $states[$row->id], in_array((int) $author->id, $following, true), (int) ($commentCounts[$row->id] ?? 0));
         }
         $encode = fn ($row, $d) => $row ? rtrim(strtr(base64_encode(json_encode([
             'at' => $scope === 'saved' ? $row->saved_at : $row->created_at, 'id' => $row->id, 'd' => $d,
@@ -205,10 +206,15 @@ class Artworks
             if (!$row) $this->fail(404, 'ARTWORK_NOT_FOUND', '이미 삭제된 작품이에요.');
             if ((int) $row->user_id !== $userId) $this->fail(403, 'ARTWORK_NOT_OWNER', '작성자만 작품을 삭제할 수 있어요.');
             $paths = $db->table('starttoo_artwork_images')->where('artwork_id', $id)->pluck('path')->all();
+            $commentIds = $db->table('starttoo_artwork_comments')->where('artwork_id', $id)->pluck('id')->map(fn ($value) => (string) $value)->all();
             $closed = $db->table('starttoo_reports')->where('target_type', 'artwork')->where('target_id', $id)
                 ->where('status', 'pending')->lockForUpdate()->pluck('id')->all();
             if ($closed) {
                 $db->table('starttoo_reports')->whereIn('id', $closed)
+                    ->update(['status' => 'target_deleted', 'open_key' => null, 'updated_at' => now()]);
+            }
+            if ($commentIds) {
+                $db->table('starttoo_reports')->where('target_type', 'comment')->whereIn('target_id', $commentIds)->where('status', 'pending')
                     ->update(['status' => 'target_deleted', 'open_key' => null, 'updated_at' => now()]);
             }
             $db->table('starttoo_safety_audits')->insert([
@@ -246,13 +252,14 @@ class Artworks
         return $this->format($row, $author, $images, $this->options(), $viewerId);
     }
 
-    private function format(object $row, object $author, iterable $images, array $options, ?int $viewerId = null, ?array $state = null, ?bool $following = null): array
+    private function format(object $row, object $author, iterable $images, array $options, ?int $viewerId = null, ?array $state = null, ?bool $following = null, ?int $commentCount = null): array
     {
         $styles = json_decode($row->styles, true, 512, JSON_THROW_ON_ERROR);
         $label = fn ($list, $value) => collect($list)->firstWhere('id', $value)['label'] ?? null;
         return ['id' => $row->id, 'kind' => $row->kind, 'title' => $row->title, 'description' => $row->description ?? '',
             'tags' => isset($row->tags) ? json_decode($row->tags, true, 512, JSON_THROW_ON_ERROR) : ArtworkHashtags::extract($row->description ?? ''),
             'viewer_id' => $viewerId, 'interaction' => $state ?? app(ArtworkInteractions::class)->states([$row->id], $viewerId)[$row->id],
+            'comment_count' => $commentCount ?? (int) (app(ArtworkComments::class)->counts([$row->id], $viewerId)[$row->id] ?? 0),
             'moderation_hidden' => (bool) $row->moderation_hidden, 'size_text' => $row->size_text, 'visibility' => $row->visibility, 'version' => (int) $row->version,
             'can_edit' => $viewerId !== null && (int) $row->user_id === $viewerId,
             'styles' => array_values(array_filter($options['styles'], fn ($style) => in_array($style['id'], $styles, true))),
