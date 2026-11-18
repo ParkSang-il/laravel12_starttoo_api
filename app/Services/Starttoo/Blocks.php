@@ -68,11 +68,17 @@ class Blocks
         $account = $artworks->ready($token, $sessions)['account'];
         if (Validator::make($input, ['page' => ['sometimes', 'integer', 'min:1', 'max:100000']])->fails()) $this->fail(422, 'INVALID_SAFETY_REQUEST', '목록 조회 조건을 확인해주세요.');
         $page = (int) ($input['page'] ?? 1);
-        $rows = app(ProjectDatabase::class)->database()->table('starttoo_user_blocks as b')->join('starttoo_users as u', 'u.id', '=', 'b.blocked_user_id')
-            ->where('b.user_id', $account['id'])->select('u.id', 'u.nickname', 'u.avatar_path', 'u.status', 'u.moderation_hidden')
+        $db = app(ProjectDatabase::class)->database();
+        $total = $db->table('starttoo_user_blocks')->where('user_id', $account['id'])->count();
+        $rows = $db->table('starttoo_user_blocks as b')->join('starttoo_users as u', 'u.id', '=', 'b.blocked_user_id')
+            ->where('b.user_id', $account['id'])->select('u.id', 'u.nickname', 'u.avatar_path', 'u.status', 'u.moderation_hidden', 'b.created_at')
             ->orderByDesc('b.id')->offset(($page - 1) * 20)->limit(21)->get();
-        return ['account' => $account, 'page' => $page, 'has_more' => $rows->count() > 20,
+        $reported = $db->table('starttoo_reports')->where('reporter_id', $account['id'])
+            ->whereIn('subject_user_id', $rows->pluck('id'))->distinct()->pluck('subject_user_id')->map(fn ($id) => (int) $id)->all();
+        return ['account' => $account, 'total' => $total, 'page' => $page, 'has_more' => $rows->count() > 20,
             'items' => $rows->take(20)->map(fn ($u) => ['id' => (int) $u->id,
+                'blocked_at' => $u->created_at,
+                'reported' => in_array((int) $u->id, $reported, true),
                 'nickname' => $u->status === 'active' && !$u->moderation_hidden ? ($u->nickname ?? '회원') : '이용할 수 없는 회원',
                 'avatar_url' => $u->status === 'active' && !$u->moderation_hidden ? app(MediaUrls::class)->url($u->avatar_path, 300) : null])->values()->all()];
     }

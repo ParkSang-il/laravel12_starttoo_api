@@ -15,7 +15,7 @@ class Reports
         if (is_string($input['details'] ?? null)) $input['details'] = trim($input['details']);
         $validator = Validator::make($input, [
             'target_type' => ['required', Rule::in(['user', 'artwork'])], 'target_id' => ['required', 'string', 'max:36'],
-            'reason' => ['required', Rule::in(['spam', 'harassment', 'sexual', 'violence', 'illegal', 'rights', 'other'])],
+            'reason' => ['required', Rule::in(['spam', 'harassment', 'sexual', 'violence', 'illegal', 'rights', 'fraud', 'privacy', 'other'])],
             'details' => ['required_if:reason,other', 'nullable', 'string', 'max:1000'], 'request_key' => ['required', 'uuid'],
         ]);
         if ($validator->fails()) $this->fail(422, 'INVALID_REPORT', '신고 대상·사유와 내용을 확인해주세요.');

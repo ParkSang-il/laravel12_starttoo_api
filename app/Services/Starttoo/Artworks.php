@@ -62,6 +62,9 @@ class Artworks
         if ($scope === 'mine') $query->where('a.user_id', $viewerId);
         else $query->where('a.visibility', 'public')->where('a.moderation_hidden', false)->where('u.moderation_hidden', false);
         app(Blocks::class)->filter($query, 'a.user_id', $viewerId);
+        if ($viewerId !== null && in_array($scope, ['public', 'following'], true) && $authorId === null) {
+            $query->whereNotExists(fn ($q) => $q->selectRaw('1')->from('starttoo_hidden_artworks as h')->whereColumn('h.artwork_id', 'a.id')->where('h.user_id', $viewerId));
+        }
         if ($authorId !== null) $query->where('a.user_id', $authorId);
         if ($scope === 'following') $query->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_follows as f')
             ->whereColumn('f.target_user_id', 'a.user_id')->where('f.user_id', $viewerId));
