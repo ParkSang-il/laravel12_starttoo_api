@@ -12,14 +12,16 @@ class Follows
     public function following(array $ids, ?int $viewer): array
     {
         if (!$ids || $viewer === null) return [];
-        return app(ProjectDatabase::class)->database()->table('starttoo_follows')
-            ->where('user_id', $viewer)->whereIn('target_user_id', $ids)->pluck('target_user_id')->map(fn ($id) => (int) $id)->all();
+        $query = app(ProjectDatabase::class)->database()->table('starttoo_follows')->join('starttoo_users as u', 'u.id', '=', 'target_user_id')
+            ->where('u.status', 'active')->where('u.moderation_hidden', false)
+            ->where('user_id', $viewer)->whereIn('target_user_id', $ids);
+        return app(Blocks::class)->filter($query, 'u.id', $viewer)->pluck('target_user_id')->map(fn ($id) => (int) $id)->all();
     }
 
     public function state(int $target, ?int $viewer): array
     {
         $db = app(ProjectDatabase::class)->database();
-        $active = fn ($query) => $query->where('u.status', 'active')->whereNotNull('u.profile_completed_at');
+        $active = fn ($query) => app(Blocks::class)->filter($query->where('u.status', 'active')->where('u.moderation_hidden', false)->whereNotNull('u.profile_completed_at'), 'u.id', $viewer);
         $followers = $active($db->table('starttoo_follows as f')->join('starttoo_users as u', 'u.id', '=', 'f.user_id'))
             ->where('f.target_user_id', $target)->count();
         $following = $active($db->table('starttoo_follows as f')->join('starttoo_users as u', 'u.id', '=', 'f.target_user_id'))
@@ -42,7 +44,7 @@ class Follows
             // 반대 방향의 동시 팔로우도 같은 순서로 회원을 잠근다.
             $db->table('starttoo_users')->whereIn('id', [$viewer, $target])->orderBy('id')->lockForUpdate()->get();
             $artworks->ready($token, $sessions);
-            app(PublicProfiles::class)->user($target);
+            app(PublicProfiles::class)->user($target, $viewer);
             $retry = $db->table('starttoo_follow_requests')->where('user_id', $viewer)->where('request_key', $input['request_key'])->first();
             if ($retry) {
                 if ($retry->payload_hash !== $hash) $this->fail(409, 'FOLLOW_REQUEST_CONFLICT', '팔로우 요청 내용이 변경됐어요.');
@@ -61,7 +63,7 @@ class Follows
 
     public function listing(int $owner, ?int $viewer, array $input): array
     {
-        $profile = app(PublicProfiles::class)->user($owner);
+        $profile = app(PublicProfiles::class)->user($owner, $viewer);
         if (Validator::make($input, ['tab' => ['sometimes', Rule::in(['followers', 'following'])],
             'q' => ['nullable', 'string', 'max:50'], 'cursor' => ['nullable', 'string', 'max:512']])->fails()) {
             $this->fail(422, 'INVALID_FOLLOW_FILTER', '팔로우 목록 조회 조건을 확인해주세요.');
@@ -77,6 +79,8 @@ class Follows
         $db = app(ProjectDatabase::class)->database();
         $query = $db->table('starttoo_follows as f')->join('starttoo_users as u', 'u.id', '=', $followers ? 'f.user_id' : 'f.target_user_id')
             ->where($followers ? 'f.target_user_id' : 'f.user_id', $owner)->where('u.status', 'active')->whereNotNull('u.profile_completed_at');
+        $query->where('u.moderation_hidden', false);
+        app(Blocks::class)->filter($query, 'u.id', $viewer);
         $search = trim($input['q'] ?? '');
         if ($search !== '') $query->where('u.nickname', 'like', '%'.addcslashes($search, '\\%_').'%');
         $backward = ($cursor['d'] ?? 'next') === 'previous';

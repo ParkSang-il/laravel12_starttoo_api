@@ -60,7 +60,8 @@ class Artworks
             ->select('a.*', 'u.id as author_id', 'u.nickname as author_nickname', 'u.display_name as author_display_name',
                 'u.interest_region as author_region', 'u.avatar_path as author_avatar');
         if ($scope === 'mine') $query->where('a.user_id', $viewerId);
-        else $query->where('a.visibility', 'public');
+        else $query->where('a.visibility', 'public')->where('a.moderation_hidden', false)->where('u.moderation_hidden', false);
+        app(Blocks::class)->filter($query, 'a.user_id', $viewerId);
         if ($authorId !== null) $query->where('a.user_id', $authorId);
         if ($scope === 'following') $query->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_follows as f')
             ->whereColumn('f.target_user_id', 'a.user_id')->where('f.user_id', $viewerId));
@@ -203,7 +204,8 @@ class Artworks
         if (!$row) $this->fail(404, 'ARTWORK_NOT_FOUND', '작품을 찾을 수 없어요.');
         if ($row->visibility !== 'public' && (int) $row->user_id !== $viewerId) $this->fail(404, 'ARTWORK_NOT_FOUND', '작품을 찾을 수 없어요.');
         $author = $db->table('starttoo_users')->where('id', $row->user_id)->first();
-        if (!$author || $author->status !== 'active') $this->fail(404, 'ARTWORK_NOT_FOUND', '작품을 찾을 수 없어요.');
+        if (!$author || $author->status !== 'active' || app(Blocks::class)->between($viewerId, (int) $row->user_id)
+            || ((int) $row->user_id !== $viewerId && ($row->moderation_hidden || $author->moderation_hidden))) $this->fail(404, 'ARTWORK_NOT_FOUND', '작품을 찾을 수 없어요.');
         $images = $db->table('starttoo_artwork_images')->where('artwork_id', $row->id)->orderBy('position')->get();
         return $this->format($row, $author, $images, $this->options(), $viewerId);
     }
@@ -215,7 +217,7 @@ class Artworks
         return ['id' => $row->id, 'kind' => $row->kind, 'title' => $row->title, 'description' => $row->description ?? '',
             'tags' => isset($row->tags) ? json_decode($row->tags, true, 512, JSON_THROW_ON_ERROR) : ArtworkHashtags::extract($row->description ?? ''),
             'viewer_id' => $viewerId, 'interaction' => $state ?? app(ArtworkInteractions::class)->states([$row->id], $viewerId)[$row->id],
-            'size_text' => $row->size_text, 'visibility' => $row->visibility, 'version' => (int) $row->version,
+            'moderation_hidden' => (bool) $row->moderation_hidden, 'size_text' => $row->size_text, 'visibility' => $row->visibility, 'version' => (int) $row->version,
             'can_edit' => $viewerId !== null && (int) $row->user_id === $viewerId,
             'styles' => array_values(array_filter($options['styles'], fn ($style) => in_array($style['id'], $styles, true))),
             'body_part' => $label($options['body_parts'], $row->body_part), 'color' => $label($options['colors'], $row->color),

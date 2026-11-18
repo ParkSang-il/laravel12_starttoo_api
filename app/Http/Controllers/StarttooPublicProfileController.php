@@ -32,7 +32,7 @@ class StarttooPublicProfileController extends Controller
     public function artworks(Request $request, string $user, PublicProfiles $profiles, Artworks $artworks, AuthSessions $sessions)
     {
         $identity = $this->identity($request, $sessions);
-        $profiles->user((int) $user);
+        $profiles->user((int) $user, isset($identity['account']['id']) ? (int) $identity['account']['id'] : null);
         // scope=mine 등을 받아도 타인의 숨김 작품으로 범위를 넓힐 수 없다.
         return response()->json(['data' => [...$artworks->feed($request->only(['cursor', 'style']),
             isset($identity['account']['id']) ? (int) $identity['account']['id'] : null, (int) $user),
