@@ -56,3 +56,4 @@ Artisan::command('starttoo:purge-auth', function () {
     return 0;
 });
 \Illuminate\Support\Facades\Schedule::command('starttoo:purge-auth')->everyMinute()->withoutOverlapping();
+require __DIR__.'/starttoo_console.php';
