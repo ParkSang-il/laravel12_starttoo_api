@@ -111,7 +111,8 @@ class Artworks
         return ['items' => $items, 'next_cursor' => $next, 'previous_cursor' => $previous, 'styles' => $options['styles'], 'total' => $total];
     }
 
-    public function create(string $token, array $input, array $files, AuthSessions $sessions): array
+    /** 미리 올린 사진(media_ids, 1~10장, 순서대로)으로 작품을 등록한다. */
+    public function create(string $token, array $input, AuthSessions $sessions): array
     {
         $identity = $this->ready($token, $sessions);
         $options = $this->options();
@@ -131,18 +132,17 @@ class Artworks
             'duration_minutes' => ['nullable', 'integer', 'min:1', 'max:10080'],
             'price' => ['required_if:kind,design', 'nullable', 'integer', 'min:0', 'max:100000000'],
             'show_in_shop' => ['required', 'boolean'],
-            'photo_count' => ['required', 'integer', 'min:1', 'max:10'],
         ]);
         if ($validator->fails() || !array_is_list($input['styles'] ?? [])) {
             $this->fail(422, 'INVALID_ARTWORK', '제목·스타일과 작품 입력 정보를 확인해주세요.');
         }
-        $photoValidator = Validator::make(['photos' => $files], [
-            'photos' => ['required', 'array', 'min:1', 'max:10'],
-            'photos.*' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=4096,max_height=4096'],
-        ]);
-        if ($photoValidator->fails() || !array_is_list($files) || count($files) !== (int) $input['photo_count']) {
-            $this->fail(422, 'INVALID_ARTWORK_PHOTOS', '사진은 1~10장, 각 5MB 이하의 JPG·PNG·WebP로 선택해주세요.');
+        if (Validator::make($input, [
+            'media_ids' => ['required', 'array', 'min:1', 'max:10'],
+            'media_ids.*' => ['required', 'uuid', 'distinct'],
+        ])->fails() || !array_is_list($input['media_ids'])) {
+            $this->fail(422, 'INVALID_ARTWORK_PHOTOS', '사진을 1~10장 선택해주세요.');
         }
+        $mediaIds = array_values($input['media_ids']);
         $valid = $validator->validated();
         // 필드 순서를 고정하고 원본 사진 해시와 순서까지 포함한다.
         $values = ['kind' => $valid['kind'], 'title' => $valid['title'], 'description' => $valid['description'] ?? '',
@@ -152,45 +152,78 @@ class Artworks
             'duration_minutes' => $valid['kind'] === 'work' && isset($valid['duration_minutes']) ? (int) $valid['duration_minutes'] : null,
             'price' => $valid['kind'] === 'design' ? (int) $valid['price'] : null,
             'show_in_shop' => (bool) $valid['show_in_shop']];
-        $hash = hash('sha256', json_encode([$values, array_map(fn ($file) => hash_file('sha256', $file->getRealPath()), $files)], JSON_THROW_ON_ERROR));
+        // 필드 순서를 고정하고 사진 순서까지 포함한다. 같은 키의 다른 내용은 409로 거절한다.
+        $hash = hash('sha256', json_encode([$values, $mediaIds], JSON_THROW_ON_ERROR));
+        $userId = (int) $identity['account']['id'];
         $db = app(ProjectDatabase::class)->database();
-        $find = fn () => $db->table('starttoo_artworks')->where('user_id', $identity['account']['id'])->where('request_key', $valid['request_key'])->first();
+        $find = fn () => $db->table('starttoo_artworks')->where('user_id', $userId)->where('request_key', $valid['request_key'])->first();
         $existing = $find();
         if ($existing) {
             $this->checkRetry($existing, $hash);
-            return $this->detail($existing->id, (int) $identity['account']['id']);
+            return $this->detail($existing->id, $userId);
         }
-        $paths = [];
-        $keep = false;
-        $photos = app(ArtworkPhotos::class);
-        try {
-            foreach ($files as $file) $paths[] = $photos->store($identity['account']['id'], $file);
-            $result = $db->transaction(function () use ($db, $token, $sessions, $identity, $valid, $values, $hash, $paths, $find) {
-                $db->table('starttoo_users')->where('id', $identity['account']['id'])->lockForUpdate()->first();
-                $this->ready($token, $sessions);
-                $existing = $find();
-                if ($existing) {
-                    $this->checkRetry($existing, $hash);
-                    return ['id' => $existing->id, 'created' => false];
-                }
-                $id = (string) Str::uuid();
-                $db->table('starttoo_artworks')->insert([
-                    ...$values, 'styles' => json_encode($values['styles'], JSON_THROW_ON_ERROR),
-                    'tags' => json_encode(ArtworkHashtags::extract($values['description']), JSON_THROW_ON_ERROR),
-                    'id' => $id, 'user_id' => $identity['account']['id'], 'request_key' => $valid['request_key'],
-                    'payload_hash' => $hash, 'created_at' => now(), 'updated_at' => now(),
-                ]);
-                foreach ($paths as $position => $path) {
-                    $db->table('starttoo_artwork_images')->insert(['artwork_id' => $id, 'position' => $position, 'path' => $path]);
-                }
-                $sessions->authenticate($token, true);
-                return ['id' => $id, 'created' => true];
-            }, 3);
-            $keep = $result['created'];
-            return $this->detail($result['id'], (int) $identity['account']['id']);
-        } finally {
-            if (!$keep) $photos->delete($paths);
-        }
+        $id = $db->transaction(function () use ($db, $token, $sessions, $userId, $valid, $values, $hash, $mediaIds, $find) {
+            $db->table('starttoo_users')->where('id', $userId)->lockForUpdate()->first();
+            $this->ready($token, $sessions);
+            $existing = $find();
+            if ($existing) {
+                $this->checkRetry($existing, $hash);
+                return $existing->id;
+            }
+            // 본인이 올린 미첨부 사진만 첨부한다. 실패하면 트랜잭션 전체를 되돌린다.
+            $paths = app(ArtworkUploads::class)->claim($userId, $mediaIds);
+            $id = (string) Str::uuid();
+            $db->table('starttoo_artworks')->insert([
+                ...$values, 'styles' => json_encode($values['styles'], JSON_THROW_ON_ERROR),
+                'tags' => json_encode(ArtworkHashtags::extract($values['description']), JSON_THROW_ON_ERROR),
+                'id' => $id, 'user_id' => $userId, 'request_key' => $valid['request_key'],
+                'payload_hash' => $hash, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+            foreach ($mediaIds as $position => $mediaId) {
+                $db->table('starttoo_artwork_images')->insert(['artwork_id' => $id, 'position' => $position, 'path' => $paths[$mediaId]]);
+            }
+            $sessions->authenticate($token, true);
+            return $id;
+        }, 3);
+        return $this->detail($id, $userId);
+    }
+
+    /**
+     * 작성자 작품 삭제. 피드·프로필·상세에서 즉시 빠지고(좋아요·저장·숨김 기록은 함께 삭제)
+     * 사진 파일은 커밋 뒤 지운다. 처리 대기 신고는 target_deleted로 닫고 감사 기록을 남긴다.
+     * 이미 삭제된 작품은 404로 응답한다.
+     */
+    public function delete(string $id, string $token, AuthSessions $sessions): array
+    {
+        $userId = (int) $this->ready($token, $sessions)['account']['id'];
+        $db = app(ProjectDatabase::class)->database();
+        $paths = $db->transaction(function () use ($db, $id, $userId, $token, $sessions) {
+            // 운영자 처리와 같은 회원 -> 작품 -> 신고 순서로 잠근다.
+            $db->table('starttoo_users')->where('id', $userId)->lockForUpdate()->first();
+            $row = $db->table('starttoo_artworks')->where('id', $id)->lockForUpdate()->first();
+            $this->ready($token, $sessions);
+            if (!$row) $this->fail(404, 'ARTWORK_NOT_FOUND', '이미 삭제된 작품이에요.');
+            if ((int) $row->user_id !== $userId) $this->fail(403, 'ARTWORK_NOT_OWNER', '작성자만 작품을 삭제할 수 있어요.');
+            $paths = $db->table('starttoo_artwork_images')->where('artwork_id', $id)->pluck('path')->all();
+            $closed = $db->table('starttoo_reports')->where('target_type', 'artwork')->where('target_id', $id)
+                ->where('status', 'pending')->lockForUpdate()->pluck('id')->all();
+            if ($closed) {
+                $db->table('starttoo_reports')->whereIn('id', $closed)
+                    ->update(['status' => 'target_deleted', 'open_key' => null, 'updated_at' => now()]);
+            }
+            $db->table('starttoo_safety_audits')->insert([
+                'actor_type' => 'member', 'actor_user_id' => $userId, 'target_type' => 'artwork', 'target_id' => $id,
+                'action' => 'delete', 'changes' => json_encode([
+                    'title' => $row->title, 'image_count' => count($paths), 'moderation_hidden' => (bool) $row->moderation_hidden,
+                    'closed_reports' => $closed,
+                ], JSON_THROW_ON_ERROR),
+            ]);
+            $db->table('starttoo_artworks')->where('id', $id)->delete();
+            app(ArtworkUploads::class)->forget($paths);
+            return $paths;
+        }, 3);
+        app(ArtworkPhotos::class)->delete($paths);
+        return ['artwork_id' => $id, 'deleted' => true];
     }
 
     private function checkRetry(object $artwork, string $hash): void

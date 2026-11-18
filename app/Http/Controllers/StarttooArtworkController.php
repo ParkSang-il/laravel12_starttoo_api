@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\Starttoo\Artworks;
 use App\Services\Starttoo\ArtworkEdits;
 use App\Services\Starttoo\ArtworkInteractions;
+use App\Services\Starttoo\ArtworkUploads;
 use App\Services\Starttoo\AuthSessions;
 use Illuminate\Http\Request;
 
@@ -32,24 +33,46 @@ class StarttooArtworkController extends Controller
             ->header('Cache-Control', 'no-store');
     }
 
+    /** multipart의 payload(JSON 문자열) 또는 JSON 본문. 객체가 아니면 null. */
+    private function input(Request $request): ?array
+    {
+        $payload = $request->input('payload');
+        try {
+            $input = is_string($payload) ? json_decode($payload, true, 512, JSON_THROW_ON_ERROR) : $request->json()->all();
+        } catch (\JsonException $e) {
+            return null;
+        }
+        return is_array($input) && ($input === [] || !array_is_list($input)) ? $input : null;
+    }
+
+    /** 사진 1장 선업로드: multipart payload {request_key}, 파일 photo. */
+    public function upload(Request $request, ArtworkUploads $uploads, Artworks $artworks, AuthSessions $sessions)
+    {
+        $input = $this->input($request);
+        if ($input === null) {
+            return response()->json(['code' => 'INVALID_ARTWORK_PHOTOS', 'message' => '사진 업로드 요청을 확인해주세요.'], 422);
+        }
+        return response()->json(['data' => $uploads->upload($request->bearerToken() ?? '', $input, $request->file('photo'), $sessions, $artworks)])
+            ->header('Cache-Control', 'no-store');
+    }
+
+    /** 작품 등록: JSON 본문, 사진은 media_ids. */
     public function store(Request $request, Artworks $artworks, AuthSessions $sessions)
     {
         $token = $request->bearerToken() ?? '';
         $artworks->ready($token, $sessions);
-        try {
-            $payload = $request->input('payload');
-            $input = is_string($payload) ? json_decode($payload, true, 512, JSON_THROW_ON_ERROR) : null;
-        } catch (\JsonException $e) {
-            $input = null;
-        }
-        if (!is_array($input) || array_is_list($input)) {
+        $input = $this->input($request);
+        if ($input === null) {
             return response()->json(['code' => 'INVALID_ARTWORK', 'message' => '작품 입력 정보를 확인해주세요.'], 422);
         }
-        $files = $request->file('photos', []);
-        if (!is_array($files)) {
-            return response()->json(['code' => 'INVALID_ARTWORK_PHOTOS', 'message' => '작품 사진을 확인해주세요.'], 422);
-        }
-        return response()->json(['data' => $artworks->create($token, $input, $files, $sessions)])->header('Cache-Control', 'no-store');
+        return response()->json(['data' => $artworks->create($token, $input, $sessions)])->header('Cache-Control', 'no-store');
+    }
+
+    /** 작성자 작품 삭제. */
+    public function destroy(Request $request, string $artwork, Artworks $artworks, AuthSessions $sessions)
+    {
+        return response()->json(['data' => $artworks->delete($artwork, $request->bearerToken() ?? '', $sessions)])
+            ->header('Cache-Control', 'no-store');
     }
 
     public function show(Request $request, string $artwork, Artworks $artworks, AuthSessions $sessions)
@@ -65,15 +88,11 @@ class StarttooArtworkController extends Controller
     {
         $token = $request->bearerToken() ?? '';
         $artworks->ready($token, $sessions);
-        try {
-            $payload = $request->input('payload');
-            $input = is_string($payload) ? json_decode($payload, true, 512, JSON_THROW_ON_ERROR) : null;
-        } catch (\JsonException $e) { $input = null; }
-        $files = $request->file('photos', []);
-        if (!is_array($input) || array_is_list($input) || !is_array($files)) {
+        $input = $this->input($request);
+        if ($input === null) {
             return response()->json(['code' => 'INVALID_ARTWORK', 'message' => '작품 입력을 확인해주세요.'], 422);
         }
-        return response()->json(['data' => $edits->save($artwork, $token, $input, $files, $sessions, $artworks)])
+        return response()->json(['data' => $edits->save($artwork, $token, $input, $sessions, $artworks)])
             ->header('Cache-Control', 'no-store');
     }
 }

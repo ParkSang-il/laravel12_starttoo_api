@@ -5,11 +5,12 @@ namespace App\Services\Starttoo;
 use App\Services\ProjectDatabase;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class ArtworkEdits
 {
-    public function save(string $id, string $token, array $input, array $files, AuthSessions $sessions, Artworks $artworks): array
+    public function save(string $id, string $token, array $input, AuthSessions $sessions, Artworks $artworks): array
     {
         $identity = $artworks->ready($token, $sessions);
         $userId = $identity['account']['id'];
@@ -29,19 +30,13 @@ class ArtworkEdits
             'duration_minutes' => ['nullable', 'integer', 'min:1', 'max:10080'],
             'price' => ['required_if:kind,design', 'nullable', 'integer', 'min:0', 'max:100000000'],
             'show_in_shop' => ['required', 'boolean'], 'visibility' => ['required', Rule::in(['public', 'hidden'])],
-            'photo_count' => ['required', 'integer', 'min:0', 'max:10'],
             'image_order' => ['required', 'array', 'min:1', 'max:10'],
         ]);
         if ($validator->fails() || !array_is_list($input['styles'] ?? []) || !array_is_list($input['image_order'] ?? [])) {
             $this->fail(422, 'INVALID_ARTWORK', '작품 입력 정보를 확인해주세요.');
         }
-        if (Validator::make(['photos' => $files], ['photos' => ['array', 'max:10'],
-            'photos.*' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=4096,max_height=4096']])->fails()
-            || !array_is_list($files) || count($files) !== (int) $input['photo_count']) {
-            $this->fail(422, 'INVALID_ARTWORK_PHOTOS', '작품 사진을 확인해주세요.');
-        }
         $input = $validator->validated();
-        $hash = hash('sha256', json_encode([$id, $input, array_map(fn ($file) => hash_file('sha256', $file->getRealPath()), $files)], JSON_THROW_ON_ERROR));
+        $hash = hash('sha256', json_encode([$id, $input], JSON_THROW_ON_ERROR));
         $findRetry = fn () => $db->table('starttoo_artwork_edits')->where('user_id', $userId)->where('request_key', $input['request_key'])->first();
         $existing = $findRetry();
         if ($existing) {
@@ -50,23 +45,20 @@ class ArtworkEdits
         }
         $oldImages = $db->table('starttoo_artwork_images')->where('artwork_id', $id)->get()->keyBy('id');
         $used = [];
-        $newIndexes = [];
+        $mediaIds = [];
         foreach ($input['image_order'] as $entry) {
             if (!is_array($entry) || count($entry) !== 1) $this->fail(422, 'INVALID_ARTWORK_PHOTOS', '사진 순서를 확인해주세요.');
             if (isset($entry['existing_id']) && is_int($entry['existing_id']) && $oldImages->has($entry['existing_id'])) {
                 $key = 'old:'.$entry['existing_id'];
-            } elseif (isset($entry['new_index']) && is_int($entry['new_index']) && $entry['new_index'] >= 0 && $entry['new_index'] < count($files)) {
-                $key = 'new:'.$entry['new_index']; $newIndexes[] = $entry['new_index'];
+            } elseif (isset($entry['media_id']) && is_string($entry['media_id']) && Str::isUuid($entry['media_id'])) {
+                $key = 'new:'.$entry['media_id']; $mediaIds[] = $entry['media_id'];
             } else $this->fail(422, 'INVALID_ARTWORK_PHOTOS', '사진 순서를 확인해주세요.');
             if (isset($used[$key])) $this->fail(422, 'INVALID_ARTWORK_PHOTOS', '같은 사진을 중복 등록할 수 없어요.');
             $used[$key] = true;
         }
-        if (count($newIndexes) !== count($files)) $this->fail(422, 'INVALID_ARTWORK_PHOTOS', '사진 수를 확인해주세요.');
-        $paths = []; $removed = []; $keep = false;
+        $removed = [];
         $photos = app(ArtworkPhotos::class);
-        try {
-            foreach ($files as $file) $paths[] = $photos->store($userId, $file);
-            $keep = $db->transaction(function () use ($db, $id, $userId, $token, $sessions, $artworks, $input, $hash, $findRetry, $paths, &$removed) {
+        $changed = $db->transaction(function () use ($db, $id, $userId, $token, $sessions, $artworks, $input, $hash, $findRetry, $mediaIds, &$removed) {
                 $db->table('starttoo_users')->where('id', $userId)->lockForUpdate()->first();
                 $row = $db->table('starttoo_artworks')->where('id', $id)->lockForUpdate()->first();
                 $artworks->ready($token, $sessions);
@@ -80,13 +72,16 @@ class ArtworkEdits
                 foreach ($input['image_order'] as $entry) {
                     if (isset($entry['existing_id']) && !$images->has($entry['existing_id'])) $this->fail(409, 'ARTWORK_EDIT_CONFLICT', '사진이 변경됐어요. 다시 불러와주세요.');
                 }
+                // 새 사진은 본인이 올린 미첨부 사진만 허용한다.
+                $paths = app(ArtworkUploads::class)->claim((int) $userId, $mediaIds);
                 $retained = array_values(array_filter(array_column($input['image_order'], 'existing_id')));
                 $removed = $images->filter(fn ($image) => !in_array((int) $image->id, $retained, true))->pluck('path')->all();
                 $db->table('starttoo_artwork_images')->where('artwork_id', $id)->increment('position', 20);
                 $db->table('starttoo_artwork_images')->where('artwork_id', $id)->whereNotIn('id', $retained)->delete();
+                app(ArtworkUploads::class)->forget($removed);
                 foreach ($input['image_order'] as $position => $entry) {
                     if (isset($entry['existing_id'])) $db->table('starttoo_artwork_images')->where('id', $entry['existing_id'])->update(['position' => $position]);
-                    else $db->table('starttoo_artwork_images')->insert(['artwork_id' => $id, 'position' => $position, 'path' => $paths[$entry['new_index']]]);
+                    else $db->table('starttoo_artwork_images')->insert(['artwork_id' => $id, 'position' => $position, 'path' => $paths[$entry['media_id']]]);
                 }
                 $db->table('starttoo_artworks')->where('id', $id)->update([
                     'kind' => $input['kind'], 'title' => $input['title'], 'description' => $input['description'] ?? '', 'size_text' => $input['size_text'] ?? null,
@@ -99,9 +94,9 @@ class ArtworkEdits
                 $db->table('starttoo_artwork_edits')->insert(['artwork_id' => $id, 'user_id' => $userId, 'request_key' => $input['request_key'], 'payload_hash' => $hash]);
                 return true;
             }, 3);
-            if ($keep) $photos->delete($removed);
-            return $artworks->detail($id, $userId);
-        } finally { if (!$keep) $photos->delete($paths); }
+        // 빠진 사진 파일은 커밋 뒤 지운다.
+        if ($changed) $photos->delete($removed);
+        return $artworks->detail($id, $userId);
     }
 
     private function fail(int $status, string $code, string $message): never
