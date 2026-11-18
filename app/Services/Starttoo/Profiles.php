@@ -120,8 +120,7 @@ class Profiles
     {
         return ['nickname' => $user->nickname,
             'bio' => $user->bio ?? '',
-            'avatar_url' => $user->avatar_path === null ? null
-                : \Illuminate\Support\Facades\Storage::disk('starttoo')->temporaryUrl($user->avatar_path, now()->addHour()),
+            'avatar_url' => app(MediaUrls::class)->url($user->avatar_path),
             'interest_styles' => $user->interest_styles === null ? [] : json_decode($user->interest_styles, true, 512, JSON_THROW_ON_ERROR),
             'interest_region' => $user->interest_region];
     }

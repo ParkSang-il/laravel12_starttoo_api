@@ -4,7 +4,6 @@ namespace App\Services\Starttoo;
 
 use App\Services\ProjectDatabase;
 use Illuminate\Http\Exceptions\HttpResponseException;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
@@ -92,7 +91,7 @@ class Follows
         return ['owner_id' => $owner, 'nickname' => $profile->nickname, 'viewer_id' => $viewer,
             'social' => $this->state($owner, $viewer),
             'items' => $page->map(fn ($u) => ['id' => (int) $u->id, 'nickname' => $u->nickname, 'bio' => $u->bio ?? '',
-                'avatar_url' => $u->avatar_path ? Storage::disk('starttoo')->temporaryUrl($u->avatar_path, now()->addHour()) : null,
+                'avatar_url' => app(MediaUrls::class)->url($u->avatar_path),
                 'following' => in_array((int) $u->id, $mine, true), 'is_me' => $viewer === (int) $u->id])->all(),
             'next_cursor' => ($backward || $more) ? $encode($page->last(), 'next') : null,
             'previous_cursor' => ($backward ? $more : $cursor !== null) ? $encode($page->first(), 'previous') : null];

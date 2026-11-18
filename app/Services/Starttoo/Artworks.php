@@ -4,7 +4,6 @@ namespace App\Services\Starttoo;
 
 use App\Services\ProjectDatabase;
 use Illuminate\Http\Exceptions\HttpResponseException;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -225,9 +224,9 @@ class Artworks
             'author' => ['id' => $author->id, 'nickname' => $author->nickname ?? $author->display_name,
                 'following' => $following ?? in_array((int) $author->id, app(Follows::class)->following([(int) $author->id], $viewerId), true),
                 'region' => $label(app(Profiles::class)->options()['regions'], $author->interest_region),
-                'avatar_url' => $author->avatar_path ? Storage::disk('starttoo')->temporaryUrl($author->avatar_path, now()->addHour()) : null],
+                'avatar_url' => app(MediaUrls::class)->url($author->avatar_path)],
             'images' => collect($images)
-                ->map(fn ($image) => ['id' => (int) $image->id, 'position' => $image->position, 'url' => Storage::disk('starttoo')->temporaryUrl($image->path, now()->addHour())])->all()];
+                ->map(fn ($image) => ['id' => (int) $image->id, 'position' => $image->position, 'url' => app(MediaUrls::class)->url($image->path)])->all()];
     }
 
     private function fail(int $status, string $code, string $message): never
