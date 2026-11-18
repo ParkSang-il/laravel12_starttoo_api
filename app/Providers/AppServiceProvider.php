@@ -17,6 +17,11 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // 댓글 작업별 IP 제한: 등록·좋아요·삭제가 서로의 한도를 소모하지 않는다.
+        foreach (['create' => 30, 'delete' => 60, 'like' => 60] as $action => $maximum) {
+            RateLimiter::for('starttoo-comment-'.$action, fn (Request $request) =>
+                Limit::perMinute($maximum)->by('starttoo-comment-'.$action.':'.$request->ip()));
+        }
         $this->app->singleton(\App\Services\FcmClient::class);
         RateLimiter::for('push-device', fn (Request $r) => Limit::perMinute(20)->by('push-device:'.$r->route('projectCode').':'.$r->user()->id));
         RateLimiter::for('group-media', fn (Request $r) => Limit::perMinute(30)->by('group-media:'.$r->route('projectCode').':'.$r->user()->id));
