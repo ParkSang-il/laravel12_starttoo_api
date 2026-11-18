@@ -29,7 +29,7 @@ class PublicProfiles
             ->where('a.user_id', $id)->where('a.visibility', 'public')
             ->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_artwork_images as i')->whereColumn('i.artwork_id', 'a.id'))->count();
         return ['id' => (int) $user->id, 'nickname' => $user->nickname, 'bio' => $user->bio ?? '',
-            'avatar_url' => app(MediaUrls::class)->url($user->avatar_path),
+            'avatar_url' => app(MediaUrls::class)->url($user->avatar_path, 300),
             'styles' => array_values(array_filter($options['styles'], fn ($s) => in_array($s['id'], $styles, true))),
             'region' => collect($options['regions'])->firstWhere('id', $user->interest_region)['label'] ?? null,
             'artwork_count' => $count, 'is_me' => $viewerId === (int) $user->id,

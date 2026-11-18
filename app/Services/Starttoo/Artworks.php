@@ -224,9 +224,9 @@ class Artworks
             'author' => ['id' => $author->id, 'nickname' => $author->nickname ?? $author->display_name,
                 'following' => $following ?? in_array((int) $author->id, app(Follows::class)->following([(int) $author->id], $viewerId), true),
                 'region' => $label(app(Profiles::class)->options()['regions'], $author->interest_region),
-                'avatar_url' => app(MediaUrls::class)->url($author->avatar_path)],
+                'avatar_url' => app(MediaUrls::class)->url($author->avatar_path, 300)],
             'images' => collect($images)
-                ->map(fn ($image) => ['id' => (int) $image->id, 'position' => $image->position, 'url' => app(MediaUrls::class)->url($image->path)])->all()];
+                ->map(fn ($image) => ['id' => (int) $image->id, 'position' => $image->position, 'url' => app(MediaUrls::class)->url($image->path, 500)])->all()];
     }
 
     private function fail(int $status, string $code, string $message): never

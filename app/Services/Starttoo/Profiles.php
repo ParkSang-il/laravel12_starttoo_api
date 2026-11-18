@@ -120,7 +120,7 @@ class Profiles
     {
         return ['nickname' => $user->nickname,
             'bio' => $user->bio ?? '',
-            'avatar_url' => app(MediaUrls::class)->url($user->avatar_path),
+            'avatar_url' => app(MediaUrls::class)->url($user->avatar_path, 300),
             'interest_styles' => $user->interest_styles === null ? [] : json_decode($user->interest_styles, true, 512, JSON_THROW_ON_ERROR),
             'interest_region' => $user->interest_region];
     }
