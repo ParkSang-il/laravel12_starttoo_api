@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 
 require __DIR__.'/starttoo_auth.php';
 require __DIR__.'/starttoo_artworks.php';
+require __DIR__.'/starttoo_posts.php';
 require __DIR__.'/starttoo_profiles.php';
 require __DIR__.'/starttoo_safety.php';
 
