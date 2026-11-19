@@ -10,6 +10,44 @@ use Illuminate\Support\Str;
 /** 일반 게시물 전용 저장소. 사진만 기존 선업로드/첨부 검증을 공유한다. */
 class Posts
 {
+    public function feedQuery(?int $viewerId, string $scope): \Illuminate\Database\Query\Builder
+    {
+        $query = app(ProjectDatabase::class)->database()->table('starttoo_posts as p')
+            ->join('starttoo_users as u', 'u.id', '=', 'p.user_id')
+            ->where('u.status', 'active')->where('u.moderation_hidden', false)->where('p.moderation_hidden', false)
+            ->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_post_images as i')->whereColumn('i.post_id', 'p.id'))
+            ->select('p.*', 'u.nickname as author_nickname', 'u.display_name as author_display_name', 'u.avatar_path as author_avatar');
+        app(Blocks::class)->filter($query, 'p.user_id', $viewerId);
+        if ($scope === 'following') $query->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_follows as f')
+            ->whereColumn('f.target_user_id', 'p.user_id')->where('f.user_id', $viewerId));
+        return $query;
+    }
+
+    /** 통합 피드가 고른 게시물만 일괄 조회한다. 카드별 추가 쿼리를 실행하지 않는다. */
+    public function feedItems(array $ids, ?int $viewerId, string $scope): array
+    {
+        if (!$ids) return [];
+        $rows = $this->feedQuery($viewerId, $scope)->whereIn('p.id', $ids)->get();
+        $images = app(ProjectDatabase::class)->database()->table('starttoo_post_images')
+            ->whereIn('post_id', $rows->pluck('id')->all())->orderBy('position')->get()->groupBy('post_id');
+        $following = app(Follows::class)->following($rows->pluck('user_id')->all(), $viewerId);
+        $items = [];
+        foreach ($rows as $row) {
+            $photos = $images->get($row->id, collect());
+            if ($photos->isEmpty()) continue;
+            $items[] = ['kind' => 'post', 'id' => $row->id, 'content' => $row->content,
+                'tags' => json_decode($row->tags, true, 512, JSON_THROW_ON_ERROR),
+                'version' => (int) $row->version, 'viewer_id' => $viewerId,
+                'can_edit' => $viewerId === (int) $row->user_id, 'moderation_hidden' => false,
+                'created_at' => $row->created_at,
+                'author' => ['id' => (int) $row->user_id, 'nickname' => $row->author_nickname ?? $row->author_display_name,
+                    'avatar_url' => app(MediaUrls::class)->url($row->author_avatar, 300),
+                    'following' => in_array((int) $row->user_id, $following, true)],
+                'images' => $photos->map(fn ($image) => ['id' => (int) $image->id, 'url' => app(MediaUrls::class)->url($image->path, 500)])->all()];
+        }
+        return $items;
+    }
+
     public function ready(string $token, AuthSessions $sessions): array
     {
         $identity = $sessions->authenticate($token);

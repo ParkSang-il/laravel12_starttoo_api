@@ -29,7 +29,7 @@ class Artworks
         return $identity;
     }
 
-    public function feed(array $input, ?int $viewerId = null, ?int $authorId = null): array
+    public function feed(array $input, ?int $viewerId = null, ?int $authorId = null, ?array $onlyIds = null): array
     {
         $options = $this->options();
         $validator = Validator::make($input, [
@@ -54,20 +54,8 @@ class Artworks
             }
         }
         $db = app(ProjectDatabase::class)->database();
-        $query = $db->table('starttoo_artworks as a')
-            ->join('starttoo_users as u', 'u.id', '=', 'a.user_id')->where('u.status', 'active')
-            ->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_artwork_images as i')->whereColumn('i.artwork_id', 'a.id'))
-            ->select('a.*', 'u.id as author_id', 'u.nickname as author_nickname', 'u.display_name as author_display_name',
-                'u.interest_region as author_region', 'u.avatar_path as author_avatar');
-        if ($scope === 'mine') $query->where('a.user_id', $viewerId);
-        else $query->where('a.visibility', 'public')->where('a.moderation_hidden', false)->where('u.moderation_hidden', false);
-        app(Blocks::class)->filter($query, 'a.user_id', $viewerId);
-        if ($viewerId !== null && in_array($scope, ['public', 'following'], true) && $authorId === null) {
-            $query->whereNotExists(fn ($q) => $q->selectRaw('1')->from('starttoo_hidden_artworks as h')->whereColumn('h.artwork_id', 'a.id')->where('h.user_id', $viewerId));
-        }
-        if ($authorId !== null) $query->where('a.user_id', $authorId);
-        if ($scope === 'following') $query->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_follows as f')
-            ->whereColumn('f.target_user_id', 'a.user_id')->where('f.user_id', $viewerId));
+        $query = $this->feedQuery($viewerId, $scope, $authorId);
+        if ($onlyIds !== null) $query->whereIn('a.id', $onlyIds);
         $orderColumn = 'a.created_at';
         if ($scope === 'saved') {
             $query->join('starttoo_artwork_interactions as s', function ($join) use ($viewerId) {
@@ -110,6 +98,26 @@ class Artworks
         $next = ($backward || $hasMore) ? $encode($page->last(), 'next') : null;
         $previous = ($backward ? $hasMore : $cursor !== null) ? $encode($page->first(), 'previous') : null;
         return ['items' => $items, 'next_cursor' => $next, 'previous_cursor' => $previous, 'styles' => $options['styles'], 'total' => $total];
+    }
+
+    /** 기존 목록과 통합 피드가 동일한 공개 범위·차단·팔로잉 조건을 사용한다. */
+    public function feedQuery(?int $viewerId, string $scope, ?int $authorId = null): \Illuminate\Database\Query\Builder
+    {
+        $query = app(ProjectDatabase::class)->database()->table('starttoo_artworks as a')
+            ->join('starttoo_users as u', 'u.id', '=', 'a.user_id')->where('u.status', 'active')
+            ->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_artwork_images as i')->whereColumn('i.artwork_id', 'a.id'))
+            ->select('a.*', 'u.id as author_id', 'u.nickname as author_nickname', 'u.display_name as author_display_name',
+                'u.interest_region as author_region', 'u.avatar_path as author_avatar');
+        if ($scope === 'mine') $query->where('a.user_id', $viewerId);
+        else $query->where('a.visibility', 'public')->where('a.moderation_hidden', false)->where('u.moderation_hidden', false);
+        app(Blocks::class)->filter($query, 'a.user_id', $viewerId);
+        if ($viewerId !== null && in_array($scope, ['public', 'following'], true) && $authorId === null) {
+            $query->whereNotExists(fn ($q) => $q->selectRaw('1')->from('starttoo_hidden_artworks as h')->whereColumn('h.artwork_id', 'a.id')->where('h.user_id', $viewerId));
+        }
+        if ($authorId !== null) $query->where('a.user_id', $authorId);
+        if ($scope === 'following') $query->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_follows as f')
+            ->whereColumn('f.target_user_id', 'a.user_id')->where('f.user_id', $viewerId));
+        return $query;
     }
 
     /** 미리 올린 사진(media_ids, 1~10장, 순서대로)으로 작품을 등록한다. */
