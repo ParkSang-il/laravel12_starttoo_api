@@ -33,6 +33,36 @@ Artisan::command('starttoo:push-info {--user=}', function () {
     });
 });
 
+// 운영자 확인용: 회원의 로그인 중인 모든 기기로 테스트 알림을 보낸다. 토큰·키는 출력하지 않는다.
+Artisan::command('starttoo:push-test {user}', function () {
+    $user = filter_var($this->argument('user'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    if ($user === false) {
+        $this->error('사용법: starttoo:push-test {회원번호}');
+        return 1;
+    }
+    return app(ProjectDatabase::class)->run('starttoo', function () use ($user) {
+        $devices = app(ProjectDatabase::class)->database()->table('starttoo_push_devices as d')
+            ->join('starttoo_auth_sessions as s', 's.id', '=', 'd.session_id')
+            ->where('d.user_id', $user)->whereNull('s.revoked_at')
+            ->where('s.idle_expires_at', '>', now())->where('s.absolute_expires_at', '>', now())
+            ->orderBy('d.id')->get(['d.id', 'd.platform', 'd.updated_at', 'd.token_ciphertext']);
+        if ($devices->isEmpty()) {
+            $this->error("회원 {$user}의 로그인 중인 기기가 없어요. 앱에서 로그인하고 알림을 허용해주세요.");
+            return 1;
+        }
+        $results = [];
+        foreach ($devices as $device) {
+            $message = ['notification' => ['title' => '스타투', 'body' => '테스트 알림']];
+            if ($device->platform === 'android') $message['android'] = ['priority' => 'high', 'notification' => ['channel_id' => 'starttoo_social', 'icon' => 'ic_stat_starttoo']];
+            else $message['apns'] = ['headers' => ['apns-push-type' => 'alert', 'apns-priority' => '10'], 'payload' => ['aps' => ['sound' => 'default']]];
+            $result = app('starttoo.fcm')->send(\Illuminate\Support\Facades\Crypt::decryptString($device->token_ciphertext), $message);
+            $results[] = ['device_id' => $device->id, 'platform' => $device->platform, 'registered_at' => $device->updated_at] + $result;
+        }
+        $this->line(json_encode($results, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
+        return collect($results)->every(fn ($r) => $r['state'] === 'sent') ? 0 : 1;
+    });
+});
+
 // SSH 접근 권한을 가진 운영자 전용이다. 외부 회원 API로 광고 발송을 열지 않는다.
 Artisan::command('starttoo:push-campaign {action} {id?} {--file=}', function () {
     try {

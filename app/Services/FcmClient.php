@@ -39,14 +39,15 @@ class FcmClient {
             $response = $send($credentials);
             if ($response->status() === 401 && ($credentials = $this->bearer(true))) $response = $send($credentials);
             if ($response->successful()) return ['state' => 'sent', 'http_status' => $response->status(), 'message_id' => $response->json('name')];
-            $code = $response->json('error.status') ?? 'UNKNOWN'; $tokenViolation = false;
+            $code = $response->json('error.status') ?? 'UNKNOWN'; $tokenViolation = false; $apnsReason = null;
             foreach (($response->json('error.details') ?? []) as $detail) {
                 if (($detail['@type'] ?? '') === 'type.googleapis.com/google.firebase.fcm.v1.FcmError') $code = $detail['errorCode'] ?? $code;
+                if (($detail['@type'] ?? '') === 'type.googleapis.com/google.firebase.fcm.v1.ApnsError' && is_string($detail['reason'] ?? null)) $apnsReason = substr($detail['reason'], 0, 64);
                 if (($detail['@type'] ?? '') === 'type.googleapis.com/google.rpc.BadRequest') {
                     foreach (($detail['fieldViolations'] ?? []) as $violation) if (($violation['field'] ?? '') === 'message.token') $tokenViolation = true;
                 }
             }
-            $meta = ['http_status' => $response->status(), 'code' => is_string($code) ? substr($code, 0, 64) : 'UNKNOWN'];
+            $meta = ['http_status' => $response->status(), 'code' => is_string($code) ? substr($code, 0, 64) : 'UNKNOWN', 'apns_reason' => $apnsReason];
             if (in_array($code, ['UNREGISTERED', 'SENDER_ID_MISMATCH'], true) || ($code === 'INVALID_ARGUMENT' && $tokenViolation)) return ['state' => 'invalid', ...$meta];
             if (in_array($code, ['QUOTA_EXCEEDED', 'UNAVAILABLE', 'INTERNAL'], true) || in_array($response->status(), [429, 500, 503], true)) {
                 $header = $response->header('Retry-After');
