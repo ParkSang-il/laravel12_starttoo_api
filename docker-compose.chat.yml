@@ -43,7 +43,14 @@ services:
   chat-queue-rt:
     <<: *chat-php
     container_name: starttoo_chat_queue_rt
-    command: ["php", "artisan", "queue:work", "database", "--queue=chat-realtime,chat-push", "--sleep=1", "--tries=3", "--backoff=5", "--timeout=30", "--max-time=3600"]
+    # STARTTOO 소셜 푸시도 기존 chat-push 큐에서 처리한다.
+    # 파일은 서버 비공개 경로에 두며, 기존 컨테이너를 재생성하면 마운트된다.
+    volumes:
+      - /home/web/laravel12_starttoo_api:/var/www/html
+      - starttoo_storage:/var/www/html/storage
+      - starttoo_bootstrap_cache:/var/www/html/bootstrap/cache
+      - ${STARTTOO_FCM_HOST_DIR:-/home/docker/secrets/starttoo}:/run/secrets/starttoo:ro
+    command: ["php", "artisan", "queue:work", "database", "--queue=chat-realtime,chat-push,chat-marketing", "--sleep=1", "--tries=3", "--backoff=5", "--timeout=30", "--max-time=3600"]
     stop_grace_period: 60s
 
   chat-queue-media:

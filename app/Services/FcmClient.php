@@ -3,15 +3,17 @@ namespace App\Services;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 class FcmClient {
+    public function __construct(private string $credentialsConfig = 'services.fcm.credentials', private ?string $expectedProject = null) {}
     private ?array $access = null;
     private bool $warned = false;
     private function bearer(bool $refresh = false): ?array {
         if (!$refresh && $this->access && $this->access['expires'] > time() + 60) return $this->access;
         try {
-            $path = config('services.fcm.credentials');
+            $path = config($this->credentialsConfig);
             if (!is_string($path) || !is_readable($path)) throw new \RuntimeException('credentials unavailable');
             $data = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
             if (empty($data['client_email']) || empty($data['private_key']) || empty($data['project_id'])) throw new \RuntimeException('credentials invalid');
+            if ($this->expectedProject !== null && $data['project_id'] !== $this->expectedProject) throw new \RuntimeException('project mismatch');
             $encode = fn ($s) => rtrim(strtr(base64_encode($s), '+/', '-_'), '=');
             $body = $encode(json_encode(['alg' => 'RS256', 'typ' => 'JWT'])).'.'.$encode(json_encode([
                 'iss' => $data['client_email'], 'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
@@ -30,13 +32,13 @@ class FcmClient {
     /** Returns only safe classifications; never logs response bodies or tokens. */
     public function send(string $token, array $payload): array {
         $credentials = $this->bearer();
-        if (!$credentials) return ['state' => 'skipped'];
+        if (!$credentials) return ['state' => 'skipped', 'code' => 'CREDENTIALS_UNAVAILABLE'];
         try {
             $send = fn ($c) => Http::withToken($c['token'])->connectTimeout(3)->timeout(6)
                 ->post('https://fcm.googleapis.com/v1/projects/'.rawurlencode($c['project']).'/messages:send', ['message' => ['token' => $token, ...$payload]]);
             $response = $send($credentials);
             if ($response->status() === 401 && ($credentials = $this->bearer(true))) $response = $send($credentials);
-            if ($response->successful()) return ['state' => 'sent'];
+            if ($response->successful()) return ['state' => 'sent', 'http_status' => $response->status(), 'message_id' => $response->json('name')];
             $code = $response->json('error.status') ?? 'UNKNOWN'; $tokenViolation = false;
             foreach (($response->json('error.details') ?? []) as $detail) {
                 if (($detail['@type'] ?? '') === 'type.googleapis.com/google.firebase.fcm.v1.FcmError') $code = $detail['errorCode'] ?? $code;
@@ -44,14 +46,15 @@ class FcmClient {
                     foreach (($detail['fieldViolations'] ?? []) as $violation) if (($violation['field'] ?? '') === 'message.token') $tokenViolation = true;
                 }
             }
-            if (in_array($code, ['UNREGISTERED', 'SENDER_ID_MISMATCH'], true) || ($code === 'INVALID_ARGUMENT' && $tokenViolation)) return ['state' => 'invalid'];
+            $meta = ['http_status' => $response->status(), 'code' => is_string($code) ? substr($code, 0, 64) : 'UNKNOWN'];
+            if (in_array($code, ['UNREGISTERED', 'SENDER_ID_MISMATCH'], true) || ($code === 'INVALID_ARGUMENT' && $tokenViolation)) return ['state' => 'invalid', ...$meta];
             if (in_array($code, ['QUOTA_EXCEEDED', 'UNAVAILABLE', 'INTERNAL'], true) || in_array($response->status(), [429, 500, 503], true)) {
                 $header = $response->header('Retry-After');
                 $delay = is_numeric($header) ? (int) $header : (($at = strtotime($header ?? '')) ? $at - time() : 60);
-                return ['state' => 'retry', 'delay' => max(60, min(3600, $delay))];
+                return ['state' => 'retry', 'delay' => max(60, min(3600, $delay)), ...$meta];
             }
             Log::warning('FCM delivery rejected.', ['status' => $response->status(), 'code' => is_string($code) ? substr($code, 0, 64) : 'UNKNOWN']);
-            return ['state' => 'rejected'];
-        } catch (\Throwable) { return ['state' => 'retry', 'delay' => 60]; }
+            return ['state' => 'rejected', ...$meta];
+        } catch (\Throwable) { return ['state' => 'retry', 'delay' => 60, 'code' => 'TRANSPORT_ERROR']; }
     }
 }

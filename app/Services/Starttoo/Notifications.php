@@ -12,19 +12,33 @@ class Notifications
     private function db() { return app(ProjectDatabase::class)->database(); }
 
     /** 호출부의 회원 잠금과 트랜잭션 안에서만 호출한다. 저장은 알림을 만들지 않는다. */
-    public function emit(int $recipient, int $actor, string $kind, string $type, string $target, ?int $comment = null): void
+    public function emit(int $recipient, int $actor, string $kind, string $type, string $target, ?int $comment = null, ?string $occurredAt = null): void
     {
         if ($recipient === $actor || app(Blocks::class)->between($recipient, $actor)) return;
-        $this->db()->table('starttoo_notifications')->insertOrIgnore([
+        $eventKey = hash('sha256', json_encode([$recipient, $actor, $kind, $type, $target, $comment], JSON_THROW_ON_ERROR));
+        $inserted = $this->db()->table('starttoo_notifications')->insertOrIgnore([
             'user_id' => $recipient, 'actor_id' => $actor, 'kind' => $kind, 'target_type' => $type, 'target_id' => $target,
-            'comment_id' => $comment, 'event_key' => hash('sha256', json_encode([$recipient, $actor, $kind, $type, $target, $comment], JSON_THROW_ON_ERROR)),
-            'created_at' => now(),
+            'comment_id' => $comment, 'event_key' => $eventKey,
+            'created_at' => $occurredAt ?? now(),
         ]);
+        if ($inserted && config('starttoo.push_enabled') && app(UserPreferences::class)->get($recipient)['values']['social']) {
+            $id = $this->db()->table('starttoo_notifications')->where('event_key', $eventKey)->value('id');
+            $this->db()->table('starttoo_push_outbox')->insertOrIgnore(['notification_id' => $id, 'created_at' => now()]);
+            $outboxId = (int) $this->db()->table('starttoo_push_outbox')->where('notification_id', $id)->value('id');
+            // STARTTOO 원본 트랜잭션의 커밋 후 기존 공용 큐에 넣는다.
+            // 큐 입력 장애가 소셜 동작을 실패시키지 않도록 발송함은 별도 복구할 수 있다.
+            $this->db()->afterCommit(function () use ($outboxId) {
+                try { \App\Jobs\QueueStarttooPush::dispatch($outboxId); }
+                catch (\Throwable $e) { report($e); }
+            });
+        }
     }
 
-    public function withdraw(int $actor, string $kind, string $type, string $target): void
+    public function withdraw(int $actor, string $kind, string $type, string $target, ?int $comment = null): void
     {
-        $this->db()->table('starttoo_notifications')->where('actor_id', $actor)->where('kind', $kind)->where('target_type', $type)->where('target_id', $target)->delete();
+        $q = $this->db()->table('starttoo_notifications')->where('actor_id', $actor)->where('kind', $kind)->where('target_type', $type)->where('target_id', $target);
+        if ($comment !== null) $q->where('comment_id', $comment);
+        $q->delete();
     }
 
     private function visible(int $viewer)
@@ -48,11 +62,24 @@ class Notifications
                                 $i->selectRaw('1')->from($table.' as li')->whereColumn('li.'.$type.'_id', 'n.target_id')->whereColumn('li.user_id', 'n.actor_id');
                                 if ($type === 'artwork') $i->where('li.kind', 'like');
                             });
+                        })->orWhere(function ($newPost) use ($viewer, $type) {
+                            $contents = $type === 'post' ? 'starttoo_posts' : 'starttoo_artworks';
+                            $newPost->where('n.kind', 'new_post')
+                                ->whereExists(fn ($p) => $p->selectRaw('1')->from($contents.' as npt')->whereColumn('npt.id', 'n.target_id')->whereColumn('npt.user_id', 'n.actor_id'))
+                                ->whereExists(fn ($f) => $f->selectRaw('1')->from('starttoo_follows as npf')->where('npf.user_id', $viewer)->whereColumn('npf.target_user_id', 'n.actor_id'));
                         })->orWhere(function ($comment) use ($viewer, $type) {
                             $table = 'starttoo_'.$type.'_comments';
-                            $comment->whereIn('n.kind', ['comment', 'reply'])->whereExists(function ($c) use ($viewer, $type, $table) {
+                            $comment->whereIn('n.kind', ['comment', 'reply', 'comment_like'])->whereExists(function ($c) use ($viewer, $type, $table) {
                                 $c->selectRaw('1')->from($table.' as nc')->whereColumn('nc.id', 'n.comment_id')->whereColumn('nc.'.$type.'_id', 'n.target_id')
-                                    ->whereColumn('nc.user_id', 'n.actor_id')->whereNull('nc.deleted_at')->where('nc.moderation_hidden', false)
+                                    ->whereNull('nc.deleted_at')->where('nc.moderation_hidden', false)
+                                    ->where(function ($event) use ($type) {
+                                        $event->where(fn ($original) => $original->whereIn('n.kind', ['comment', 'reply'])->whereColumn('nc.user_id', 'n.actor_id'))
+                                            ->orWhere(function ($like) use ($type) {
+                                                $likes = $type === 'post' ? 'starttoo_post_comment_likes' : 'starttoo_comment_likes';
+                                                $like->where('n.kind', 'comment_like')->whereColumn('nc.user_id', 'n.user_id')
+                                                    ->whereExists(fn ($l) => $l->selectRaw('1')->from($likes.' as ncl')->whereColumn('ncl.comment_id', 'nc.id')->whereColumn('ncl.user_id', 'n.actor_id'));
+                                            });
+                                    })
                                     ->where(function ($root) use ($viewer, $type, $table) {
                                         $root->whereNull('nc.parent_id')->orWhereExists(function ($parent) use ($viewer, $type, $table) {
                                             $parent->selectRaw('1')->from($table.' as pc')->join('starttoo_users as pu', 'pu.id', '=', 'pc.user_id')
@@ -70,6 +97,20 @@ class Notifications
     }
 
     public function unread(int $viewer): int { return $this->visible($viewer)->whereNull('n.read_at')->count(); }
+
+    public function delivery(int $viewer, int $id): ?object
+    {
+        return $this->visible($viewer)->where('n.id', $id)->whereNull('n.read_at')->first(['n.*']);
+    }
+
+    public function open(int $viewer, int $id): array
+    {
+        $n = $this->visible($viewer)->where('n.id', $id)->first(['n.*']);
+        if (!$n) $this->fail(404, 'NOTIFICATION_NOT_FOUND', '더 이상 확인할 수 없는 알림이에요.');
+        app(PushAudit::class)->opened('notification', (string) $id, $viewer);
+        return [...$this->read($viewer, $id), 'target_type' => $n->target_type, 'target_id' => $n->target_id,
+            'actor_id' => (int) $n->actor_id, 'kind' => $n->kind];
+    }
 
     public function listing(int $viewer, array $input): array
     {

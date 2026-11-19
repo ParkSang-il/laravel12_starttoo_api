@@ -18,6 +18,7 @@ class StarttooNotificationsController extends Controller
             'starttoo.notifications' => $notifications->listing($user, $request->query()),
             'starttoo.notifications.unread' => ['unread_count' => $notifications->unread($user)],
             'starttoo.notifications.read' => $notifications->read($user, (int) $notification),
+            'starttoo.notifications.open' => $notifications->open($user, (int) $notification),
             'starttoo.preferences.get' => $preferences->get($user),
             'starttoo.preferences.set' => $preferences->change($user, $request->all()),
         };

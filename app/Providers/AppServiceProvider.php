@@ -13,6 +13,8 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(ProjectDatabase::class, fn () => new ProjectDatabase);
+        // 같은 기존 worker 안에서도 STARTTOO의 키·OAuth 캐시를 다른 앱과 분리한다.
+        $this->app->singleton('starttoo.fcm', fn () => new \App\Services\FcmClient('starttoo.fcm_credentials', config('starttoo.firebase_project_id')));
     }
 
     public function boot(): void

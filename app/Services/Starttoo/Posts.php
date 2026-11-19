@@ -161,6 +161,7 @@ class Posts
                 foreach ($mediaIds as $position => $mediaId) {
                     $db->table('starttoo_post_images')->insert(['post_id' => $savedId, 'position' => $position, 'path' => $paths[$mediaId]]);
                 }
+                app(FollowerNotifications::class)->created((int) $userId, 'post', $savedId);
             } else {
                 $retained = array_column($order, 'existing_id');
                 $removed = $images->filter(fn ($image) => !in_array((int) $image->id, $retained, true))->pluck('path')->all();

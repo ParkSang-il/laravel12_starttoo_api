@@ -128,6 +128,8 @@ class AuthSessions
 
     public function logout(string $token): void
     {
+        $sessionId = $this->db()->table('starttoo_auth_sessions')->where('access_hash', hash('sha256', $token))->value('id');
+        if ($sessionId) $this->db()->table('starttoo_push_devices')->where('session_id', $sessionId)->delete();
         $this->db()->table('starttoo_auth_sessions')->where('access_hash', hash('sha256', $token))
             ->update(['revoked_at' => now(), 'previous_result' => null, 'updated_at' => now()]);
     }

@@ -167,8 +167,10 @@ class ArtworkComments
                 $id = $commentId;
             } else {
                 $key = ['comment_id' => $commentId, 'user_id' => $viewer];
-                if ($input['active']) $db->table(static::LIKES)->insertOrIgnore([...$key, 'created_at' => now()]);
+                if ($input['active']) $inserted = $db->table(static::LIKES)->insertOrIgnore([...$key, 'created_at' => now()]);
                 else $db->table(static::LIKES)->where($key)->delete();
+                if ($input['active'] && $inserted) app(Notifications::class)->emit((int) $target->user_id, $viewer, 'comment_like', static::DOMAIN, $artwork, $commentId);
+                if (!$input['active']) app(Notifications::class)->withdraw($viewer, 'comment_like', static::DOMAIN, $artwork, $commentId);
                 $db->table(static::COMMENTS)->where('id', $commentId)->update(['like_count' => $db->table(static::LIKES)->where('comment_id', $commentId)->count()]);
                 $id = $commentId;
             }

@@ -195,6 +195,7 @@ class Artworks
             foreach ($mediaIds as $position => $mediaId) {
                 $db->table('starttoo_artwork_images')->insert(['artwork_id' => $id, 'position' => $position, 'path' => $paths[$mediaId]]);
             }
+            if (($values['visibility'] ?? 'public') === 'public') app(FollowerNotifications::class)->created((int) $userId, 'artwork', $id);
             $sessions->authenticate($token, true);
             return $id;
         }, 3);

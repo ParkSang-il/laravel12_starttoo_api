@@ -29,6 +29,21 @@ class UserPreferences
         return (bool) app(ProjectDatabase::class)->database()->table('starttoo_user_preferences')->where('user_id', $user)->value('privateSave');
     }
 
+    /** 개발용 초안 동의를 실제 광고 수신 동의로 사용하지 않는다. */
+    public function marketingEligible(int $user): bool
+    {
+        $db = app(ProjectDatabase::class)->database();
+        $change = $db->table('starttoo_marketing_choices')->where('user_id', $user)->orderByDesc('recorded_at')->orderByDesc('id')->first();
+        $signup = $db->table('starttoo_consent_records as r')->join('starttoo_consent_submissions as s', 's.id', '=', 'r.submission_id')
+            ->where('s.user_id', $user)->where('r.document_id', 'marketing')->orderByDesc('r.recorded_at')->orderByDesc('r.id')
+            ->first(['r.accepted', 'r.recorded_at', 's.is_draft']);
+        if ($change && (!$signup || $change->recorded_at >= $signup->recorded_at)) {
+            $snapshot = json_decode($change->document_snapshot ?? 'null', true);
+            return (bool) $change->accepted && is_array($snapshot) && ($snapshot['is_draft'] ?? true) === false;
+        }
+        return $signup && (bool) $signup->accepted && !$signup->is_draft;
+    }
+
     public function change(int $user, array $input): array
     {
         if (Validator::make($input, ['key' => ['required', 'in:chat,booking,social,mkt,privateSave,dm'], 'value' => ['required', 'boolean'],
