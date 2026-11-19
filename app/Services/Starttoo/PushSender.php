@@ -106,14 +106,25 @@ class PushSender
                     'comment_like' => '회원님의 댓글에 새 좋아요가 있어요.',
                     'new_post' => '팔로우한 회원이 새 게시물을 올렸어요.',
                 };
+                // 이력에는 본문 원문 대신 안내 문구만 남긴다.
                 $db->table('starttoo_push_logs')->where('id', $log)->update(['kind' => $n->kind, 'title_snapshot' => '스타투', 'body_snapshot' => $body]);
+                $title = '스타투';
+                $image = null;
+                if ($n->kind === 'new_post' && ($preview = $this->newPostPreview($n))) {
+                    [$title, $body, $image] = $preview;
+                }
+                $notification = ['title' => $title, 'body' => $body];
+                if ($image) $notification['image'] = $image;
+                $aps = ['sound' => 'default'];
+                // iOS는 Notification Service Extension이 fcm_options.image를 내려받아 붙인다.
+                if ($image) $aps['mutable-content'] = 1;
                 $fcm = app('starttoo.fcm');
                 $result = $fcm->send(Crypt::decryptString($device->token_ciphertext), [
-                    'notification' => ['title' => '스타투', 'body' => $body],
+                    'notification' => $notification,
                     'data' => ['notification_id' => (string) $n->id, 'recipient_id' => (string) $device->user_id],
                     'android' => ['priority' => 'high', 'ttl' => '3600s', 'notification' => ['channel_id' => 'starttoo_social', 'tag' => 'starttoo:'.$n->id, 'icon' => 'ic_stat_starttoo']],
                     'apns' => ['headers' => ['apns-push-type' => 'alert', 'apns-priority' => '10', 'apns-collapse-id' => 'starttoo:'.$n->id],
-                        'payload' => ['aps' => ['sound' => 'default']]],
+                        'payload' => ['aps' => $aps], ...($image ? ['fcm_options' => ['image' => $image]] : [])],
                 ]);
             }
             if ($result['state'] === 'invalid' && $device) {
@@ -134,5 +145,36 @@ class PushSender
             ]);
             throw $e;
         }
+    }
+
+    /**
+     * 팔로우한 회원의 새 게시물 알림: 제목에 작성자, 본문에 내용 앞부분, 대표 사진(첫 장).
+     * 열람 권한은 delivery()에서 이미 확인했다. 내용이 없으면 기본 안내 문구를 쓴다.
+     */
+    private function newPostPreview(object $n): ?array
+    {
+        $db = $this->db();
+        if ($n->target_type === 'artwork') {
+            $row = $db->table('starttoo_artworks')->where('id', $n->target_id)->first(['title', 'description']);
+            $text = $row ? trim(($row->description ?? '') !== '' ? $row->description : ($row->title ?? '')) : '';
+            $path = $db->table('starttoo_artwork_images')->where('artwork_id', $n->target_id)->orderBy('position')->value('path');
+        } elseif ($n->target_type === 'post') {
+            $text = trim((string) $db->table('starttoo_posts')->where('id', $n->target_id)->value('content'));
+            $path = $db->table('starttoo_post_images')->where('post_id', $n->target_id)->orderBy('position')->value('path');
+        } else {
+            return null;
+        }
+        $actor = $db->table('starttoo_users')->where('id', $n->actor_id)->first(['nickname', 'display_name']);
+        $name = $actor ? ($actor->nickname ?: $actor->display_name) : null;
+        $text = preg_replace('/\s+/u', ' ', $text) ?? '';
+        $body = $text === '' ? '새 게시물을 올렸어요.' : Str::limit($text, 120, '…');
+        $title = $name ? Str::limit($name, 30, '…').'님의 새 게시물' : '스타투';
+        $image = null;
+        try {
+            $image = $path ? app(MediaUrls::class)->url($path, 720) : null;
+        } catch (\Throwable) {
+            $image = null; // 사진 주소를 만들지 못해도 글 알림은 보낸다.
+        }
+        return [$title, $body, is_string($image) && str_starts_with($image, 'https://') ? $image : null];
     }
 }
