@@ -175,6 +175,8 @@ class PushSender
         } catch (\Throwable) {
             $image = null; // 사진 주소를 만들지 못해도 글 알림은 보낸다.
         }
+        // FCM 알림 사진은 https만 허용한다. CDN 주소가 http로 설정돼 있으면 https로 바꿔 보낸다.
+        if (is_string($image) && str_starts_with($image, 'http://')) $image = 'https://'.substr($image, 7);
         return [$title, $body, is_string($image) && str_starts_with($image, 'https://') ? $image : null];
     }
 }
