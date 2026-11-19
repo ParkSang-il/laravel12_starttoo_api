@@ -152,6 +152,10 @@ class ArtworkComments
                 $id = $db->table(static::COMMENTS)->insertGetId([static::CONTENT_ID => $artwork, 'user_id' => $viewer,
                     'parent_id' => $targetId, 'content' => $input['content'], 'mentions' => json_encode($this->mentions($artwork, $viewer, $input), JSON_THROW_ON_ERROR),
                     'created_at' => now(), 'updated_at' => now()]);
+                app(Notifications::class)->emit((int) $author, $viewer, 'comment', static::DOMAIN, $artwork, $id);
+                if ($target && (int) $target->user_id !== (int) $author) {
+                    app(Notifications::class)->emit((int) $target->user_id, $viewer, 'reply', static::DOMAIN, $artwork, $id);
+                }
             } elseif ($action === 'delete') {
                 if ((int) $target->user_id !== $viewer) $this->fail(403, 'COMMENT_NOT_OWNER', '작성자만 댓글을 삭제할 수 있어요.');
                 $db->table(static::COMMENTS)->where('id', $commentId)->update(['content' => '', 'mentions' => '[]', 'like_count' => 0, 'deleted_at' => now(), 'updated_at' => now()]);

@@ -48,8 +48,12 @@ class ArtworkInteractions
                 return json_decode($request->response_payload, true, 512, JSON_THROW_ON_ERROR);
             }
             $key = ['user_id' => $userId, 'artwork_id' => $id, 'kind' => $input['kind']];
-            if ($input['active']) $db->table('starttoo_artwork_interactions')->insertOrIgnore([...$key, 'created_at' => now(), 'updated_at' => now()]);
+            if ($input['active']) $inserted = $db->table('starttoo_artwork_interactions')->insertOrIgnore([...$key, 'created_at' => now(), 'updated_at' => now()]);
             else $db->table('starttoo_artwork_interactions')->where($key)->delete();
+            if ($input['kind'] === 'like') {
+                if ($input['active'] && $inserted) app(Notifications::class)->emit((int) $row->user_id, (int) $userId, 'like', 'artwork', $id);
+                if (!$input['active']) app(Notifications::class)->withdraw((int) $userId, 'like', 'artwork', $id);
+            }
             $result = $this->states([$id], $userId)[$id];
             $db->table('starttoo_interaction_requests')->insert(['user_id' => $userId, 'request_key' => $input['request_key'], 'payload_hash' => $hash,
                 'response_payload' => json_encode($result, JSON_THROW_ON_ERROR)]);

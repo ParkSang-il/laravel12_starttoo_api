@@ -35,6 +35,7 @@ class PublicProfiles
             'artwork_count' => $count,
             'content_count' => $count + app(Posts::class)->feedQuery($viewerId, 'public', $id)->count(),
             'is_me' => $viewerId === (int) $user->id,
+            'saved_public' => app(UserPreferences::class)->savedPublic((int) $user->id),
             'social' => app(Follows::class)->state($id, $viewerId)];
     }
 }

@@ -11,6 +11,14 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 
 class StarttooPublicProfileController extends Controller
 {
+    public function saved(Request $request, string $user, \App\Services\Starttoo\UnifiedFeed $feed, AuthSessions $sessions)
+    {
+        $identity = $this->identity($request, $sessions);
+        $viewer = isset($identity['account']['id']) ? (int) $identity['account']['id'] : null;
+        return response()->json(['data' => [...$feed->list([...$request->only(['cursor', 'style']), 'scope' => 'saved'], $viewer, null, (int) $user),
+            'account' => $identity['account'] ?? null]])->header('Cache-Control', 'no-store');
+    }
+
     public function feed(Request $request, string $user, PublicProfiles $profiles, \App\Services\Starttoo\UnifiedFeed $feed, AuthSessions $sessions)
     {
         $identity = $this->identity($request, $sessions);

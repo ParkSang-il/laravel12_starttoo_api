@@ -11,7 +11,7 @@ use Illuminate\Validation\Rule;
 /** 작품/도안과 일반 게시물을 서버에서 합쳐 단일 커서로 조회한다. */
 class UnifiedFeed
 {
-    public function list(array $input, ?int $viewerId, ?int $authorId = null): array
+    public function list(array $input, ?int $viewerId, ?int $authorId = null, ?int $savedOwner = null): array
     {
         $artworks = app(Artworks::class);
         $styles = $artworks->options()['styles'];
@@ -22,7 +22,14 @@ class UnifiedFeed
         ])->fails()) $this->fail();
         $scope = $input['scope'] ?? 'public';
         $style = $input['style'] ?? null;
-        if ($scope !== 'public' && $viewerId === null) {
+        $owner = $savedOwner ?? $viewerId;
+        if ($savedOwner !== null) {
+            app(PublicProfiles::class)->user($savedOwner, $viewerId);
+            if ($scope !== 'saved' || ($savedOwner !== $viewerId && !app(UserPreferences::class)->savedPublic($savedOwner))) {
+                throw new HttpResponseException(response()->json(['code' => 'SAVED_NOT_PUBLIC', 'message' => '공개하지 않은 저장 목록이에요.'], 403));
+            }
+        }
+        if ($scope !== 'public' && $viewerId === null && !($scope === 'saved' && $savedOwner !== null)) {
             throw new HttpResponseException(response()->json(['code' => 'SESSION_EXPIRED', 'message' => '로그인이 필요해요.'], 401));
         }
         $cursor = null;
@@ -34,7 +41,8 @@ class UnifiedFeed
                     'v' => ['required', Rule::in([2])], 'at' => ['required', 'date_format:Y-m-d H:i:s'],
                     'id' => ['required', 'uuid'], 't' => ['required', Rule::in(['artwork', 'post'])],
                     'd' => ['required', Rule::in(['next', 'previous'])], 'scope' => ['required', Rule::in([$scope])],
-                ])->fails() || (($cursor['style'] ?? null) !== $style || ($cursor['author'] ?? null) !== $authorId || ($cursor['viewer'] ?? null) !== $viewerId)) $this->fail();
+                ])->fails() || (($cursor['style'] ?? null) !== $style || ($cursor['author'] ?? null) !== $authorId || ($cursor['viewer'] ?? null) !== $viewerId)
+                    || ($scope === 'saved' && ($cursor['saved_owner'] ?? $viewerId) !== $owner)) $this->fail();
             } catch (\JsonException $e) {
                 $this->fail();
             }
@@ -43,10 +51,13 @@ class UnifiedFeed
         $direction = $backward ? 'asc' : 'desc';
         $art = $artworks->feedQuery($viewerId, $scope, $authorId)
             ->select('a.id', 'a.created_at')->selectRaw("'artwork' as entry_type");
+        if ($scope === 'saved' && $owner !== $viewerId && $viewerId !== null) {
+            $art->whereNotExists(fn ($q) => $q->selectRaw('1')->from('starttoo_hidden_artworks as vh')->whereColumn('vh.artwork_id', 'a.id')->where('vh.user_id', $viewerId));
+        }
         if ($style !== null) $art->whereJsonContains('a.styles', $style);
         $artTime = 'a.created_at';
         if ($scope === 'saved') {
-            $art->join('starttoo_artwork_interactions as sv', fn ($j) => $j->on('sv.artwork_id', '=', 'a.id')->where('sv.user_id', $viewerId)->where('sv.kind', 'save'));
+            $art->join('starttoo_artwork_interactions as sv', fn ($j) => $j->on('sv.artwork_id', '=', 'a.id')->where('sv.user_id', $owner)->where('sv.kind', 'save'));
             $artTime = 'sv.created_at';
         }
         $art->select('a.id', $artTime.' as created_at')->selectRaw("'artwork' as entry_type");
@@ -59,9 +70,12 @@ class UnifiedFeed
         if ($style === null) {
             $posts = app(Posts::class)->feedQuery($viewerId, $scope, $authorId)
                 ->select('p.id', 'p.created_at')->selectRaw("'post' as entry_type");
+            if ($scope === 'saved' && $owner !== $viewerId && $viewerId !== null) {
+                $posts->whereNotExists(fn ($q) => $q->selectRaw('1')->from('starttoo_hidden_posts as vh')->whereColumn('vh.post_id', 'p.id')->where('vh.user_id', $viewerId));
+            }
             $postTime = 'p.created_at';
             if ($scope === 'saved') {
-                $posts->join('starttoo_post_saves as sp', fn ($j) => $j->on('sp.post_id', '=', 'p.id')->where('sp.user_id', $viewerId));
+                $posts->join('starttoo_post_saves as sp', fn ($j) => $j->on('sp.post_id', '=', 'p.id')->where('sp.user_id', $owner));
                 $postTime = 'sp.created_at';
             }
             $posts->select('p.id', $postTime.' as created_at')->selectRaw("'post' as entry_type");
@@ -81,7 +95,7 @@ class UnifiedFeed
         if ($artIds) {
             $payload = ['scope' => $scope];
             if ($style !== null) $payload['style'] = $style;
-            foreach ($artworks->feed($payload, $viewerId, $authorId, $artIds)['items'] as $card) $cards['artwork:'.$card['id']] = $card;
+            foreach ($artworks->feed($payload, $viewerId, $authorId, $artIds, $savedOwner)['items'] as $card) $cards['artwork:'.$card['id']] = $card;
         }
         $postIds = $page->where('entry_type', 'post')->pluck('id')->all();
         foreach (app(Posts::class)->feedItems($postIds, $viewerId, $scope, $authorId) as $card) $cards['post:'.$card['id']] = $card;
@@ -91,7 +105,7 @@ class UnifiedFeed
         }
         $encode = fn ($row, $d) => $row ? rtrim(strtr(base64_encode(json_encode([
             'v' => 2, 'author' => $authorId, 'viewer' => $viewerId, 'at' => $row->created_at, 'id' => $row->id, 't' => $row->entry_type,
-            'd' => $d, 'scope' => $scope, 'style' => $style,
+            'd' => $d, 'scope' => $scope, 'style' => $style, 'saved_owner' => $scope === 'saved' ? $owner : null,
         ], JSON_THROW_ON_ERROR)), '+/', '-_'), '=') : null;
         return ['items' => $items, 'styles' => $styles, 'total' => $total,
             'next_cursor' => ($backward || $hasMore) ? $encode($page->last(), 'next') : null,

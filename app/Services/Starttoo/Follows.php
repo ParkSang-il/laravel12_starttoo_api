@@ -51,8 +51,10 @@ class Follows
                 return json_decode($retry->response_payload, true, 512, JSON_THROW_ON_ERROR);
             }
             $key = ['user_id' => $viewer, 'target_user_id' => $target];
-            if ($input['active']) $db->table('starttoo_follows')->insertOrIgnore([...$key, 'created_at' => now()]);
+            if ($input['active']) $inserted = $db->table('starttoo_follows')->insertOrIgnore([...$key, 'created_at' => now()]);
             else $db->table('starttoo_follows')->where($key)->delete();
+            if ($input['active'] && $inserted) app(Notifications::class)->emit($target, $viewer, 'follow', 'user', (string) $target);
+            if (!$input['active']) app(Notifications::class)->withdraw($viewer, 'follow', 'user', (string) $target);
             $state = $this->state($target, $viewer);
             $db->table('starttoo_follow_requests')->insert(['user_id' => $viewer, 'request_key' => $input['request_key'], 'payload_hash' => $hash,
                 'response_payload' => json_encode($state, JSON_THROW_ON_ERROR)]);

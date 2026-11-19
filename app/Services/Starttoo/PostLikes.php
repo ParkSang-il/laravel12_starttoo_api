@@ -47,8 +47,12 @@ class PostLikes
             }
             $key = ['user_id' => $viewer, 'post_id' => $id];
             $table = $input['kind'] === 'like' ? 'starttoo_post_likes' : 'starttoo_post_saves';
-            if ($input['active']) $db->table($table)->insertOrIgnore([...$key, 'created_at' => now()]);
+            if ($input['active']) $inserted = $db->table($table)->insertOrIgnore([...$key, 'created_at' => now()]);
             else $db->table($table)->where($key)->delete();
+            if ($input['kind'] === 'like') {
+                if ($input['active'] && $inserted) app(Notifications::class)->emit((int) $author, $viewer, 'like', 'post', $id);
+                if (!$input['active']) app(Notifications::class)->withdraw($viewer, 'like', 'post', $id);
+            }
             $result = $this->states([$id], $viewer)[$id];
             $db->table('starttoo_post_like_requests')->insert([
                 'user_id' => $viewer, 'request_key' => $input['request_key'], 'payload_hash' => $hash,

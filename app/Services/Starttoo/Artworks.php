@@ -29,7 +29,7 @@ class Artworks
         return $identity;
     }
 
-    public function feed(array $input, ?int $viewerId = null, ?int $authorId = null, ?array $onlyIds = null): array
+    public function feed(array $input, ?int $viewerId = null, ?int $authorId = null, ?array $onlyIds = null, ?int $savedOwner = null): array
     {
         $options = $this->options();
         $validator = Validator::make($input, [
@@ -39,7 +39,11 @@ class Artworks
         ]);
         if ($validator->fails()) $this->fail(422, 'INVALID_ARTWORK_FILTER', '작품 목록 조회 조건을 확인해주세요.');
         $scope = $input['scope'] ?? 'public';
-        if ($scope !== 'public' && $viewerId === null) $this->fail(401, 'SESSION_EXPIRED', '로그인이 필요해요.');
+        if ($savedOwner !== null) {
+            app(PublicProfiles::class)->user($savedOwner, $viewerId);
+            if ($scope !== 'saved' || ($savedOwner !== $viewerId && !app(UserPreferences::class)->savedPublic($savedOwner))) $this->fail(403, 'SAVED_NOT_PUBLIC', '공개하지 않은 저장 목록이에요.');
+        }
+        if ($scope !== 'public' && $viewerId === null && !($scope === 'saved' && $savedOwner !== null)) $this->fail(401, 'SESSION_EXPIRED', '로그인이 필요해요.');
         $cursor = null;
         if (isset($input['cursor']) && $input['cursor'] !== '') {
             try {
@@ -58,8 +62,8 @@ class Artworks
         if ($onlyIds !== null) $query->whereIn('a.id', $onlyIds);
         $orderColumn = 'a.created_at';
         if ($scope === 'saved') {
-            $query->join('starttoo_artwork_interactions as s', function ($join) use ($viewerId) {
-                $join->on('s.artwork_id', '=', 'a.id')->where('s.user_id', $viewerId)->where('s.kind', 'save');
+            $query->join('starttoo_artwork_interactions as s', function ($join) use ($viewerId, $savedOwner) {
+                $join->on('s.artwork_id', '=', 'a.id')->where('s.user_id', $savedOwner ?? $viewerId)->where('s.kind', 'save');
             })->addSelect('s.created_at as saved_at');
             $orderColumn = 's.created_at';
         }
