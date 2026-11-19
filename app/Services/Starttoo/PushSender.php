@@ -169,14 +169,23 @@ class PushSender
         $text = preg_replace('/\s+/u', ' ', $text) ?? '';
         $body = $text === '' ? '새 게시물을 올렸어요.' : Str::limit($text, 120, '…');
         $title = $name ? Str::limit($name, 30, '…').'님의 새 게시물' : '스타투';
-        $image = null;
+        return [$title, $body, $path ? $this->pushImageUrl($path) : null];
+    }
+
+    /**
+     * 알림 사진 주소. FCM·APNs는 https만 받는다.
+     * CDN이 https가 아니면(현재 gcdn은 http 전용) Object Storage의 https 서명 주소를 쓴다.
+     * 서명 주소는 늦게 도착하는 알림도 열 수 있게 6시간 유지한다.
+     */
+    private function pushImageUrl(string $path): ?string
+    {
         try {
-            $image = $path ? app(MediaUrls::class)->url($path, 720) : null;
+            $cdn = app(MediaUrls::class)->url($path, 720);
+            if (is_string($cdn) && str_starts_with($cdn, 'https://')) return $cdn;
+            $signed = \Illuminate\Support\Facades\Storage::disk('starttoo')->temporaryUrl($path, now()->addHours(6));
+            return is_string($signed) && str_starts_with($signed, 'https://') ? $signed : null;
         } catch (\Throwable) {
-            $image = null; // 사진 주소를 만들지 못해도 글 알림은 보낸다.
+            return null; // 사진 주소를 만들지 못해도 글 알림은 보낸다.
         }
-        // FCM 알림 사진은 https만 허용한다. CDN 주소가 http로 설정돼 있으면 https로 바꿔 보낸다.
-        if (is_string($image) && str_starts_with($image, 'http://')) $image = 'https://'.substr($image, 7);
-        return [$title, $body, is_string($image) && str_starts_with($image, 'https://') ? $image : null];
     }
 }

@@ -29,7 +29,8 @@ class ProfilePhotos
                 imagedestroy($source);
             }
             $jpeg = function_exists('imagejpeg');
-            $path = 'profile/starttoo/'.$userId.'/'.Str::uuid().($jpeg ? '.jpg' : '.png');
+            // 저장 경로: profile/starttoo/연도/월/일/UUID. 기존 회원번호 경로의 사진은 DB 경로 그대로 유지된다.
+            $path = 'profile/starttoo/'.now('Asia/Seoul')->format('Y/m/d').'/'.Str::uuid().($jpeg ? '.jpg' : '.png');
             if (!Storage::disk('starttoo')->put($path, $bytes, [
                 'visibility' => 'private', 'ContentType' => $jpeg ? 'image/jpeg' : 'image/png',
             ])) {
