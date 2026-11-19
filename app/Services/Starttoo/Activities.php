@@ -47,8 +47,9 @@ class Activities
             $q->selectRaw('a.id as activity_id, a.created_at, ? as source_rank', [$rank])
                 ->selectRaw($source['kind'] === null ? 'a.kind as kind' : '? as kind', $source['kind'] === null ? [] : [$source['kind']])
                 ->selectRaw('? as target_type, t.id as target_id, u.id as author_id, COALESCE(u.nickname, u.display_name) as author_name', [$source['target']])
-                ->selectRaw($source['target'] === 'artwork' ? 't.kind as target_kind, t.title as target_text' : "'post' as target_kind, t.content as target_text")
-                ->selectRaw($source['kind'] === 'comment' ? 'a.content as comment_text' : 'NULL as comment_text')
+                // 제목 없는 작품은 내용으로 대신 보여 준다.
+                ->selectRaw($source['target'] === 'artwork' ? "t.kind as target_kind, COALESCE(NULLIF(t.title, ''), t.description) as target_text" : "'post' as target_kind, t.content as target_text")
+                ->selectRaw($source['kind'] === 'comment' ? 'a.content as comment_text, a.like_count as comment_like_count' : 'NULL as comment_text, NULL as comment_like_count')
                 ->orderByDesc('a.created_at')->orderByDesc('a.id')->limit(21);
             $candidate = $db->query()->fromSub($q, 's'.$rank)->select('*');
             if ($union === null) $union = $candidate;
@@ -63,6 +64,7 @@ class Activities
                 'id' => $source['name'].':'.$row->activity_id, 'kind' => $row->kind,
                 'created_at' => Carbon::parse($row->created_at)->toIso8601String(),
                 'comment_excerpt' => $row->kind === 'comment' ? Str::limit($row->comment_text, 120, '…') : null,
+                'comment_like_count' => $row->kind === 'comment' ? (int) $row->comment_like_count : null,
                 'target' => [
                     'type' => $row->target_type, 'id' => $row->target_id, 'kind' => $row->target_kind,
                     'title' => Str::limit($row->target_text, 120, '…'),
