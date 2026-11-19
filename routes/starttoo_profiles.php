@@ -9,4 +9,5 @@ Route::prefix('v1/projects/starttoo/users')->middleware([StarttooDatabase::class
     Route::post('{user}/follow', [StarttooPublicProfileController::class, 'follow'])->whereNumber('user');
     Route::get('{user}', [StarttooPublicProfileController::class, 'show'])->whereNumber('user');
     Route::get('{user}/artworks', [StarttooPublicProfileController::class, 'artworks'])->whereNumber('user');
+    Route::get('{user}/feed', [StarttooPublicProfileController::class, 'feed'])->whereNumber('user');
 });

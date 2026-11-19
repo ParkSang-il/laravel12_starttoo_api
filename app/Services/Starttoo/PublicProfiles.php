@@ -32,7 +32,9 @@ class PublicProfiles
             'avatar_url' => app(MediaUrls::class)->url($user->avatar_path, 300),
             'styles' => array_values(array_filter($options['styles'], fn ($s) => in_array($s['id'], $styles, true))),
             'region' => collect($options['regions'])->firstWhere('id', $user->interest_region)['label'] ?? null,
-            'artwork_count' => $count, 'is_me' => $viewerId === (int) $user->id,
+            'artwork_count' => $count,
+            'content_count' => $count + app(Posts::class)->feedQuery($viewerId, 'public', $id)->count(),
+            'is_me' => $viewerId === (int) $user->id,
             'social' => app(Follows::class)->state($id, $viewerId)];
     }
 }

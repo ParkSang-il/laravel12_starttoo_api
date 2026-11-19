@@ -12,6 +12,8 @@ Route::prefix('v1/projects/starttoo/posts')->middleware([StarttooDatabase::class
     Route::post('media', [StarttooArtworkController::class, 'upload'])->middleware('throttle:30,1');
     Route::post('/', [StarttooPostController::class, 'store'])->middleware('throttle:30,1');
     Route::post('{post}/edit', [StarttooPostController::class, 'update'])->whereUuid('post')->middleware('throttle:30,1');
+    Route::post('{post}/delete', [StarttooPostController::class, 'destroy'])->whereUuid('post')->middleware('throttle:30,1');
+    Route::post('{post}/hide', [StarttooPostController::class, 'hide'])->whereUuid('post')->middleware('throttle:30,1');
     Route::post('{post}/interaction', [StarttooPostController::class, 'interaction'])->whereUuid('post')->middleware('throttle:60,1');
     Route::get('{post}/comments', [StarttooPostCommentController::class, 'index'])->whereUuid('post');
     Route::get('{post}/comments/{comment}/replies', [StarttooPostCommentController::class, 'replies'])->whereUuid('post')->whereNumber('comment');

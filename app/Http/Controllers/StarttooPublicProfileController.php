@@ -11,6 +11,15 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 
 class StarttooPublicProfileController extends Controller
 {
+    public function feed(Request $request, string $user, PublicProfiles $profiles, \App\Services\Starttoo\UnifiedFeed $feed, AuthSessions $sessions)
+    {
+        $identity = $this->identity($request, $sessions);
+        $viewer = isset($identity['account']['id']) ? (int) $identity['account']['id'] : null;
+        $profiles->user((int) $user, $viewer);
+        return response()->json(['data' => [...$feed->list($request->only(['cursor', 'style']), $viewer, (int) $user),
+            'account' => $identity['account'] ?? null]])->header('Cache-Control', 'no-store');
+    }
+
     private function identity(Request $request, AuthSessions $sessions): ?array
     {
         if (!$request->bearerToken() && !config('starttoo.guest_browsing_enabled')) {

@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 /** 일반 게시물 전용 저장소. 사진만 기존 선업로드/첨부 검증을 공유한다. */
 class Posts
 {
-    public function feedQuery(?int $viewerId, string $scope): \Illuminate\Database\Query\Builder
+    public function feedQuery(?int $viewerId, string $scope, ?int $authorId = null): \Illuminate\Database\Query\Builder
     {
         $query = app(ProjectDatabase::class)->database()->table('starttoo_posts as p')
             ->join('starttoo_users as u', 'u.id', '=', 'p.user_id')
@@ -18,16 +18,21 @@ class Posts
             ->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_post_images as i')->whereColumn('i.post_id', 'p.id'))
             ->select('p.*', 'u.nickname as author_nickname', 'u.display_name as author_display_name', 'u.avatar_path as author_avatar');
         app(Blocks::class)->filter($query, 'p.user_id', $viewerId);
+        if ($authorId !== null) $query->where('p.user_id', $authorId);
+        if ($viewerId !== null && $authorId === null && in_array($scope, ['public', 'following'], true)) {
+            $query->whereNotExists(fn ($q) => $q->selectRaw('1')->from('starttoo_hidden_posts as h')
+                ->whereColumn('h.post_id', 'p.id')->where('h.user_id', $viewerId));
+        }
         if ($scope === 'following') $query->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_follows as f')
             ->whereColumn('f.target_user_id', 'p.user_id')->where('f.user_id', $viewerId));
         return $query;
     }
 
     /** 통합 피드가 고른 게시물만 일괄 조회한다. 카드별 추가 쿼리를 실행하지 않는다. */
-    public function feedItems(array $ids, ?int $viewerId, string $scope): array
+    public function feedItems(array $ids, ?int $viewerId, string $scope, ?int $authorId = null): array
     {
         if (!$ids) return [];
-        $rows = $this->feedQuery($viewerId, $scope)->whereIn('p.id', $ids)->get();
+        $rows = $this->feedQuery($viewerId, $scope, $authorId)->whereIn('p.id', $ids)->get();
         $images = app(ProjectDatabase::class)->database()->table('starttoo_post_images')
             ->whereIn('post_id', $rows->pluck('id')->all())->orderBy('position')->get()->groupBy('post_id');
         $following = app(Follows::class)->following($rows->pluck('user_id')->all(), $viewerId);
@@ -174,6 +179,71 @@ class Posts
         }, 3);
         app(ArtworkPhotos::class)->delete($removed);
         return $this->detail($savedId, $userId);
+    }
+
+    public function delete(string $id, string $token, array $input, AuthSessions $sessions): array
+    {
+        $userId = (int) $this->ready($token, $sessions)['account']['id'];
+        if (Validator::make($input, ['request_key' => ['required', 'uuid']])->fails()) $this->fail(422, 'INVALID_POST', '삭제 요청을 확인해주세요.');
+        $db = app(ProjectDatabase::class)->database();
+        $paths = $db->transaction(function () use ($db, $id, $token, $input, $sessions, $userId) {
+            $db->table('starttoo_users')->where('id', $userId)->lockForUpdate()->first();
+            $this->ready($token, $sessions);
+            $retry = $db->table('starttoo_post_deletions')->where('user_id', $userId)->where('request_key', $input['request_key'])->first();
+            if ($retry) {
+                if ($retry->post_id !== $id) $this->fail(409, 'POST_REQUEST_CONFLICT', '삭제 대상이 변경됐어요.');
+                return json_decode($retry->paths, true, 512, JSON_THROW_ON_ERROR);
+            }
+            $row = $db->table('starttoo_posts')->where('id', $id)->lockForUpdate()->first();
+            if (!$row) $this->fail(404, 'POST_NOT_FOUND', '이미 삭제된 게시물이에요.');
+            if ((int) $row->user_id !== $userId) $this->fail(403, 'POST_NOT_OWNER', '작성자만 게시물을 삭제할 수 있어요.');
+            $paths = $db->table('starttoo_post_images')->where('post_id', $id)->pluck('path')->all();
+            $comments = $db->table('starttoo_post_comments')->where('post_id', $id)->pluck('id')->map(fn ($v) => (string) $v)->all();
+            $reports = $db->table('starttoo_reports')->where('status', 'pending')->where(function ($q) use ($id, $comments) {
+                $q->where(fn ($p) => $p->where('target_type', 'post')->where('target_id', $id))
+                    ->orWhere(fn ($c) => $c->where('target_type', 'post_comment')->whereIn('target_id', $comments));
+            })->lockForUpdate()->pluck('id')->all();
+            if ($reports) $db->table('starttoo_reports')->whereIn('id', $reports)->update(['status' => 'target_deleted', 'open_key' => null, 'updated_at' => now()]);
+            $db->table('starttoo_safety_audits')->insert([
+                'actor_type' => 'member', 'actor_user_id' => $userId, 'target_type' => 'post', 'target_id' => $id,
+                'action' => 'delete', 'changes' => json_encode(['image_count' => count($paths), 'closed_reports' => $reports], JSON_THROW_ON_ERROR),
+            ]);
+            $db->table('starttoo_posts')->where('id', $id)->delete();
+            app(ArtworkUploads::class)->forget($paths);
+            $db->table('starttoo_post_deletions')->insert([
+                'user_id' => $userId, 'post_id' => $id, 'request_key' => $input['request_key'],
+                'paths' => json_encode($paths, JSON_THROW_ON_ERROR),
+            ]);
+            $sessions->authenticate($token, true);
+            return $paths;
+        }, 3);
+        app(ArtworkPhotos::class)->delete($paths);
+        return ['post_id' => $id, 'deleted' => true];
+    }
+
+    public function hide(string $id, string $token, array $input, AuthSessions $sessions): array
+    {
+        $viewer = (int) $this->ready($token, $sessions)['account']['id'];
+        if (Validator::make($input, ['request_key' => ['required', 'uuid'], 'active' => ['required', 'boolean']])->fails()
+            || !is_bool($input['active'] ?? null)) $this->fail(422, 'INVALID_SAFETY_REQUEST', '숨김 요청을 확인해주세요.');
+        $db = app(ProjectDatabase::class)->database();
+        $author = $db->table('starttoo_posts')->where('id', $id)->value('user_id');
+        return $db->transaction(function () use ($db, $viewer, $author, $id, $input, $token, $sessions) {
+            $db->table('starttoo_users')->whereIn('id', array_filter([$viewer, $author]))->orderBy('id')->lockForUpdate()->get();
+            $this->ready($token, $sessions);
+            $requests = app(Blocks::class);
+            $hash = hash('sha256', json_encode(['hide_post', $id, $input['active']], JSON_THROW_ON_ERROR));
+            if ($result = $requests->retry($viewer, $input['request_key'], $hash)) return $result;
+            $detail = $this->detail($id, $viewer);
+            if ($detail['can_edit']) $this->fail(422, 'CANNOT_HIDE_SELF', '본인 게시물은 편집 또는 삭제로 관리해주세요.');
+            if ($detail['moderation_hidden']) $this->fail(404, 'POST_NOT_FOUND', '게시물을 찾을 수 없어요.');
+            $key = ['user_id' => $viewer, 'post_id' => $id];
+            if ($input['active']) $db->table('starttoo_hidden_posts')->insertOrIgnore([...$key, 'created_at' => now()]);
+            else $db->table('starttoo_hidden_posts')->where($key)->delete();
+            $result = ['post_id' => $id, 'hidden' => $input['active']];
+            $requests->remember($viewer, $input['request_key'], $hash, $result);
+            return $result;
+        }, 3);
     }
 
     private function fail(int $status, string $code, string $message): never

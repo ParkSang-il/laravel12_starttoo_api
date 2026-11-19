@@ -9,6 +9,16 @@ use Illuminate\Http\Request;
 
 class StarttooPostController extends Controller
 {
+    public function destroy(Request $request, string $post, Posts $posts, AuthSessions $sessions)
+    {
+        return response()->json(['data' => $posts->delete($post, $request->bearerToken() ?? '', $request->all(), $sessions)])->header('Cache-Control', 'no-store');
+    }
+
+    public function hide(Request $request, string $post, Posts $posts, AuthSessions $sessions)
+    {
+        return response()->json(['data' => $posts->hide($post, $request->bearerToken() ?? '', $request->all(), $sessions)])->header('Cache-Control', 'no-store');
+    }
+
     public function interaction(Request $request, string $post, PostLikes $likes, AuthSessions $sessions)
     {
         return response()->json(['data' => $likes->set($post, $request->bearerToken() ?? '', $request->all(), $sessions)])
