@@ -31,11 +31,14 @@ class Posts
         $images = app(ProjectDatabase::class)->database()->table('starttoo_post_images')
             ->whereIn('post_id', $rows->pluck('id')->all())->orderBy('position')->get()->groupBy('post_id');
         $following = app(Follows::class)->following($rows->pluck('user_id')->all(), $viewerId);
+        $interactions = app(PostLikes::class)->states($rows->pluck('id')->all(), $viewerId);
+        $comments = app(PostComments::class)->counts($rows->pluck('id')->all(), $viewerId);
         $items = [];
         foreach ($rows as $row) {
             $photos = $images->get($row->id, collect());
             if ($photos->isEmpty()) continue;
             $items[] = ['kind' => 'post', 'id' => $row->id, 'content' => $row->content,
+                'interaction' => $interactions[$row->id], 'comment_count' => (int) ($comments[$row->id] ?? 0),
                 'tags' => json_decode($row->tags, true, 512, JSON_THROW_ON_ERROR),
                 'version' => (int) $row->version, 'viewer_id' => $viewerId,
                 'can_edit' => $viewerId === (int) $row->user_id, 'moderation_hidden' => false,
@@ -69,10 +72,12 @@ class Posts
         }
         return [
             'id' => $row->id, 'content' => $row->content,
+            'interaction' => app(PostLikes::class)->states([$id], $viewerId)[$id],
+            'comment_count' => (int) (app(PostComments::class)->counts([$id], $viewerId)[$id] ?? 0),
             'tags' => json_decode($row->tags, true, 512, JSON_THROW_ON_ERROR),
             'version' => (int) $row->version, 'viewer_id' => $viewerId,
             'can_edit' => $viewerId === (int) $row->user_id,
-            'moderation_hidden' => (bool) $row->moderation_hidden,
+            'moderation_hidden' => (bool) ($row->moderation_hidden || $author->moderation_hidden),
             'created_at' => $row->created_at,
             'author' => ['id' => (int) $author->id, 'nickname' => $author->nickname ?? $author->display_name,
                 'avatar_url' => app(MediaUrls::class)->url($author->avatar_path, 300),

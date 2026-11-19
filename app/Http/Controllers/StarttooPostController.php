@@ -4,10 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Services\Starttoo\AuthSessions;
 use App\Services\Starttoo\Posts;
+use App\Services\Starttoo\PostLikes;
 use Illuminate\Http\Request;
 
 class StarttooPostController extends Controller
 {
+    public function interaction(Request $request, string $post, PostLikes $likes, AuthSessions $sessions)
+    {
+        return response()->json(['data' => $likes->set($post, $request->bearerToken() ?? '', $request->all(), $sessions)])
+            ->header('Cache-Control', 'no-store');
+    }
+
     public function options(Request $request, Posts $posts, AuthSessions $sessions)
     {
         return response()->json(['data' => ['account' => $posts->ready($request->bearerToken() ?? '', $sessions)['account']]])->header('Cache-Control', 'no-store');

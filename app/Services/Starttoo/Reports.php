@@ -14,22 +14,23 @@ class Reports
         $viewer = (int) $artworks->ready($token, $sessions)['account']['id'];
         if (is_string($input['details'] ?? null)) $input['details'] = trim($input['details']);
         $validator = Validator::make($input, [
-            'target_type' => ['required', Rule::in(['user', 'artwork', 'comment'])], 'target_id' => ['required', 'string', 'max:36'],
+            'target_type' => ['required', Rule::in(['user', 'artwork', 'comment', 'post_comment'])], 'target_id' => ['required', 'string', 'max:36'],
             'reason' => ['required', Rule::in(['spam', 'harassment', 'sexual', 'violence', 'illegal', 'rights', 'fraud', 'privacy', 'other'])],
             'details' => ['required_if:reason,other', 'nullable', 'string', 'max:1000'], 'request_key' => ['required', 'uuid'],
         ]);
         if ($validator->fails()) $this->fail(422, 'INVALID_REPORT', '신고 대상·사유와 내용을 확인해주세요.');
         $input = $validator->validated();
         $type = $input['target_type'];
-        if ((in_array($type, ['user', 'comment'], true) && (!ctype_digit($input['target_id']) || (int) $input['target_id'] < 1))
+        if ((in_array($type, ['user', 'comment', 'post_comment'], true) && (!ctype_digit($input['target_id']) || (int) $input['target_id'] < 1))
             || ($type === 'artwork' && Validator::make(['id' => $input['target_id']], ['id' => ['uuid']])->fails())) {
             $this->fail(422, 'INVALID_REPORT', '신고 대상을 확인해주세요.');
         }
-        if (in_array($type, ['user', 'comment'], true)) $input['target_id'] = (string) (int) $input['target_id'];
+        if (in_array($type, ['user', 'comment', 'post_comment'], true)) $input['target_id'] = (string) (int) $input['target_id'];
         $db = app(ProjectDatabase::class)->database();
         $subject = match ($type) {
             'user' => (int) $input['target_id'],
             'comment' => $db->table('starttoo_artwork_comments')->where('id', $input['target_id'])->value('user_id'),
+            'post_comment' => $db->table('starttoo_post_comments')->where('id', $input['target_id'])->value('user_id'),
             default => $db->table('starttoo_artworks')->where('id', $input['target_id'])->value('user_id'),
         };
         if ($subject === null) $this->fail(404, 'ARTWORK_NOT_FOUND', '작품을 찾을 수 없어요.');
@@ -44,18 +45,21 @@ class Reports
             if ($type === 'user') {
                 $user = app(PublicProfiles::class)->user($subject, $viewer);
                 $snapshot = ['id' => $subject, 'nickname' => $user->nickname, 'bio' => $user->bio ?? ''];
-            } elseif ($type === 'comment') {
-                $comment = $db->table('starttoo_artwork_comments')->where('id', $input['target_id'])->whereNull('deleted_at')->where('moderation_hidden', false)->lockForUpdate()->first();
+            } elseif (in_array($type, ['comment', 'post_comment'], true)) {
+                $postComment = $type === 'post_comment';
+                $commentTable = $postComment ? 'starttoo_post_comments' : 'starttoo_artwork_comments';
+                $contentId = $postComment ? 'post_id' : 'artwork_id';
+                $comment = $db->table($commentTable)->where('id', $input['target_id'])->whereNull('deleted_at')->where('moderation_hidden', false)->lockForUpdate()->first();
                 if (!$comment) $this->fail(404, 'COMMENT_NOT_FOUND', '댓글을 찾을 수 없어요.');
-                $detail = $artworks->detail($comment->artwork_id, $viewer);
+                $detail = $postComment ? app(Posts::class)->detail($comment->post_id, $viewer) + ['visibility' => 'public'] : $artworks->detail($comment->artwork_id, $viewer);
                 app(PublicProfiles::class)->user($subject, $viewer);
                 if ($detail['visibility'] !== 'public' || $detail['moderation_hidden']) $this->fail(404, 'COMMENT_NOT_FOUND', '댓글을 찾을 수 없어요.');
                 if ($comment->parent_id !== null) {
-                    $parent = $db->table('starttoo_artwork_comments')->where('id', $comment->parent_id)->where('moderation_hidden', false)->first();
+                    $parent = $db->table($commentTable)->where('id', $comment->parent_id)->where('moderation_hidden', false)->first();
                     if (!$parent) $this->fail(404, 'COMMENT_NOT_FOUND', '댓글을 찾을 수 없어요.');
                     app(PublicProfiles::class)->user((int) $parent->user_id, $viewer);
                 }
-                $snapshot = ['id' => (int) $comment->id, 'artwork_id' => $comment->artwork_id, 'content' => $comment->content, 'author_id' => $subject];
+                $snapshot = ['id' => (int) $comment->id, $contentId => $comment->{$contentId}, 'content' => $comment->content, 'author_id' => $subject];
             } else {
                 // 상세 조회와 같은 접근 제한을 적용한 뒤 접수 시점의 텍스트만 보관한다.
                 $detail = $artworks->detail($input['target_id'], $viewer);
@@ -94,7 +98,7 @@ class Reports
             if (!$record) throw new \InvalidArgumentException('신고를 찾을 수 없습니다.');
             // 앱 변경 작업과 회원 -> 작품 -> 신고 순서로 잠금을 맞춘다.
             $db->table('starttoo_users')->where('id', $record->subject_user_id)->lockForUpdate()->first();
-            $table = match ($record->target_type) { 'user' => 'starttoo_users', 'comment' => 'starttoo_artwork_comments', default => 'starttoo_artworks' };
+            $table = match ($record->target_type) { 'user' => 'starttoo_users', 'comment' => 'starttoo_artwork_comments', 'post_comment' => 'starttoo_post_comments', default => 'starttoo_artworks' };
             $target = $db->table($table)->where('id', $record->target_id)->lockForUpdate()->first();
             $report = $db->table('starttoo_reports')->where('id', $id)->lockForUpdate()->first();
             if (!$target) throw new \InvalidArgumentException('대상을 찾을 수 없습니다.');
