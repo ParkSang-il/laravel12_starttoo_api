@@ -21,7 +21,7 @@ class ArtworkEdits
         $input['title'] = is_string($input['title'] ?? null) ? trim($input['title']) : $input['title'] ?? null;
         $validator = Validator::make($input, [
             'request_key' => ['required', 'uuid'], 'version' => ['required', 'integer', 'min:1'],
-            'kind' => ['required', Rule::in(['work', 'design'])], 'title' => ['required', 'string', 'max:100'],
+            'kind' => ['required', Rule::in(['work', 'design'])], 'title' => ['nullable', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:2000'], 'size_text' => ['nullable', 'string', 'max:50'],
             'styles' => ['required', 'array', 'min:1', 'max:5'],
             'styles.*' => ['required', 'string', 'distinct', Rule::in(array_column($options['styles'], 'id'))],
@@ -84,7 +84,7 @@ class ArtworkEdits
                     else $db->table('starttoo_artwork_images')->insert(['artwork_id' => $id, 'position' => $position, 'path' => $paths[$entry['media_id']]]);
                 }
                 $db->table('starttoo_artworks')->where('id', $id)->update([
-                    'kind' => $input['kind'], 'title' => $input['title'], 'description' => $input['description'] ?? '', 'size_text' => $input['size_text'] ?? null,
+                    'kind' => $input['kind'], 'title' => $input['title'] ?? '', 'description' => $input['description'] ?? '', 'size_text' => $input['size_text'] ?? null,
                     'tags' => json_encode(ArtworkHashtags::extract($input['description'] ?? ''), JSON_THROW_ON_ERROR),
                     'styles' => json_encode($input['styles'], JSON_THROW_ON_ERROR), 'body_part' => $input['body_part'] ?? null, 'color' => $input['color'] ?? null,
                     'duration_minutes' => $input['kind'] === 'work' ? ($input['duration_minutes'] ?? null) : null,

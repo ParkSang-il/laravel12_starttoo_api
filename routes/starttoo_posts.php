@@ -20,5 +20,6 @@ Route::prefix('v1/projects/starttoo/posts')->middleware([StarttooDatabase::class
     Route::post('{post}/comments', [StarttooPostCommentController::class, 'store'])->whereUuid('post')->middleware('throttle:starttoo-comment-create');
     Route::post('{post}/comments/{comment}/delete', [StarttooPostCommentController::class, 'delete'])->whereUuid('post')->whereNumber('comment')->middleware('throttle:starttoo-comment-delete');
     Route::post('{post}/comments/{comment}/like', [StarttooPostCommentController::class, 'like'])->whereUuid('post')->whereNumber('comment')->middleware('throttle:starttoo-comment-like');
+    Route::get('{post}/likes', [\App\Http\Controllers\StarttooLikersController::class, 'post'])->whereUuid('post');
     Route::get('{post}', [StarttooPostController::class, 'show'])->whereUuid('post');
 });

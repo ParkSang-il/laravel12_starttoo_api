@@ -135,7 +135,8 @@ class Artworks
         $validator = Validator::make($input, [
             'request_key' => ['required', 'uuid'],
             'kind' => ['required', Rule::in(['work', 'design'])],
-            'title' => ['required', 'string', 'max:100'],
+            // 제목 입력은 앱에서 제거됐다. 기존 앱 호환을 위해 보내면 저장한다.
+            'title' => ['nullable', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:2000'],
             'size_text' => ['nullable', 'string', 'max:50'],
             'styles' => ['required', 'array', 'min:1', 'max:5'],
@@ -147,7 +148,7 @@ class Artworks
             'show_in_shop' => ['required', 'boolean'],
         ]);
         if ($validator->fails() || !array_is_list($input['styles'] ?? [])) {
-            $this->fail(422, 'INVALID_ARTWORK', '제목·스타일과 작품 입력 정보를 확인해주세요.');
+            $this->fail(422, 'INVALID_ARTWORK', '스타일과 작품 입력 정보를 확인해주세요.');
         }
         if (Validator::make($input, [
             'media_ids' => ['required', 'array', 'min:1', 'max:10'],
@@ -158,7 +159,7 @@ class Artworks
         $mediaIds = array_values($input['media_ids']);
         $valid = $validator->validated();
         // 필드 순서를 고정하고 원본 사진 해시와 순서까지 포함한다.
-        $values = ['kind' => $valid['kind'], 'title' => $valid['title'], 'description' => $valid['description'] ?? '',
+        $values = ['kind' => $valid['kind'], 'title' => $valid['title'] ?? '', 'description' => $valid['description'] ?? '',
             'size_text' => $valid['size_text'] ?? null,
             'styles' => array_values($valid['styles']), 'body_part' => $valid['body_part'] ?? null,
             'color' => $valid['color'] ?? null,

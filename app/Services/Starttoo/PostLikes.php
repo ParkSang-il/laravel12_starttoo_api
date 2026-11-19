@@ -18,8 +18,10 @@ class PostLikes
             ->where('user_id', $viewer)->pluck('post_id')->all();
         $saved = $viewer === null ? [] : $db->table('starttoo_post_saves')->whereIn('post_id', $ids)
             ->where('user_id', $viewer)->pluck('post_id')->all();
+        $likers = app(ContentLikers::class)->recent('post', $ids, $viewer);
         $result = [];
-        foreach ($ids as $id) $result[$id] = ['liked' => in_array($id, $mine, true), 'saved' => in_array($id, $saved, true), 'like_count' => (int) ($counts[$id] ?? 0)];
+        foreach ($ids as $id) $result[$id] = ['liked' => in_array($id, $mine, true), 'saved' => in_array($id, $saved, true), 'like_count' => (int) ($counts[$id] ?? 0),
+            'recent_likers' => $likers[$id] ?? []];
         return $result;
     }
 

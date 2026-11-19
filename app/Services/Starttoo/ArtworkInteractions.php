@@ -17,10 +17,12 @@ class ArtworkInteractions
             ->selectRaw('artwork_id, COUNT(*) as total')->groupBy('artwork_id')->pluck('total', 'artwork_id');
         $mine = $viewer === null ? collect() : $db->table('starttoo_artwork_interactions')->where('user_id', $viewer)
             ->whereIn('artwork_id', $ids)->get()->groupBy('artwork_id');
+        $likers = app(ContentLikers::class)->recent('artwork', $ids, $viewer);
         $result = [];
         foreach ($ids as $id) {
             $kinds = $mine->get($id, collect())->pluck('kind')->all();
-            $result[$id] = ['liked' => in_array('like', $kinds, true), 'saved' => in_array('save', $kinds, true), 'like_count' => (int) ($counts[$id] ?? 0)];
+            $result[$id] = ['liked' => in_array('like', $kinds, true), 'saved' => in_array('save', $kinds, true), 'like_count' => (int) ($counts[$id] ?? 0),
+                'recent_likers' => $likers[$id] ?? []];
         }
         return $result;
     }
