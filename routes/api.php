@@ -8,6 +8,7 @@ require __DIR__.'/starttoo_artworks.php';
 require __DIR__.'/starttoo_feed.php';
 require __DIR__.'/starttoo_posts.php';
 require __DIR__.'/starttoo_profiles.php';
+require __DIR__.'/starttoo_activity.php';
 require __DIR__.'/starttoo_safety.php';
 
 Route::prefix('v1/projects/{projectCode}')
