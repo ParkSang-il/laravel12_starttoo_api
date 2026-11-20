@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\StarttooArtistController;
+use App\Http\Controllers\StarttooShopController;
 use App\Http\Controllers\StarttooStudioController;
 use App\Http\Middleware\StarttooDatabase;
 use Illuminate\Support\Facades\Route;
@@ -18,4 +19,14 @@ Route::prefix('v1/projects/starttoo/studio')->middleware([StarttooDatabase::clas
     Route::post('shop', [StarttooStudioController::class, 'updateShop'])->middleware('throttle:30,1');
     Route::get('artworks', [StarttooStudioController::class, 'artworks']);
     Route::post('artworks/{artwork}', [StarttooStudioController::class, 'updateArtwork'])->whereUuid('artwork')->middleware('throttle:60,1');
+    Route::get('news', [StarttooShopController::class, 'myNews']);
+    Route::post('news', [StarttooShopController::class, 'createNews'])->middleware('throttle:20,1');
+    Route::post('news/{news}/delete', [StarttooShopController::class, 'deleteNews'])->whereNumber('news');
+});
+
+// 2-07~2-11 고객용 상점
+Route::prefix('v1/projects/starttoo/shops')->middleware([StarttooDatabase::class])->group(function () {
+    Route::get('{user}', [StarttooShopController::class, 'show'])->whereNumber('user');
+    Route::get('{user}/portfolio', [StarttooShopController::class, 'portfolio'])->whereNumber('user');
+    Route::get('{user}/news', [StarttooShopController::class, 'news'])->whereNumber('user');
 });

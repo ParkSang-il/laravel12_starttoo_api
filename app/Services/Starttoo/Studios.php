@@ -43,7 +43,7 @@ class Studios
 
     public function update(int $userId, array $input): array
     {
-        foreach (['activity_name', 'studio_name', 'bio', 'notice'] as $field) {
+        foreach (['activity_name', 'studio_name', 'bio', 'notice', 'business_hours', 'guide'] as $field) {
             if (is_string($input[$field] ?? null)) $input[$field] = trim($input[$field]);
         }
         $regions = array_column(app(Profiles::class)->options()['regions'], 'id');
@@ -57,6 +57,8 @@ class Studios
             'price_max' => ['nullable', 'integer', 'min:0', 'max:'.self::MAX_PRICE],
             'consult_status' => ['required', Rule::in(self::CONSULT)],
             'notice' => ['nullable', 'string', 'max:60'],
+            'business_hours' => ['nullable', 'string', 'max:60'],
+            'guide' => ['nullable', 'string', 'max:300'],
             'cover_media_id' => ['nullable', 'uuid'],
             'remove_cover' => ['sometimes', 'boolean'],
         ]);
@@ -84,6 +86,7 @@ class Studios
                 'region' => $input['region'], 'bio' => $input['bio'] ?? '',
                 'price_min' => $input['price_min'] ?? null, 'price_max' => $input['price_max'] ?? null,
                 'consult_status' => $input['consult_status'], 'notice' => $input['notice'] ?? null,
+                'business_hours' => ($input['business_hours'] ?? '') ?: null, 'guide' => ($input['guide'] ?? '') ?: null,
                 'cover_path' => $cover, 'version' => (int) $shop->version + 1, 'updated_at' => now(),
             ]);
             return $this->view($this->db()->table('starttoo_shops')->where('user_id', $userId)->first());
@@ -184,6 +187,7 @@ class Studios
             'price_max' => $shop->price_max === null ? null : (int) $shop->price_max,
             'consult_status' => $shop->consult_status, 'notice' => $shop->notice,
             'cover_url' => $shop->cover_path ? app(MediaUrls::class)->url($shop->cover_path, 1080) : null,
+            'business_hours' => $shop->business_hours ?? null, 'guide' => $shop->guide ?? null,
             'version' => (int) $shop->version];
     }
 

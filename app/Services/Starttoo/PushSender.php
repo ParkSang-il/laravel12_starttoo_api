@@ -109,6 +109,7 @@ class PushSender
                     'comment_like' => '회원님의 댓글에 새 좋아요가 있어요.',
                     'new_post' => '팔로우한 회원이 새 게시물을 올렸어요.',
                     'artist_review' => '아티스트 신청 심사 소식이 있어요.',
+                    'shop_news' => '팔로우한 아티스트의 상점 소식이 있어요.',
                 };
                 // 이력에는 본문 원문 대신 안내 문구만 남긴다.
                 $db->table('starttoo_push_logs')->where('id', $log)->update(['kind' => $n->kind, 'title_snapshot' => '스타투', 'body_snapshot' => $body]);
@@ -118,6 +119,8 @@ class PushSender
                     [$title, $body, $images] = $preview;
                 } elseif ($notice) {
                     [$title, $body] = $this->noticeText($n);
+                } elseif ($n->kind === 'shop_news') {
+                    [$title, $body] = $this->shopNewsText($n);
                 } elseif ($decorated = $this->socialText($n)) {
                     [$title, $body] = $decorated;
                 }
@@ -219,6 +222,18 @@ class PushSender
      * 소셜 알림 문구. 제목에 이모지와 알림 종류, 본문에 보낸 회원과 내용을 넣는다.
      * 이력(starttoo_push_logs)에는 이름·댓글 원문 대신 기본 안내 문구만 남긴다.
      */
+    /** 상점 소식: 제목에 상점 이름, 본문에 소식 내용. */
+    private function shopNewsText(object $n): array
+    {
+        $db = $this->db();
+        $shop = $db->table('starttoo_shops')->where('user_id', $n->actor_id)->first(['activity_name', 'studio_name']);
+        $news = $db->table('starttoo_shop_news')->where('id', $n->target_id)->first(['kind', 'title', 'body']);
+        $name = $shop ? Str::limit((string) ($shop->studio_name ?: $shop->activity_name), 30, '…') : '아티스트';
+        $label = ($news->kind ?? null) === 'holiday' ? '휴무 안내' : '새 소식';
+        $text = $news ? $this->multiline(trim(($news->title ? $news->title."\n" : '').$news->body)) : '';
+        return ['📢 '.$name.' · '.$label, $text === '' ? '상점에 새 소식이 올라왔어요.' : Str::limit($text, 120, '…')];
+    }
+
     /** 아티스트 심사 단계별 안내 문구. */
     private function noticeText(object $n): array
     {

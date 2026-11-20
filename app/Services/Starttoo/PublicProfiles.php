@@ -36,6 +36,7 @@ class PublicProfiles
             'content_count' => $count + app(Posts::class)->feedQuery($viewerId, 'public', $id)->count(),
             'is_me' => $viewerId === (int) $user->id,
             'saved_public' => app(UserPreferences::class)->savedPublic((int) $user->id),
+            'is_artist' => ($user->artist_status ?? null) === 'approved',
             'social' => app(Follows::class)->state($id, $viewerId)];
     }
 }

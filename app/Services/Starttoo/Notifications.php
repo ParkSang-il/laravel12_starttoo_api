@@ -37,6 +37,9 @@ class Notifications
     /** 안내 알림(심사 결과 등)의 종류. 보낸 회원이 없어 actor는 받는 회원 자신으로 기록한다. */
     public const NOTICE_KINDS = ['artist_review'];
 
+    /** 이전 버전 앱이 모르는 알림 종류(notices=1을 보낸 앱에만 목록에 준다). */
+    public const NEW_KINDS = ['artist_review', 'shop_news'];
+
     /**
      * 안내 알림. 소셜 알림 설정과 관계없이 보낸다(계정·심사 안내).
      * 호출부 트랜잭션이 커밋된 뒤 푸시 큐에 넣는다.
@@ -72,6 +75,12 @@ class Notifications
         return $q->where(function ($targets) use ($viewer) {
             // 안내 알림: 받는 회원 자신이 기록한 심사 안내
             $targets->where(fn ($notice) => $notice->whereIn('n.kind', self::NOTICE_KINDS)->whereColumn('n.actor_id', 'n.user_id'));
+            // 팔로우한 아티스트의 상점 소식
+            $targets->orWhere(function ($news) use ($viewer) {
+                $news->where('n.kind', 'shop_news')->where('n.target_type', 'shop_news')
+                    ->whereExists(fn ($s) => $s->selectRaw('1')->from('starttoo_shop_news as sn')->whereColumn('sn.id', 'n.target_id')->whereColumn('sn.user_id', 'n.actor_id'))
+                    ->whereExists(fn ($f) => $f->selectRaw('1')->from('starttoo_follows as snf')->where('snf.user_id', $viewer)->whereColumn('snf.target_user_id', 'n.actor_id'));
+            });
             $targets->orWhere(function ($follow) use ($viewer) {
                 $follow->where('n.kind', 'follow')->where('n.target_type', 'user')->where('n.target_id', (string) $viewer)
                     ->whereExists(fn ($f) => $f->selectRaw('1')->from('starttoo_follows as f')->whereColumn('f.user_id', 'n.actor_id')->where('f.target_user_id', $viewer));
@@ -147,7 +156,8 @@ class Notifications
         $q = $this->visible($viewer);
         if ($filter === 'reservation') $q->whereRaw('1 = 0');
         elseif ($filter === 'notice') $notices ? $q->whereIn('n.kind', self::NOTICE_KINDS) : $q->whereRaw('1 = 0');
-        elseif ($filter === 'social' || !$notices) $q->whereNotIn('n.kind', self::NOTICE_KINDS);
+        elseif ($filter === 'social') $q->whereNotIn('n.kind', $notices ? self::NOTICE_KINDS : self::NEW_KINDS);
+        elseif (!$notices) $q->whereNotIn('n.kind', self::NEW_KINDS);
         if (!empty($input['cursor'])) {
             try { $c = json_decode(base64_decode(strtr($input['cursor'], '-_', '+/'), true) ?: '', true, 8, JSON_THROW_ON_ERROR); }
             catch (\JsonException $e) { $this->fail(422, 'INVALID_NOTIFICATIONS', '알림 목록을 다시 불러와주세요.'); }

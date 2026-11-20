@@ -279,11 +279,16 @@ class Artworks
             'styles' => array_values(array_filter($options['styles'], fn ($style) => in_array($style['id'], $styles, true))),
             'body_part' => $label($options['body_parts'], $row->body_part), 'color' => $label($options['colors'], $row->color),
             'duration_minutes' => $row->duration_minutes, 'price' => $row->price, 'show_in_shop' => (bool) $row->show_in_shop,
+            'size_text' => $row->size_text ?? null,
+            // 2-10 예약 가능 도안: 예약 가능·상담 중·작업 완료
+            'design_status' => $row->kind === 'design' ? ($row->design_status ?? 'available') : null,
             'created_at' => $row->created_at,
             'author' => ['id' => $author->id, 'nickname' => $author->nickname ?? $author->display_name,
                 'following' => $following ?? in_array((int) $author->id, app(Follows::class)->following([(int) $author->id], $viewerId), true),
                 'region' => $label(app(Profiles::class)->options()['regions'], $author->interest_region),
-                'avatar_url' => app(MediaUrls::class)->url($author->avatar_path, 300)],
+                'avatar_url' => app(MediaUrls::class)->url($author->avatar_path, 300),
+                // 아티스트면 상점으로 이동할 수 있다.
+                'is_artist' => ($author->artist_status ?? null) === 'approved'],
             'images' => collect($images)
                 ->map(fn ($image) => ['id' => (int) $image->id, 'position' => $image->position, 'url' => app(MediaUrls::class)->url($image->path, 500)])->all()];
     }
