@@ -15,7 +15,7 @@ class StarttooPublicProfileController extends Controller
     {
         $identity = $this->identity($request, $sessions);
         $viewer = isset($identity['account']['id']) ? (int) $identity['account']['id'] : null;
-        return response()->json(['data' => [...$feed->list([...$request->only(['cursor', 'style']), 'scope' => 'saved'], $viewer, null, (int) $user),
+        return response()->json(['data' => [...$feed->list([...$request->only(['cursor', 'style', 'collection']), 'scope' => 'saved'], $viewer, null, (int) $user),
             'account' => $identity['account'] ?? null]])->header('Cache-Control', 'no-store');
     }
 

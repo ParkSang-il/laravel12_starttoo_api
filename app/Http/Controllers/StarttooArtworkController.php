@@ -56,6 +56,13 @@ class StarttooArtworkController extends Controller
             ->header('Cache-Control', 'no-store');
     }
 
+    /** 선업로드 사진 처리 상태: processing → ready(url) 또는 failed. */
+    public function uploadStatus(Request $request, string $media, ArtworkUploads $uploads, Artworks $artworks, AuthSessions $sessions)
+    {
+        return response()->json(['data' => $uploads->status($request->bearerToken() ?? '', $media, $sessions, $artworks)])
+            ->header('Cache-Control', 'no-store');
+    }
+
     /** 작품 등록: JSON 본문, 사진은 media_ids. */
     public function store(Request $request, Artworks $artworks, AuthSessions $sessions)
     {

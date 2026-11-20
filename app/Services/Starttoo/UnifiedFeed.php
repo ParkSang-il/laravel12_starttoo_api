@@ -19,11 +19,18 @@ class UnifiedFeed
             'scope' => ['nullable', Rule::in(['public', 'following', 'saved'])],
             'style' => ['nullable', 'string', Rule::in(array_column($styles, 'id'))],
             'cursor' => ['nullable', 'string', 'max:512'],
+            'collection' => ['nullable', 'integer', 'min:1'],
         ])->fails()) $this->fail();
         $scope = $input['scope'] ?? 'public';
         $style = $input['style'] ?? null;
         $owner = $savedOwner ?? $viewerId;
-        if ($savedOwner !== null) {
+        // 저장 컬렉션: 본인 컬렉션이거나 공개 컬렉션만 조회한다(전체 저장 목록 공개 설정과 별개).
+        $collection = isset($input['collection']) ? (int) $input['collection'] : null;
+        if ($collection !== null) {
+            if ($scope !== 'saved' || $owner === null) $this->fail();
+            if ($savedOwner !== null) app(PublicProfiles::class)->user($savedOwner, $viewerId);
+            app(Collections::class)->readable($collection, $owner, $viewerId);
+        } elseif ($savedOwner !== null) {
             app(PublicProfiles::class)->user($savedOwner, $viewerId);
             if ($scope !== 'saved' || ($savedOwner !== $viewerId && !app(UserPreferences::class)->savedPublic($savedOwner))) {
                 throw new HttpResponseException(response()->json(['code' => 'SAVED_NOT_PUBLIC', 'message' => '공개하지 않은 저장 목록이에요.'], 403));
@@ -42,7 +49,8 @@ class UnifiedFeed
                     'id' => ['required', 'uuid'], 't' => ['required', Rule::in(['artwork', 'post'])],
                     'd' => ['required', Rule::in(['next', 'previous'])], 'scope' => ['required', Rule::in([$scope])],
                 ])->fails() || (($cursor['style'] ?? null) !== $style || ($cursor['author'] ?? null) !== $authorId || ($cursor['viewer'] ?? null) !== $viewerId)
-                    || ($scope === 'saved' && ($cursor['saved_owner'] ?? $viewerId) !== $owner)) $this->fail();
+                    || ($scope === 'saved' && ($cursor['saved_owner'] ?? $viewerId) !== $owner)
+                    || ($cursor['collection'] ?? null) !== $collection) $this->fail();
             } catch (\JsonException $e) {
                 $this->fail();
             }
@@ -59,6 +67,10 @@ class UnifiedFeed
         if ($scope === 'saved') {
             $art->join('starttoo_artwork_interactions as sv', fn ($j) => $j->on('sv.artwork_id', '=', 'a.id')->where('sv.user_id', $owner)->where('sv.kind', 'save'));
             $artTime = 'sv.created_at';
+            if ($collection !== null) {
+                $art->join('starttoo_collection_items as ci', fn ($j) => $j->on('ci.target_id', '=', 'a.id')->where('ci.target_type', 'artwork')->where('ci.collection_id', $collection));
+                $artTime = 'ci.created_at';
+            }
         }
         $art->select('a.id', $artTime.' as created_at')->selectRaw("'artwork' as entry_type");
         $total = ($scope === 'saved' || $authorId !== null) && $cursor === null ? (clone $art)->count() : null;
@@ -77,6 +89,10 @@ class UnifiedFeed
             if ($scope === 'saved') {
                 $posts->join('starttoo_post_saves as sp', fn ($j) => $j->on('sp.post_id', '=', 'p.id')->where('sp.user_id', $owner));
                 $postTime = 'sp.created_at';
+                if ($collection !== null) {
+                    $posts->join('starttoo_collection_items as ci', fn ($j) => $j->on('ci.target_id', '=', 'p.id')->where('ci.target_type', 'post')->where('ci.collection_id', $collection));
+                    $postTime = 'ci.created_at';
+                }
             }
             $posts->select('p.id', $postTime.' as created_at')->selectRaw("'post' as entry_type");
             if ($total !== null) $total += (clone $posts)->count();
@@ -106,6 +122,7 @@ class UnifiedFeed
         $encode = fn ($row, $d) => $row ? rtrim(strtr(base64_encode(json_encode([
             'v' => 2, 'author' => $authorId, 'viewer' => $viewerId, 'at' => $row->created_at, 'id' => $row->id, 't' => $row->entry_type,
             'd' => $d, 'scope' => $scope, 'style' => $style, 'saved_owner' => $scope === 'saved' ? $owner : null,
+            'collection' => $collection,
         ], JSON_THROW_ON_ERROR)), '+/', '-_'), '=') : null;
         return ['items' => $items, 'styles' => $styles, 'total' => $total,
             'next_cursor' => ($backward || $hasMore) ? $encode($page->last(), 'next') : null,

@@ -51,7 +51,11 @@ class ArtworkInteractions
             }
             $key = ['user_id' => $userId, 'artwork_id' => $id, 'kind' => $input['kind']];
             if ($input['active']) $inserted = $db->table('starttoo_artwork_interactions')->insertOrIgnore([...$key, 'created_at' => now(), 'updated_at' => now()]);
-            else $db->table('starttoo_artwork_interactions')->where($key)->delete();
+            else {
+                $db->table('starttoo_artwork_interactions')->where($key)->delete();
+                // 저장을 취소하면 내 모든 컬렉션에서도 뺀다.
+                if ($input['kind'] === 'save') app(Collections::class)->forget((int) $userId, 'artwork', $id);
+            }
             if ($input['kind'] === 'like') {
                 if ($input['active'] && $inserted) app(Notifications::class)->emit((int) $row->user_id, (int) $userId, 'like', 'artwork', $id);
                 if (!$input['active']) app(Notifications::class)->withdraw((int) $userId, 'like', 'artwork', $id);

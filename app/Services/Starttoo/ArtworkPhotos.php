@@ -13,12 +13,37 @@ class ArtworkPhotos
 {
     public function store(int $userId, UploadedFile $file): string
     {
+        return $this->storeBytes((string) $file->get());
+    }
+
+    /** 원본을 변환하지 않고 임시 경로에 저장한다(백그라운드 변환 전). */
+    public function storeRaw(UploadedFile $file): string
+    {
+        $path = 'artwork/starttoo/tmp/'.now('Asia/Seoul')->format('Y/m/d').'/'.Str::uuid().'.raw';
+        if (!Storage::disk('starttoo')->put($path, (string) $file->get(), ['visibility' => 'private'])) {
+            throw new HttpResponseException(response()->json([
+                'code' => 'ARTWORK_PHOTO_FAILED', 'message' => '작품 사진을 저장하지 못했어요. 다시 시도해주세요.',
+            ], 503));
+        }
+        return $path;
+    }
+
+    public function readRaw(string $path): string
+    {
+        $bytes = Storage::disk('starttoo')->get($path);
+        if (!is_string($bytes) || $bytes === '') throw new \RuntimeException('Raw artwork image is missing.');
+        return $bytes;
+    }
+
+    /** 원본 바이트를 변환(EXIF 제거·긴 변 1600px·재인코딩)해 저장하고 경로를 돌려준다. */
+    public function storeBytes(string $original): string
+    {
         $path = null;
         try {
             if (!extension_loaded('gd')) {
                 throw new \RuntimeException('GD is required for artwork images.');
             }
-            $source = @imagecreatefromstring($file->get());
+            $source = @imagecreatefromstring($original);
             if (!$source) {
                 throw new \RuntimeException('Unable to decode artwork image.');
             }

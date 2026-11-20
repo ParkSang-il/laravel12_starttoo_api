@@ -50,7 +50,11 @@ class PostLikes
             $key = ['user_id' => $viewer, 'post_id' => $id];
             $table = $input['kind'] === 'like' ? 'starttoo_post_likes' : 'starttoo_post_saves';
             if ($input['active']) $inserted = $db->table($table)->insertOrIgnore([...$key, 'created_at' => now()]);
-            else $db->table($table)->where($key)->delete();
+            else {
+                $db->table($table)->where($key)->delete();
+                // 저장을 취소하면 내 모든 컬렉션에서도 뺀다.
+                if ($input['kind'] === 'save') app(Collections::class)->forget((int) $viewer, 'post', $id);
+            }
             if ($input['kind'] === 'like') {
                 if ($input['active'] && $inserted) app(Notifications::class)->emit((int) $author, $viewer, 'like', 'post', $id);
                 if (!$input['active']) app(Notifications::class)->withdraw($viewer, 'like', 'post', $id);
