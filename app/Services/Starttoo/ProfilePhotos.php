@@ -13,12 +13,18 @@ class ProfilePhotos
 {
     public function store(int $userId, UploadedFile $file): string
     {
+        return $this->storeBytes((string) $file->get());
+    }
+
+    /** 이미지 원본 바이트를 축소·재인코딩해 저장하고 경로를 돌려준다. */
+    public function storeBytes(string $original): string
+    {
         $path = null;
         try {
             if (!extension_loaded('gd')) {
                 throw new \RuntimeException('GD is required for STARTTOO profile photos.');
             }
-            $source = @imagecreatefromstring($file->get());
+            $source = @imagecreatefromstring($original);
             if (!$source) {
                 throw new \RuntimeException('Unable to decode profile photo.');
             }

@@ -29,7 +29,8 @@ class Profiles
             'connected_providers' => app(ProjectDatabase::class)->database()->table('starttoo_auth_identities')
                 ->where('user_id', $user->id)->orderBy('provider')->distinct()->pluck('provider')->all(),
             'profile' => $this->values($user),
-            'suggested_nickname' => $user->nickname ?? $this->suggestNickname()];
+            // 카카오·네이버 가입이면 그 닉네임을 먼저 추천한다.
+            'suggested_nickname' => $user->nickname ?? SignupProfileSeed::suggestedNickname((int) $user->id) ?? $this->suggestNickname()];
     }
 
     private function suggestNickname(): string

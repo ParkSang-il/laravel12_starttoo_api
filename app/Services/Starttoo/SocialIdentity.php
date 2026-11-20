@@ -19,8 +19,11 @@ use Lcobucci\JWT\Validation\Validator;
  */
 class SocialIdentity
 {
-    /** 카카오 액세스 토큰: 토큰 정보 API로 우리 앱(app_id)에서 발급된 토큰인지 확인한다. */
-    public function kakao(string $accessToken): string
+    /**
+     * 카카오 액세스 토큰: 토큰 정보 API로 우리 앱(app_id)에서 발급된 토큰인지 확인한다.
+     * 반환: [subject, 가입용 프로필(nickname, image)]
+     */
+    public function kakao(string $accessToken): array
     {
         $appId = (string) config('starttoo.kakao_app_id');
         if ($appId === '') {
@@ -31,12 +34,24 @@ class SocialIdentity
         if ((string) ($info['app_id'] ?? '') !== $appId || ! is_numeric($id)) {
             $this->fail(401, 'INVALID_KAKAO_TOKEN', '카카오 인증을 다시 진행해주세요.');
         }
+        // 프로필은 가입 편의용이라 실패해도 로그인은 진행한다.
+        $profile = [];
+        try {
+            $me = Http::connectTimeout(3)->timeout(5)->withToken($accessToken)->acceptJson()
+                ->get('https://kapi.kakao.com/v2/user/me')->json();
+            $kakao = is_array($me) ? ($me['kakao_account']['profile'] ?? []) : [];
+            $profile = [
+                'nickname' => $kakao['nickname'] ?? null,
+                'image' => ($kakao['is_default_image'] ?? false) ? null : ($kakao['profile_image_url'] ?? null),
+            ];
+        } catch (\Throwable) {
+        }
 
-        return (string) $id;
+        return [(string) $id, $profile];
     }
 
-    /** 네이버 액세스 토큰: 회원 프로필 API의 고유 ID를 사용한다. */
-    public function naver(string $accessToken): string
+    /** 네이버 액세스 토큰: 회원 프로필 API의 고유 ID를 사용한다. 반환: [subject, 가입용 프로필] */
+    public function naver(string $accessToken): array
     {
         if (! config('starttoo.naver_enabled')) {
             $this->fail(503, 'AUTH_NOT_CONFIGURED', '네이버 로그인을 준비하고 있어요. 잠시 후 다시 시도해주세요.');
@@ -47,7 +62,10 @@ class SocialIdentity
             $this->fail(401, 'INVALID_NAVER_TOKEN', '네이버 인증을 다시 진행해주세요.');
         }
 
-        return $id;
+        return [$id, [
+            'nickname' => $me['response']['nickname'] ?? null,
+            'image' => $me['response']['profile_image'] ?? null,
+        ]];
     }
 
     /** Apple identity token(JWT): Apple 공개키 서명, 발급자, 대상(번들 ID), 만료를 확인한다. */
