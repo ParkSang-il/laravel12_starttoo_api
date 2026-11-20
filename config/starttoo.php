@@ -22,4 +22,8 @@ return [
     'terms_version' => '2026-11-17-draft',
     // 공개 소셜의 운영 선행 조건을 검토하기 전에는 익명 조회를 열지 않는다.
     'guest_browsing_enabled' => env('STARTTOO_GUEST_BROWSING_ENABLED', false),
+    // 아티스트 신청: 법정 문신사 면허 제도 시행 후 true로 바꾸면 면허 번호·자격증 사진을 필수로 받는다.
+    'artist_license_required' => (bool) env('STARTTOO_ARTIST_LICENSE_REQUIRED', false),
+    // 휴대폰 본인인증 제공자. dev는 개발 서버 전용(입력한 이름·번호를 그대로 인증 처리), 운영은 실명인증 업체 연동 후 지정.
+    'identity_provider' => env('STARTTOO_IDENTITY_PROVIDER'),
 ];

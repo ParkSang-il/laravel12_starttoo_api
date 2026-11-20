@@ -134,7 +134,10 @@ class Profiles
             'bio' => $user->bio ?? '',
             'avatar_url' => app(MediaUrls::class)->url($user->avatar_path, 300),
             'interest_styles' => $user->interest_styles === null ? [] : json_decode($user->interest_styles, true, 512, JSON_THROW_ON_ERROR),
-            'interest_region' => $user->interest_region];
+            'interest_region' => $user->interest_region,
+            // 아티스트 상태와 신청 진행 상태(마이 화면 진입점 표시용)
+            'artist_status' => $user->artist_status ?? null,
+            'artist_application_status' => app(ProjectDatabase::class)->database()->table('starttoo_artist_applications')->where('user_id', $user->id)->value('status')];
     }
 
     private function fail(int $status, string $code, string $message): never
