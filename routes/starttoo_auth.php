@@ -10,6 +10,9 @@ use Illuminate\Support\Facades\Route;
 // STARTTOO 전용 토큰은 이 경로에서만 사용하며 다른 앱의 JWT 인증과 분리한다.
 Route::prefix('v1/projects/starttoo/auth')->middleware([StarttooDatabase::class])->group(function () {
     Route::post('google', [StarttooAuthController::class, 'google']);
+    Route::post('kakao', [StarttooAuthController::class, 'kakao'])->middleware('throttle:20,1');
+    Route::post('naver', [StarttooAuthController::class, 'naver'])->middleware('throttle:20,1');
+    Route::post('apple', [StarttooAuthController::class, 'apple'])->middleware('throttle:20,1');
     Route::post('refresh', [StarttooAuthController::class, 'refresh']);
     Route::get('me', [StarttooAuthController::class, 'me']);
     Route::get('terms', [StarttooTermsController::class, 'index']);
