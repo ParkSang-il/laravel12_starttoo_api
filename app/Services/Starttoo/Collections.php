@@ -171,8 +171,11 @@ class Collections
         }
         $time = $collection !== null ? 'ci.created_at' : null;
         $count = (clone $art)->count() + (clone $post)->count();
-        $latestArt = (clone $art)->orderByDesc($time ?? 'sv.created_at')->first(['a.id', ($time ?? 'sv.created_at').' as at']);
-        $latestPost = (clone $post)->orderByDesc($time ?? 'sp.created_at')->first(['p.id', ($time ?? 'sp.created_at').' as at']);
+        // feedQuery가 이미 select를 정해 두었으므로 select()로 바꿔야 at 값이 들어온다.
+        $artTime = $time ?? 'sv.created_at';
+        $postTime = $time ?? 'sp.created_at';
+        $latestArt = (clone $art)->select('a.id', $artTime.' as at')->orderByDesc($artTime)->first();
+        $latestPost = (clone $post)->select('p.id', $postTime.' as at')->orderByDesc($postTime)->first();
         $path = null;
         if ($latestArt && (! $latestPost || $latestArt->at >= $latestPost->at)) {
             $path = $this->db()->table('starttoo_artwork_images')->where('artwork_id', $latestArt->id)->orderBy('position')->value('path');
