@@ -92,7 +92,8 @@ class Artworks
         $commentCounts = app(ArtworkComments::class)->counts($page->pluck('id')->all(), $viewerId);
         foreach ($page as $row) {
             $author = (object) ['id' => $row->author_id, 'nickname' => $row->author_nickname,
-                'display_name' => $row->author_display_name, 'interest_region' => $row->author_region, 'avatar_path' => $row->author_avatar];
+                'display_name' => $row->author_display_name, 'interest_region' => $row->author_region, 'avatar_path' => $row->author_avatar,
+                'artist_status' => $row->author_artist_status];
             $photos = $images->get($row->id, collect());
             if ($photos->isNotEmpty()) $items[] = $this->format($row, $author, $photos, $options, $viewerId, $states[$row->id], in_array((int) $author->id, $following, true), (int) ($commentCounts[$row->id] ?? 0));
         }
@@ -111,7 +112,7 @@ class Artworks
             ->join('starttoo_users as u', 'u.id', '=', 'a.user_id')->where('u.status', 'active')
             ->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_artwork_images as i')->whereColumn('i.artwork_id', 'a.id'))
             ->select('a.*', 'u.id as author_id', 'u.nickname as author_nickname', 'u.display_name as author_display_name',
-                'u.interest_region as author_region', 'u.avatar_path as author_avatar');
+                'u.interest_region as author_region', 'u.avatar_path as author_avatar', 'u.artist_status as author_artist_status');
         if ($scope === 'mine') $query->where('a.user_id', $viewerId);
         else $query->where('a.visibility', 'public')->where('a.moderation_hidden', false)->where('u.moderation_hidden', false);
         app(Blocks::class)->filter($query, 'a.user_id', $viewerId);

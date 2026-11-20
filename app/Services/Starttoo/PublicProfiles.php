@@ -10,7 +10,7 @@ class PublicProfiles
     public function user(int $id, ?int $viewer = null): object
     {
         $user = app(ProjectDatabase::class)->database()->table('starttoo_users')
-            ->select('id', 'nickname', 'bio', 'avatar_path', 'interest_styles', 'interest_region', 'moderation_hidden')
+            ->select('id', 'nickname', 'bio', 'avatar_path', 'interest_styles', 'interest_region', 'moderation_hidden', 'artist_status')
             ->where('id', $id)->where('status', 'active')->whereNotNull('profile_completed_at')->first();
         if (!$user || ($user->moderation_hidden && $id !== $viewer) || app(Blocks::class)->between($viewer, $id)) {
             throw new HttpResponseException(response()->json([

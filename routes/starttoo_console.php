@@ -36,6 +36,56 @@ Artisan::command('starttoo:moderate {report} {action} {--operator=} {--reason=}'
     } catch (\InvalidArgumentException $e) { $this->error($e->getMessage()); return 1; }
 })->purpose('Hide/release reported content or dismiss a report, recording an operator audit');
 
+// 기존 게시물이 스튜디오/상점에서 누락될 때 사용한다. 데이터 변경 없이 개수와 조회 결과만 확인한다.
+Artisan::command('starttoo:studio-info {--user=}', function () {
+    $userId = filter_var($this->option('user'), FILTER_VALIDATE_INT);
+    if (!$userId || $userId < 1) { $this->error('--user=회원번호를 지정해주세요.'); return 1; }
+    return app(ProjectDatabase::class)->run('starttoo', function () use ($userId) {
+        $db = app(ProjectDatabase::class)->database();
+        $schema = $db->getSchemaBuilder();
+        foreach (['starttoo_users' => ['artist_status', 'artist_approved_at'],
+            'starttoo_artworks' => ['visibility', 'show_in_shop', 'moderation_hidden', 'design_status'],
+            'starttoo_artwork_images' => ['artwork_id', 'path'],
+            'starttoo_shops' => ['business_hours', 'guide']] as $table => $columns) {
+            if (!$schema->hasTable($table) || !$schema->hasColumns($table, $columns)) {
+                $this->error('스키마 누락: '.$table.' ('.implode(', ', $columns).')');
+                return 1;
+            }
+        }
+        $user = $db->table('starttoo_users')->where('id', $userId)->first(['artist_status', 'artist_approved_at']);
+        if (!$user) { $this->error('회원을 찾을 수 없어요.'); return 1; }
+        $base = $db->table('starttoo_artworks as a')->where('a.user_id', $userId);
+        $this->table(['항목', '값'], [
+            ['회원 번호', $userId], ['아티스트 상태', $user->artist_status ?? '일반 회원'],
+            ['상점 존재', $db->table('starttoo_shops')->where('user_id', $userId)->exists() ? '예' : '아니오'],
+            ['전체 작품·도안', (clone $base)->count()],
+            ['승인 전 작품·도안', $user->artist_approved_at ? (clone $base)->where('a.created_at', '<=', $user->artist_approved_at)->count() : '미승인'],
+            ['사진 없는 작품·도안', (clone $base)->whereNotExists(fn ($q) => $q->selectRaw('1')->from('starttoo_artwork_images as i')->whereColumn('i.artwork_id', 'a.id'))->count()],
+        ]);
+        $groups = (clone $base)->select('a.kind', 'a.visibility', 'a.show_in_shop', 'a.moderation_hidden')
+            ->selectRaw('COUNT(*) as total')->groupBy('a.kind', 'a.visibility', 'a.show_in_shop', 'a.moderation_hidden')->get();
+        $this->table(['유형', '공개 상태', '상점 노출', '운영자 숨김', '개수'],
+            $groups->map(fn ($r) => [$r->kind, $r->visibility, (int) $r->show_in_shop, (int) $r->moderation_hidden, $r->total])->all());
+        $failed = false;
+        foreach (['studio:work', 'studio:design', 'shop:work', 'shop:design'] as $scope) {
+            [$screen, $kind] = explode(':', $scope);
+            try {
+                $result = $screen === 'studio'
+                    ? app(\App\Services\Starttoo\Studios::class)->artworks($userId, ['kind' => $kind])
+                    : app(\App\Services\Starttoo\Shops::class)->portfolio($userId, $userId, ['kind' => $kind]);
+                $this->line($scope.': '.count($result['items']).'개 (첫 페이지)');
+            } catch (\Throwable $error) {
+                $failed = true;
+                $trace = (string) \Illuminate\Support\Str::uuid();
+                \Illuminate\Support\Facades\Log::warning('STARTTOO studio-info 조회 실패', ['trace' => $trace, 'scope' => $scope, 'user_id' => $userId, 'exception' => $error]);
+                // 출력에는 개인정보·서명 URL·SQL 바인딩을 포함하지 않는다.
+                $this->error($scope.': 조회 실패 ('.get_class($error).', 로그 추적 번호 '.$trace.')');
+            }
+        }
+        return $failed ? 1 : 0;
+    });
+})->purpose('Inspect STARTTOO studio/shop artwork counts without changing any data');
+
 // 2-13 아티스트 신청 심사 (관리자 웹 전까지 서버 명령으로 처리)
 Artisan::command('starttoo:artist-applications {--status=} {--limit=50} {--id=}', function () {
     return app(ProjectDatabase::class)->run('starttoo', function () {
