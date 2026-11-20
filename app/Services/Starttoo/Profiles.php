@@ -11,6 +11,9 @@ use Illuminate\Validation\Rule;
 
 class Profiles
 {
+    private const NICKNAME_MAX_HANGUL = 8;
+    private const NICKNAME_MAX_LATIN = 15;
+
     public function options(): array
     {
         return json_decode(file_get_contents(resource_path('starttoo/profile-options.json')), true, 512, JSON_THROW_ON_ERROR);
@@ -36,9 +39,13 @@ class Profiles
         for ($attempt = 0; $attempt < 100; $attempt++) {
             $name = $parts['adjectives'][random_int(0, count($parts['adjectives']) - 1)]['word']
                 .$parts['nouns'][random_int(0, count($parts['nouns']) - 1)]['word'];
-            // 조합 공간이 소진되어도 재시도 횟수에 상한을 둔다.
+            // 한글 닉네임은 최대 8자. 넘는 조합은 다시 뽑는다.
+            if (mb_strlen($name) > self::NICKNAME_MAX_HANGUL) continue;
+            // 조합 공간이 소진되면 8자 안에서 숫자를 붙인다.
             if ($attempt >= 20) {
-                $name .= random_int(1000, 9999);
+                $digits = min(4, self::NICKNAME_MAX_HANGUL - mb_strlen($name));
+                if ($digits < 2) continue;
+                $name .= random_int(10 ** ($digits - 1), 10 ** $digits - 1);
             }
             if (!$db->table('starttoo_users')->where('nickname', $name)->exists()) {
                 return $name;
@@ -60,14 +67,18 @@ class Profiles
             $input['nickname'] = strtolower(trim($input['nickname']));
         }
         $validator = Validator::make($input, [
-            'nickname' => ['required', 'string', 'min:2', 'max:20', 'regex:/^[가-힣a-z0-9]+$/uD'],
+            'nickname' => ['required', 'string', 'min:2', 'max:'.self::NICKNAME_MAX_LATIN, 'regex:/^[가-힣a-z0-9]+$/uD',
+                // 한글이 들어가면 최대 8자, 영문·숫자만이면 최대 15자.
+                function ($attribute, $value, $fail) {
+                    if (preg_match('/[가-힣]/u', $value) && mb_strlen($value) > self::NICKNAME_MAX_HANGUL) $fail('nickname');
+                }],
             'interest_styles' => ['present', 'array', 'max:5'],
             'interest_styles.*' => ['required', 'string', 'distinct', Rule::in(array_column($options['styles'], 'id'))],
             'interest_region' => ['required', 'string', Rule::in(array_column($options['regions'], 'id'))],
             'bio' => ['sometimes', 'nullable', 'string', 'max:150'],
         ]);
         if ($validator->fails() || !array_is_list($input['interest_styles'] ?? [])) {
-            $this->fail(422, 'INVALID_PROFILE', '닉네임(한글·영문·숫자 2~20자), 관심 스타일 최대 5개와 지역을 확인해주세요.');
+            $this->fail(422, 'INVALID_PROFILE', '닉네임(한글 2~8자 · 영문 2~15자), 관심 스타일 최대 5개와 지역을 확인해주세요.');
         }
         $input = $validator->validated();
         $db = app(ProjectDatabase::class)->database();
