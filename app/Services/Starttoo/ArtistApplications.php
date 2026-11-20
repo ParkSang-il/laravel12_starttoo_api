@@ -99,6 +99,7 @@ class ArtistApplications
                 $id = $this->db()->table('starttoo_artist_applications')->insertGetId([...$values, 'user_id' => $userId, 'version' => 1, 'created_at' => now()]);
             }
             $this->event($id, 'submitted', $version > 1 ? '수정해 다시 제출' : null, 'member', $version);
+            app(Notifications::class)->notice($userId, 'artist_review', 'artist_app', (string) $id, 'submitted');
             return $this->view($this->db()->table('starttoo_artist_applications')->where('id', $id)->first());
         });
     }
@@ -126,8 +127,12 @@ class ArtistApplications
             if ($status === 'approved') {
                 $this->db()->table('starttoo_users')->where('id', $row->user_id)
                     ->update(['artist_status' => 'approved', 'artist_approved_at' => now(), 'updated_at' => now()]);
+                // 승인과 함께 신청서 내용으로 상점을 만들어 둔다.
+                app(Studios::class)->open((int) $row->user_id, $row);
             }
             $this->event($id, $status, $note ? trim($note) : null, 'operator:'.trim($operator), (int) $row->version);
+            // 심사 단계마다 신청자에게 알림·푸시를 보낸다.
+            app(Notifications::class)->notice((int) $row->user_id, 'artist_review', 'artist_app', (string) $id, $status);
             return ['id' => $id, 'user_id' => (int) $row->user_id, 'status' => $status];
         });
     }

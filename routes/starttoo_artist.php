@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\StarttooArtistController;
+use App\Http\Controllers\StarttooStudioController;
 use App\Http\Middleware\StarttooDatabase;
 use Illuminate\Support\Facades\Route;
 
@@ -9,4 +10,12 @@ Route::prefix('v1/projects/starttoo/artist')->middleware([StarttooDatabase::clas
     Route::get('application', [StarttooArtistController::class, 'show']);
     Route::post('application', [StarttooArtistController::class, 'submit'])->middleware('throttle:10,1');
     Route::post('identity', [StarttooArtistController::class, 'identity'])->middleware('throttle:10,1');
+});
+
+// 2-14·2-15·2-16 아티스트 스튜디오
+Route::prefix('v1/projects/starttoo/studio')->middleware([StarttooDatabase::class])->group(function () {
+    Route::get('/', [StarttooStudioController::class, 'dashboard']);
+    Route::post('shop', [StarttooStudioController::class, 'updateShop'])->middleware('throttle:30,1');
+    Route::get('artworks', [StarttooStudioController::class, 'artworks']);
+    Route::post('artworks/{artwork}', [StarttooStudioController::class, 'updateArtwork'])->whereUuid('artwork')->middleware('throttle:60,1');
 });

@@ -96,7 +96,10 @@ class PushSender
             $box = $db->table('starttoo_push_outbox')->where('id', $job->outbox_id)->first();
             $n = $device && $box ? app(Notifications::class)->delivery((int) $device->user_id, (int) $box->notification_id) : null;
             $result = ['state' => 'skipped', 'code' => 'RECIPIENT_OR_NOTIFICATION_UNAVAILABLE'];
-            $eligible = $n && $n->created_at >= now()->subDay()->toDateTimeString() && app(UserPreferences::class)->get((int) $device->user_id)['values']['social'];
+            // 안내 알림(심사 결과)은 소셜 알림 설정과 관계없이 보낸다.
+            $notice = $n && in_array($n->kind, Notifications::NOTICE_KINDS, true);
+            $eligible = $n && $n->created_at >= now()->subDay()->toDateTimeString()
+                && ($notice || app(UserPreferences::class)->get((int) $device->user_id)['values']['social']);
             if ($eligible) {
                 $body = match ($n->kind) {
                     'like' => '회원님의 게시물에 새 좋아요가 있어요.',
@@ -105,6 +108,7 @@ class PushSender
                     'follow' => '새로운 팔로워가 있어요.',
                     'comment_like' => '회원님의 댓글에 새 좋아요가 있어요.',
                     'new_post' => '팔로우한 회원이 새 게시물을 올렸어요.',
+                    'artist_review' => '아티스트 신청 심사 소식이 있어요.',
                 };
                 // 이력에는 본문 원문 대신 안내 문구만 남긴다.
                 $db->table('starttoo_push_logs')->where('id', $log)->update(['kind' => $n->kind, 'title_snapshot' => '스타투', 'body_snapshot' => $body]);
@@ -112,6 +116,8 @@ class PushSender
                 $images = [];
                 if ($n->kind === 'new_post' && ($preview = $this->newPostPreview($n))) {
                     [$title, $body, $images] = $preview;
+                } elseif ($notice) {
+                    [$title, $body] = $this->noticeText($n);
                 } elseif ($decorated = $this->socialText($n)) {
                     [$title, $body] = $decorated;
                 }
@@ -213,6 +219,19 @@ class PushSender
      * 소셜 알림 문구. 제목에 이모지와 알림 종류, 본문에 보낸 회원과 내용을 넣는다.
      * 이력(starttoo_push_logs)에는 이름·댓글 원문 대신 기본 안내 문구만 남긴다.
      */
+    /** 아티스트 심사 단계별 안내 문구. */
+    private function noticeText(object $n): array
+    {
+        return match ($n->variant ?? null) {
+            'submitted' => ['📮 아티스트 신청 접수', '신청서가 접수됐어요. 보통 영업일 3일 안에 결과를 알려드려요.'],
+            'reviewing' => ['🔍 아티스트 심사 시작', '포트폴리오 심사를 시작했어요. 조금만 기다려주세요.'],
+            'needs_changes' => ['📝 보완이 필요해요', '요청 사항을 확인하고 신청서를 보완해 다시 제출해주세요.'],
+            'approved' => ['🎉 아티스트로 승인됐어요', '이제 상점을 열고 작품 · 도안을 올릴 수 있어요.'],
+            'rejected' => ['아티스트 신청 결과', '이번 신청은 승인되지 않았어요. 사유를 확인하고 고쳐 다시 제출할 수 있어요.'],
+            default => ['스타투', '아티스트 신청 심사 소식이 있어요.'],
+        };
+    }
+
     private function socialText(object $n): ?array
     {
         $db = $this->db();

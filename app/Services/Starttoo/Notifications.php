@@ -34,6 +34,29 @@ class Notifications
         }
     }
 
+    /** 안내 알림(심사 결과 등)의 종류. 보낸 회원이 없어 actor는 받는 회원 자신으로 기록한다. */
+    public const NOTICE_KINDS = ['artist_review'];
+
+    /**
+     * 안내 알림. 소셜 알림 설정과 관계없이 보낸다(계정·심사 안내).
+     * 호출부 트랜잭션이 커밋된 뒤 푸시 큐에 넣는다.
+     */
+    public function notice(int $recipient, string $kind, string $type, string $target, string $variant): void
+    {
+        $eventKey = hash('sha256', json_encode([$recipient, $kind, $type, $target, $variant, (string) microtime(true), random_int(0, PHP_INT_MAX)], JSON_THROW_ON_ERROR));
+        $id = $this->db()->table('starttoo_notifications')->insertGetId([
+            'user_id' => $recipient, 'actor_id' => $recipient, 'kind' => $kind, 'target_type' => $type, 'target_id' => $target,
+            'variant' => $variant, 'event_key' => $eventKey, 'created_at' => now(),
+        ]);
+        if (!config('starttoo.push_enabled')) return;
+        $this->db()->table('starttoo_push_outbox')->insertOrIgnore(['notification_id' => $id, 'created_at' => now()]);
+        $outboxId = (int) $this->db()->table('starttoo_push_outbox')->where('notification_id', $id)->value('id');
+        $this->db()->afterCommit(function () use ($outboxId) {
+            try { \App\Jobs\QueueStarttooPush::dispatch($outboxId); }
+            catch (\Throwable $e) { report($e); }
+        });
+    }
+
     public function withdraw(int $actor, string $kind, string $type, string $target, ?int $comment = null): void
     {
         $q = $this->db()->table('starttoo_notifications')->where('actor_id', $actor)->where('kind', $kind)->where('target_type', $type)->where('target_id', $target);
@@ -47,7 +70,9 @@ class Notifications
             ->where('n.user_id', $viewer)->where('actor.status', 'active')->where('actor.moderation_hidden', false);
         app(Blocks::class)->filter($q, 'n.actor_id', $viewer);
         return $q->where(function ($targets) use ($viewer) {
-            $targets->where(function ($follow) use ($viewer) {
+            // 안내 알림: 받는 회원 자신이 기록한 심사 안내
+            $targets->where(fn ($notice) => $notice->whereIn('n.kind', self::NOTICE_KINDS)->whereColumn('n.actor_id', 'n.user_id'));
+            $targets->orWhere(function ($follow) use ($viewer) {
                 $follow->where('n.kind', 'follow')->where('n.target_type', 'user')->where('n.target_id', (string) $viewer)
                     ->whereExists(fn ($f) => $f->selectRaw('1')->from('starttoo_follows as f')->whereColumn('f.user_id', 'n.actor_id')->where('f.target_user_id', $viewer));
             });
@@ -109,15 +134,20 @@ class Notifications
         if (!$n) $this->fail(404, 'NOTIFICATION_NOT_FOUND', '더 이상 확인할 수 없는 알림이에요.');
         app(PushAudit::class)->opened('notification', (string) $id, $viewer);
         return [...$this->read($viewer, $id), 'target_type' => $n->target_type, 'target_id' => $n->target_id,
-            'actor_id' => (int) $n->actor_id, 'kind' => $n->kind];
+            'actor_id' => (int) $n->actor_id, 'kind' => $n->kind, 'variant' => $n->variant];
     }
 
     public function listing(int $viewer, array $input): array
     {
-        if (Validator::make($input, ['filter' => ['nullable', 'in:all,reservation,social,notice'], 'cursor' => ['nullable', 'string', 'max:512']])->fails()) $this->fail(422, 'INVALID_NOTIFICATIONS', '알림 조회 조건을 확인해주세요.');
+        if (Validator::make($input, ['filter' => ['nullable', 'in:all,reservation,social,notice'], 'cursor' => ['nullable', 'string', 'max:512'],
+            'notices' => ['nullable', 'in:0,1']])->fails()) $this->fail(422, 'INVALID_NOTIFICATIONS', '알림 조회 조건을 확인해주세요.');
         $filter = $input['filter'] ?? 'all';
+        // 안내 알림을 모르는 이전 앱은 목록 전체를 버리므로 notices=1을 보낸 앱에만 준다.
+        $notices = ($input['notices'] ?? '0') === '1';
         $q = $this->visible($viewer);
-        if (in_array($filter, ['reservation', 'notice'], true)) $q->whereRaw('1 = 0');
+        if ($filter === 'reservation') $q->whereRaw('1 = 0');
+        elseif ($filter === 'notice') $notices ? $q->whereIn('n.kind', self::NOTICE_KINDS) : $q->whereRaw('1 = 0');
+        elseif ($filter === 'social' || !$notices) $q->whereNotIn('n.kind', self::NOTICE_KINDS);
         if (!empty($input['cursor'])) {
             try { $c = json_decode(base64_decode(strtr($input['cursor'], '-_', '+/'), true) ?: '', true, 8, JSON_THROW_ON_ERROR); }
             catch (\JsonException $e) { $this->fail(422, 'INVALID_NOTIFICATIONS', '알림 목록을 다시 불러와주세요.'); }
@@ -127,7 +157,9 @@ class Notifications
         $rows = $q->orderByDesc('n.id')->limit(21)->get(['n.*', 'actor.nickname', 'actor.display_name']);
         $page = $rows->take(20);
         return ['items' => $page->map(fn ($n) => [
-            'id' => (int) $n->id, 'kind' => $n->kind, 'category' => 'social',
+            'id' => (int) $n->id, 'kind' => $n->kind,
+            'category' => in_array($n->kind, self::NOTICE_KINDS, true) ? 'notice' : 'social',
+            'variant' => $n->variant,
             'actor_name' => $n->nickname ?: $n->display_name,
             'actor_id' => (int) $n->actor_id, 'target_type' => $n->target_type, 'target_id' => $n->target_id,
             'comment_id' => $n->comment_id === null ? null : (int) $n->comment_id,
