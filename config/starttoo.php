@@ -13,6 +13,10 @@ return [
     'naver_enabled' => (bool) env('STARTTOO_NAVER_ENABLED', false),
     // Apple 로그인 identity token의 aud(iOS 번들 ID).
     'apple_client_id' => env('STARTTOO_APPLE_CLIENT_ID', 'com.pju2251.starttoo'),
+    // 탈퇴 시 Apple 연결 해지용 Sign in with Apple 키(.p8). 키 원문은 파일로만 둔다.
+    'apple_team_id' => env('STARTTOO_APPLE_TEAM_ID', 'T42QXLMFA4'),
+    'apple_key_id' => env('STARTTOO_APPLE_KEY_ID'),
+    'apple_private_key' => env('STARTTOO_APPLE_PRIVATE_KEY', '/run/secrets/starttoo/apple_signin.p8'),
     // 개발용 초안은 별도 설정을 켠 환경에서만 노출하고 정식 문안 발행 시 버전을 올린다.
     'draft_terms_enabled' => env('STARTTOO_DRAFT_TERMS_ENABLED', false),
     'terms_version' => '2026-11-17-draft',

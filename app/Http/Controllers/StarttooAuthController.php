@@ -6,6 +6,7 @@ use App\Services\Starttoo\AuthSessions;
 use App\Services\Starttoo\GoogleIdentity;
 use App\Services\Starttoo\SignupProfileSeed;
 use App\Services\Starttoo\SocialIdentity;
+use App\Services\Starttoo\Withdrawals;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 
@@ -64,6 +65,13 @@ class StarttooAuthController extends Controller
         }
 
         return response()->json(['data' => $data])->header('Cache-Control', 'no-store');
+    }
+
+    public function withdraw(Request $request, AuthSessions $sessions, Withdrawals $withdrawals)
+    {
+        $withdrawals->withdraw((string) $request->bearerToken(), $request->all(), $sessions);
+
+        return response()->noContent()->header('Cache-Control', 'no-store');
     }
 
     public function refresh(Request $request, AuthSessions $sessions)

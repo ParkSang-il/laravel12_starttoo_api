@@ -20,4 +20,5 @@ Route::prefix('v1/projects/starttoo/auth')->middleware([StarttooDatabase::class]
     Route::get('profile', [StarttooProfileController::class, 'show']);
     Route::post('profile', [StarttooProfileController::class, 'store']);
     Route::post('logout', [StarttooAuthController::class, 'logout']);
+    Route::post('withdraw', [StarttooAuthController::class, 'withdraw'])->middleware('throttle:5,1');
 });

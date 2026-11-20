@@ -32,7 +32,8 @@ class ArtworkComments
     {
         $q = $this->db()->table(static::COMMENTS." as $alias")
             ->join("starttoo_users as {$alias}_u", "{$alias}_u.id", '=', "$alias.user_id")
-            ->where("{$alias}_u.status", 'active')->where("{$alias}_u.moderation_hidden", false)
+            // 탈퇴 회원 댓글은 남기고 작성자를 「탈퇴한 회원」으로 보여 준다.
+            ->whereIn("{$alias}_u.status", ['active', 'withdrawn'])->where("{$alias}_u.moderation_hidden", false)
             ->where("$alias.moderation_hidden", false);
         return app(Blocks::class)->filter($q, "$alias.user_id", $viewer);
     }
@@ -65,7 +66,7 @@ class ArtworkComments
                 $q->whereNull('c.deleted_at')->orWhereExists(function ($sub) use ($viewer) {
                     $sub->from(static::COMMENTS.' as r')->join('starttoo_users as ru', 'ru.id', '=', 'r.user_id')
                         ->whereColumn('r.parent_id', 'c.id')->whereNull('r.deleted_at')->where('r.moderation_hidden', false)
-                        ->where('ru.status', 'active')->where('ru.moderation_hidden', false)->selectRaw('1');
+                        ->whereIn('ru.status', ['active', 'withdrawn'])->where('ru.moderation_hidden', false)->selectRaw('1');
                     app(Blocks::class)->filter($sub, 'r.user_id', $viewer);
                 });
             });
@@ -75,7 +76,7 @@ class ArtworkComments
                 ->orWhere(fn ($q) => $q->where('c.like_count', $cursor['likes'])->where('c.id', '<', $cursor['id'])));
         }
         if ($sort === 'popular') $q->orderByDesc('c.like_count');
-        $rows = $q->orderByDesc('c.id')->limit(11)->get(['c.*', 'c_u.nickname', 'c_u.avatar_path']);
+        $rows = $q->orderByDesc('c.id')->limit(11)->get(['c.*', 'c_u.nickname', 'c_u.avatar_path', 'c_u.status as author_status']);
         $canWrite = $canWrite && $detail['visibility'] === 'public' && !$detail['moderation_hidden'];
         $items = [];
         foreach ($rows->take(10) as $row) {
@@ -107,7 +108,7 @@ class ArtworkComments
         $q = $this->visible($viewer)->where('c.parent_id', $parent)->whereNull('c.deleted_at');
         $total = (clone $q)->count();
         if ($after !== null) $q->where('c.id', '>', $after);
-        $rows = $q->orderBy('c.id')->limit($limit + 1)->get(['c.*', 'c_u.nickname', 'c_u.avatar_path']);
+        $rows = $q->orderBy('c.id')->limit($limit + 1)->get(['c.*', 'c_u.nickname', 'c_u.avatar_path', 'c_u.status as author_status']);
         return ['items' => $rows->take($limit)->map(fn ($row) => $this->format($row, $viewer, $detail, $canWrite))->all(),
             'total' => $total, 'next_cursor' => $rows->count() > $limit
                 ? $this->encode(['artwork' => $detail['id'], 'sort' => 'replies:'.$parent, 'id' => (int) $rows[$limit - 1]->id]) : null];
@@ -142,7 +143,7 @@ class ArtworkComments
                 if ($retry->payload_hash !== $hash) $this->fail(409, 'COMMENT_REQUEST_CONFLICT', '댓글 요청 내용이 변경됐어요. 다시 확인해주세요.');
                 return json_decode($retry->response_payload, true, 512, JSON_THROW_ON_ERROR);
             }
-            $target = $targetId ? $this->visible($viewer)->where('c.'.static::CONTENT_ID, $artwork)->where('c.id', $targetId)->whereNull('c.deleted_at')->lockForUpdate()->first(['c.*', 'c_u.nickname', 'c_u.avatar_path']) : null;
+            $target = $targetId ? $this->visible($viewer)->where('c.'.static::CONTENT_ID, $artwork)->where('c.id', $targetId)->whereNull('c.deleted_at')->lockForUpdate()->first(['c.*', 'c_u.nickname', 'c_u.avatar_path', 'c_u.status as author_status']) : null;
             if ($targetId && !$target) $this->fail(404, 'COMMENT_NOT_FOUND', '댓글을 찾을 수 없어요.');
             if ($target && $target->parent_id !== null) {
                 if ($action === 'create') $this->fail(422, 'COMMENT_REPLY_DEPTH', '대댓글에는 답글을 작성할 수 없어요.');
@@ -174,7 +175,7 @@ class ArtworkComments
                 $db->table(static::COMMENTS)->where('id', $commentId)->update(['like_count' => $db->table(static::LIKES)->where('comment_id', $commentId)->count()]);
                 $id = $commentId;
             }
-            $row = $this->visible($viewer)->where('c.id', $id)->first(['c.*', 'c_u.nickname', 'c_u.avatar_path']);
+            $row = $this->visible($viewer)->where('c.id', $id)->first(['c.*', 'c_u.nickname', 'c_u.avatar_path', 'c_u.status as author_status']);
             $result = ['item' => $this->format($row, $viewer, $detail, true), 'total' => (int) ($this->counts([$artwork], $viewer)[$artwork] ?? 0)];
             $db->table(static::REQUESTS)->insert(['user_id' => $viewer, 'request_key' => $input['request_key'], 'payload_hash' => $hash,
                 'response_payload' => json_encode($result, JSON_THROW_ON_ERROR)]);
@@ -207,8 +208,10 @@ class ArtworkComments
         }));
         return ['id' => (int) $row->id, 'parent_id' => $row->parent_id === null ? null : (int) $row->parent_id,
             'content' => $deleted ? '' : $row->content, 'deleted' => $deleted, 'created_at' => Carbon::parse($row->created_at)->toIso8601String(),
-            'author' => $deleted ? null : ['id' => (int) $row->user_id, 'nickname' => $row->nickname,
-                'avatar_url' => app(MediaUrls::class)->url($row->avatar_path, 300), 'is_artwork_author' => (int) $detail['author']['id'] === (int) $row->user_id],
+            'author' => $deleted ? null : (($row->author_status ?? 'active') === 'withdrawn'
+                ? ['id' => (int) $row->user_id, 'nickname' => '탈퇴한 회원', 'avatar_url' => null, 'withdrawn' => true, 'is_artwork_author' => false]
+                : ['id' => (int) $row->user_id, 'nickname' => $row->nickname,
+                    'avatar_url' => app(MediaUrls::class)->url($row->avatar_path, 300), 'is_artwork_author' => (int) $detail['author']['id'] === (int) $row->user_id]),
             'mentions' => $mentions, 'like_count' => $deleted ? 0 : (int) $row->like_count,
             'liked' => !$deleted && $viewer !== null && $this->db()->table(static::LIKES)->where('comment_id', $row->id)->where('user_id', $viewer)->exists(),
             'can_delete' => !$deleted && $canWrite && (int) $row->user_id === $viewer,
