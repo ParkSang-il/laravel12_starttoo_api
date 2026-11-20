@@ -184,7 +184,7 @@ class PushSender
         }
         $actor = $db->table('starttoo_users')->where('id', $n->actor_id)->first(['nickname', 'display_name']);
         $name = $actor ? ($actor->nickname ?: $actor->display_name) : null;
-        $text = preg_replace('/\s+/u', ' ', $text) ?? '';
+        $text = $this->multiline($text);
         $body = $text === '' ? '새 게시물을 올렸어요.' : Str::limit($text, 120, '…');
         $title = $name ? '✨ '.Str::limit($name, 30, '…').'님의 새 게시물' : '✨ 새 게시물';
         // 사진은 최대 3장. 주소를 만들지 못한 사진은 빼고 보낸다.
@@ -228,7 +228,7 @@ class PushSender
             if (!$n->comment_id) return '';
             $table = $n->target_type === 'post' ? 'starttoo_post_comments' : 'starttoo_artwork_comments';
             $row = $db->table($table)->where('id', $n->comment_id)->whereNull('deleted_at')->first(['content']);
-            $text = trim(preg_replace('/\s+/u', ' ', (string) ($row->content ?? '')) ?? '');
+            $text = $this->multiline((string) ($row->content ?? ''));
             return $text === '' ? '' : Str::limit($text, 80, '…');
         };
         return match ($n->kind) {
@@ -239,5 +239,16 @@ class PushSender
             'follow' => ['🙌 새 팔로워', "{$name}님이 회원님을 팔로우하기 시작했어요."],
             default => null,
         };
+    }
+
+    /**
+     * 알림 본문: 줄바꿈은 살리고, 줄 안의 연속 공백과 2줄 이상 빈 줄은 하나로 줄인다.
+     */
+    private function multiline(string $text): string
+    {
+        $text = str_replace(["\r\n", "\r"], "\n", $text);
+        $lines = array_map(fn ($line) => trim(preg_replace('/[^\S\n]+/u', ' ', $line) ?? ''), explode("\n", $text));
+        $text = preg_replace("/\n{3,}/", "\n\n", implode("\n", $lines)) ?? '';
+        return trim($text);
     }
 }
