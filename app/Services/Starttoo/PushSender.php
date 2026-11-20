@@ -109,23 +109,41 @@ class PushSender
                 // 이력에는 본문 원문 대신 안내 문구만 남긴다.
                 $db->table('starttoo_push_logs')->where('id', $log)->update(['kind' => $n->kind, 'title_snapshot' => '스타투', 'body_snapshot' => $body]);
                 $title = '스타투';
-                $image = null;
+                $images = [];
                 if ($n->kind === 'new_post' && ($preview = $this->newPostPreview($n))) {
-                    [$title, $body, $image] = $preview;
+                    [$title, $body, $images] = $preview;
+                } elseif ($decorated = $this->socialText($n)) {
+                    [$title, $body] = $decorated;
                 }
-                $notification = ['title' => $title, 'body' => $body];
-                if ($image) $notification['image'] = $image;
-                $aps = ['sound' => 'default'];
-                // iOS는 Notification Service Extension이 fcm_options.image를 내려받아 붙인다.
-                if ($image) $aps['mutable-content'] = 1;
-                $fcm = app('starttoo.fcm');
-                $result = $fcm->send(Crypt::decryptString($device->token_ciphertext), [
-                    'notification' => $notification,
-                    'data' => ['notification_id' => (string) $n->id, 'recipient_id' => (string) $device->user_id],
-                    'android' => ['priority' => 'high', 'ttl' => '3600s', 'notification' => ['channel_id' => 'starttoo_social', 'tag' => 'starttoo:'.$n->id, 'icon' => 'ic_stat_starttoo']],
-                    'apns' => ['headers' => ['apns-push-type' => 'alert', 'apns-priority' => '10', 'apns-collapse-id' => 'starttoo:'.$n->id],
-                        'payload' => ['aps' => $aps], ...($image ? ['fcm_options' => ['image' => $image]] : [])],
-                ]);
+                $data = ['notification_id' => (string) $n->id, 'recipient_id' => (string) $device->user_id];
+                $tag = 'starttoo:'.$n->id;
+                $apnsHeaders = ['apns-push-type' => 'alert', 'apns-priority' => '10', 'apns-collapse-id' => $tag];
+                if ($images && $device->platform === 'android') {
+                    // 사진 알림은 앱이 직접 그린다: 접힌 상태 오른쪽 작은 썸네일, 펼치면 작은 사진 최대 3장.
+                    $message = [
+                        'data' => $data + ['style' => 'gallery', 'title' => $title, 'body' => $body,
+                            'images' => json_encode($images, JSON_UNESCAPED_SLASHES), 'tag' => $tag],
+                        'android' => ['priority' => 'high', 'ttl' => '3600s'],
+                    ];
+                } elseif ($images) {
+                    // iOS: Service Extension이 images의 사진을 내려받아 붙이고(썸네일),
+                    // Content Extension(category STARTTOO_GALLERY)이 펼친 화면에 최대 3장을 보여 준다.
+                    $message = [
+                        'data' => $data + ['images' => json_encode($images, JSON_UNESCAPED_SLASHES)],
+                        'apns' => ['headers' => $apnsHeaders, 'payload' => ['aps' => [
+                            'alert' => ['title' => $title, 'body' => $body], 'sound' => 'default',
+                            'mutable-content' => 1, 'category' => 'STARTTOO_GALLERY',
+                        ]]],
+                    ];
+                } else {
+                    $message = [
+                        'notification' => ['title' => $title, 'body' => $body],
+                        'data' => $data,
+                        'android' => ['priority' => 'high', 'ttl' => '3600s', 'notification' => ['channel_id' => 'starttoo_social', 'tag' => $tag, 'icon' => 'ic_stat_starttoo']],
+                        'apns' => ['headers' => $apnsHeaders, 'payload' => ['aps' => ['sound' => 'default']]],
+                    ];
+                }
+                $result = app('starttoo.fcm')->send(Crypt::decryptString($device->token_ciphertext), $message);
             }
             if ($result['state'] === 'invalid' && $device) {
                 $db->table('starttoo_push_devices')->where('id', $device->id)->where('token_hash', $job->token_hash)->delete();
@@ -148,7 +166,7 @@ class PushSender
     }
 
     /**
-     * 팔로우한 회원의 새 게시물 알림: 제목에 작성자, 본문에 내용 앞부분, 대표 사진(첫 장).
+     * 팔로우한 회원의 새 게시물 알림: 제목에 작성자, 본문에 내용 앞부분, 사진 최대 3장.
      * 열람 권한은 delivery()에서 이미 확인했다. 내용이 없으면 기본 안내 문구를 쓴다.
      */
     private function newPostPreview(object $n): ?array
@@ -157,10 +175,10 @@ class PushSender
         if ($n->target_type === 'artwork') {
             $row = $db->table('starttoo_artworks')->where('id', $n->target_id)->first(['title', 'description']);
             $text = $row ? trim(($row->description ?? '') !== '' ? $row->description : ($row->title ?? '')) : '';
-            $path = $db->table('starttoo_artwork_images')->where('artwork_id', $n->target_id)->orderBy('position')->value('path');
+            $paths = $db->table('starttoo_artwork_images')->where('artwork_id', $n->target_id)->orderBy('position')->limit(3)->pluck('path')->all();
         } elseif ($n->target_type === 'post') {
             $text = trim((string) $db->table('starttoo_posts')->where('id', $n->target_id)->value('content'));
-            $path = $db->table('starttoo_post_images')->where('post_id', $n->target_id)->orderBy('position')->value('path');
+            $paths = $db->table('starttoo_post_images')->where('post_id', $n->target_id)->orderBy('position')->limit(3)->pluck('path')->all();
         } else {
             return null;
         }
@@ -168,8 +186,10 @@ class PushSender
         $name = $actor ? ($actor->nickname ?: $actor->display_name) : null;
         $text = preg_replace('/\s+/u', ' ', $text) ?? '';
         $body = $text === '' ? '새 게시물을 올렸어요.' : Str::limit($text, 120, '…');
-        $title = $name ? Str::limit($name, 30, '…').'님의 새 게시물' : '스타투';
-        return [$title, $body, $path ? $this->pushImageUrl($path) : null];
+        $title = $name ? '✨ '.Str::limit($name, 30, '…').'님의 새 게시물' : '✨ 새 게시물';
+        // 사진은 최대 3장. 주소를 만들지 못한 사진은 빼고 보낸다.
+        $images = array_values(array_filter(array_map(fn ($path) => $this->pushImageUrl($path), $paths)));
+        return [$title, $body, $images];
     }
 
     /**
@@ -187,5 +207,37 @@ class PushSender
         } catch (\Throwable) {
             return null; // 사진 주소를 만들지 못해도 글 알림은 보낸다.
         }
+    }
+
+    /**
+     * 소셜 알림 문구. 제목에 이모지와 알림 종류, 본문에 보낸 회원과 내용을 넣는다.
+     * 이력(starttoo_push_logs)에는 이름·댓글 원문 대신 기본 안내 문구만 남긴다.
+     */
+    private function socialText(object $n): ?array
+    {
+        $db = $this->db();
+        $actor = $db->table('starttoo_users')->where('id', $n->actor_id)->first(['nickname', 'display_name']);
+        $name = $actor ? Str::limit((string) ($actor->nickname ?: $actor->display_name), 30, '…') : '';
+        if ($name === '') return null;
+        $target = match ($n->target_type) {
+            'post' => '게시물',
+            'artwork' => $db->table('starttoo_artworks')->where('id', $n->target_id)->value('kind') === 'design' ? '도안' : '작품',
+            default => '게시물',
+        };
+        $comment = function () use ($db, $n): string {
+            if (!$n->comment_id) return '';
+            $table = $n->target_type === 'post' ? 'starttoo_post_comments' : 'starttoo_artwork_comments';
+            $row = $db->table($table)->where('id', $n->comment_id)->whereNull('deleted_at')->first(['content']);
+            $text = trim(preg_replace('/\s+/u', ' ', (string) ($row->content ?? '')) ?? '');
+            return $text === '' ? '' : Str::limit($text, 80, '…');
+        };
+        return match ($n->kind) {
+            'like' => ['❤️ 새 좋아요', "{$name}님이 회원님의 {$target}을 좋아해요."],
+            'comment_like' => ['❤️ 댓글 좋아요', "{$name}님이 회원님의 댓글을 좋아해요."],
+            'comment' => ['💬 새 댓글', ($text = $comment()) !== '' ? "{$name}: {$text}" : "{$name}님이 회원님의 {$target}에 댓글을 남겼어요."],
+            'reply' => ['↩️ 새 답글', ($text = $comment()) !== '' ? "{$name}: {$text}" : "{$name}님이 회원님의 댓글에 답글을 남겼어요."],
+            'follow' => ['🙌 새 팔로워', "{$name}님이 회원님을 팔로우하기 시작했어요."],
+            default => null,
+        };
     }
 }
