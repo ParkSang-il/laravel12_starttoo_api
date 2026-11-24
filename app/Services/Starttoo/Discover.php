@@ -54,7 +54,8 @@ class Discover
     public function search(array $input, ?int $viewer): array
     {
         $f = $this->filters($input);
-        $signature = hash('sha256', json_encode([$f, $viewer], JSON_THROW_ON_ERROR));
+        // 정렬 기간 변경 전 커서를 새 점수에 재사용하지 않는다.
+        $signature = hash('sha256', json_encode(['likes48h-follow7d-v2', $f, $viewer], JSON_THROW_ON_ERROR));
         $at = now()->format('Y-m-d H:i:s');
         $after = [];
         if (!empty($input['cursor'])) {
@@ -85,7 +86,7 @@ class Discover
         if (in_array($f['type'], ['all', 'work', 'design'], true)) {
             if ($f['type'] !== 'all') $art->where('a.kind', $f['type']);
             $likes = $this->db()->table('starttoo_artwork_interactions')->where('kind', 'like')
-                ->whereBetween('created_at', [date('Y-m-d H:i:s', strtotime($at.' -7 days')), $at])
+                ->whereBetween('created_at', [date('Y-m-d H:i:s', strtotime($at.' -48 hours')), $at])
                 ->groupBy('artwork_id')->selectRaw('artwork_id, COUNT(*) as score');
             $art->leftJoinSub($likes, 'rank_likes', fn ($j) => $j->on('rank_likes.artwork_id', '=', 'a.id'));
             $score = $f['sort'] === 'popular' ? 'COALESCE(rank_likes.score, 0)' : 'CAST(0 AS UNSIGNED)';
