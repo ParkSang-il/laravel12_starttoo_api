@@ -50,6 +50,16 @@ class StarttooConsultationController extends Controller
         return $this->json($c->read($this->viewer($request, $sessions, $artworks), $consultation, $request->all()));
     }
 
+    public function realtime(Request $request, Consultations $c, AuthSessions $sessions, Artworks $artworks)
+    {
+        return $this->json($c->realtime($this->viewer($request, $sessions, $artworks)));
+    }
+
+    public function realtimeAuth(Request $request, Consultations $c, AuthSessions $sessions, Artworks $artworks)
+    {
+        return $this->json($c->authorizeChannel($this->viewer($request, $sessions, $artworks), $request->all()));
+    }
+
     private function viewer(Request $request, AuthSessions $sessions, Artworks $artworks): int
     {
         return (int) $artworks->ready((string) $request->bearerToken(), $sessions)['account']['id'];

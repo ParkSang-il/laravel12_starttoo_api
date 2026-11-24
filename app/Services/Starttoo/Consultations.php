@@ -198,7 +198,12 @@ class Consultations
         $room = $this->room($viewer, $id);
         $column = (int) $room->customer_id === $viewer ? 'customer_last_read_id' : 'artist_last_read_id';
         $target = min((int) $input['message_id'], (int) ($room->last_message_id ?? 0));
-        $this->db()->table('starttoo_consultations')->where('id', $room->id)->where($column, '<', $target)->update([$column => $target]);
+        $moved = $this->db()->table('starttoo_consultations')->where('id', $room->id)->where($column, '<', $target)->update([$column => $target]);
+        // 상대의 「읽음」 표시와 내 다른 기기의 배지를 맞춘다.
+        if ($moved) {
+            try { event(new \App\Events\StarttooConsultationChanged([(int) $room->customer_id, (int) $room->artist_id], (int) $room->id, 'read', $target, $viewer)); }
+            catch (\Throwable $e) { report($e); }
+        }
         return ['last_read_id' => (int) $this->db()->table('starttoo_consultations')->where('id', $room->id)->value($column),
             'unread_total' => $this->unreadTotal($viewer)];
     }
@@ -295,7 +300,53 @@ class Consultations
         // 보낸 사람은 자기 메시지까지 읽은 것으로 본다.
         if ($sender !== null) $update[(int) $room->customer_id === $sender ? 'customer_last_read_id' : 'artist_last_read_id'] = $id;
         $this->db()->table('starttoo_consultations')->where('id', $room->id)->update($update);
+        $this->notify($room, $id, $sender);
         return $id;
+    }
+
+    /**
+     * 커밋 후: 두 참여자 개인 채널에 변경 알림, 받는 사람에게 푸시(채팅 설정·읽음 여부는 발송 직전에 다시 확인).
+     * 실시간·푸시 실패가 메시지 저장을 실패시키지 않는다.
+     */
+    private function notify(object $room, int $messageId, ?int $sender): void
+    {
+        $users = [(int) $room->customer_id, (int) $room->artist_id];
+        $roomId = (int) $room->id;
+        $this->db()->afterCommit(function () use ($users, $roomId, $messageId) {
+            try { event(new \App\Events\StarttooConsultationChanged($users, $roomId, 'message', $messageId)); }
+            catch (\Throwable $e) { report($e); }
+        });
+        if (!config('starttoo.push_enabled') || $sender === null) return;
+        $this->db()->table('starttoo_push_outbox')->insertOrIgnore(['message_id' => $messageId, 'created_at' => now()]);
+        $outboxId = (int) $this->db()->table('starttoo_push_outbox')->where('message_id', $messageId)->value('id');
+        $this->db()->afterCommit(function () use ($outboxId) {
+            try { \App\Jobs\QueueStarttooPush::dispatch($outboxId); }
+            catch (\Throwable $e) { report($e); }
+        });
+    }
+
+    // ── 실시간 ───────────────────────────────────
+
+    /** 앱이 접속할 Reverb 정보. 키가 없거나 방송이 꺼져 있으면 enabled=false(앱은 HTTP 조회로만 동작). */
+    public function realtime(int $viewer): array
+    {
+        $key = config('broadcasting.connections.reverb.key');
+        $on = config('broadcasting.default') === 'reverb' && $key && config('starttoo.realtime_host');
+        return ['enabled' => (bool) $on, 'key' => $on ? $key : null, 'host' => $on ? config('starttoo.realtime_host') : null,
+            'port' => (int) config('starttoo.realtime_port'), 'scheme' => config('starttoo.realtime_scheme'),
+            'channel' => "private-starttoo.user.{$viewer}"];
+    }
+
+    /** 개인 채널 구독 서명(Pusher 프로토콜). 본인 채널만 서명한다. */
+    public function authorizeChannel(int $viewer, array $input): array
+    {
+        if (Validator::make($input, ['socket_id' => ['required', 'string', 'regex:/^\d+\.\d+$/', 'max:64'],
+            'channel_name' => ['required', 'string', 'max:100']])->fails()) $this->fail(422, 'INVALID_REALTIME', '실시간 연결 정보를 확인해주세요.');
+        if ($input['channel_name'] !== "private-starttoo.user.{$viewer}") $this->fail(403, 'REALTIME_FORBIDDEN', '구독할 수 없는 채널이에요.');
+        $key = config('broadcasting.connections.reverb.key');
+        $secret = config('broadcasting.connections.reverb.secret');
+        if (!$key || !$secret) $this->fail(503, 'REALTIME_UNAVAILABLE', '실시간 연결을 준비하고 있어요.');
+        return ['auth' => $key.':'.hash_hmac('sha256', $input['socket_id'].':'.$input['channel_name'], $secret)];
     }
 
     private function visibleArtwork(int $viewer, string $artworkId): bool

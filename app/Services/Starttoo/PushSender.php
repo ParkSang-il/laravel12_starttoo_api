@@ -24,7 +24,12 @@ class PushSender
             $db->transaction(function () use ($db, $box) {
                 $locked = $db->table('starttoo_push_outbox')->where('id', $box->id)->lockForUpdate()->first();
                 if (!$locked || $locked->expanded_at !== null) return;
-                $n = $db->table('starttoo_notifications')->where('id', $box->notification_id)->first();
+                // 상담 메시지는 받는 사람(보낸 사람이 아닌 참여자)에게 보낸다.
+                $n = $locked->message_id
+                    ? $db->table('starttoo_messages as m')->join('starttoo_consultations as c', 'c.id', '=', 'm.consultation_id')
+                        ->where('m.id', $locked->message_id)
+                        ->selectRaw('m.created_at, CASE WHEN m.sender_id = c.customer_id THEN c.artist_id ELSE c.customer_id END as user_id')->first()
+                    : $db->table('starttoo_notifications')->where('id', $box->notification_id)->first();
                 if ($n && $n->created_at >= now()->subDay()->toDateTimeString()) {
                     $devices = $db->table('starttoo_push_devices as d')->join('starttoo_auth_sessions as s', 's.id', '=', 'd.session_id')
                         ->where('d.user_id', $n->user_id)->where('s.created_at', '<=', $n->created_at)->get(['d.*']);
@@ -81,8 +86,9 @@ class PushSender
             $at = $current->state === 'sending' ? $current->leased_until : $current->available_at;
             return max(5, (int) now()->diffInSeconds(Carbon::parse($at), false) + 1);
         }
-        $audit = app(PushAudit::class);
         $boxForLog = $db->table('starttoo_push_outbox')->where('id', $job->outbox_id)->first();
+        if ($boxForLog && $boxForLog->message_id) return $this->deliverChat($job, $boxForLog, $key);
+        $audit = app(PushAudit::class);
         $deviceForLog = $db->table('starttoo_push_devices')->where('id', $job->device_id)->first();
         $log = $audit->begin('notification', (string) ($boxForLog->notification_id ?? $job->outbox_id), (int) $id,
             isset($deviceForLog->user_id) ? (int) $deviceForLog->user_id : null, (int) $job->device_id,
@@ -159,6 +165,81 @@ class PushSender
             }
             $audit->finish($log, $result);
             $retry = $eligible && in_array($result['state'], ['retry', 'skipped'], true) && $job->attempts < 7;
+            $delay = max((int) ($result['delay'] ?? 60), min(3600, 60 * (2 ** min(6, $job->attempts))));
+            $db->table('starttoo_push_deliveries')->where('id', $id)->where('lease_key', $key)->update([
+                'state' => $retry ? 'pending' : ($result['state'] === 'sent' ? 'sent' : ($result['state'] === 'skipped' ? 'skipped' : 'failed')),
+                'available_at' => now()->addSeconds($delay), 'lease_key' => null, 'leased_until' => null,
+            ]);
+            return $retry ? $delay : null;
+        } catch (\Throwable $e) {
+            $audit->finish($log, ['state' => 'exception', 'code' => 'WORKER_EXCEPTION']);
+            $db->table('starttoo_push_deliveries')->where('id', $id)->where('lease_key', $key)->update([
+                'state' => 'pending', 'available_at' => now()->addMinute(), 'lease_key' => null, 'leased_until' => null,
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * 상담 메시지 푸시. 발송 직전에 다시 확인한다: 받는 사람의 세션·기기, 채팅 알림 설정,
+     * 이미 읽은 메시지(앱에서 열어 본 경우), 차단 관계. 같은 방 알림은 tag로 하나만 남긴다.
+     */
+    private function deliverChat(object $job, object $box, string $key): ?int
+    {
+        $db = $this->db();
+        $id = (int) $job->id;
+        $device = $db->table('starttoo_push_devices')->where('id', $job->device_id)->first();
+        $audit = app(PushAudit::class);
+        $log = $audit->begin('chat', (string) $box->message_id, $id, $device ? (int) $device->user_id : null, (int) $job->device_id,
+            $device->platform ?? null, (int) $job->attempts + 1);
+        try {
+            $device = $db->table('starttoo_push_devices as d')->join('starttoo_auth_sessions as s', 's.id', '=', 'd.session_id')
+                ->join('starttoo_users as u', 'u.id', '=', 'd.user_id')
+                ->where('d.id', $job->device_id)->where('d.session_id', $job->session_id)->where('d.token_hash', $job->token_hash)
+                ->whereColumn('s.user_id', 'd.user_id')->whereNull('s.revoked_at')->where('s.idle_expires_at', '>', now())->where('s.absolute_expires_at', '>', now())
+                ->where('u.status', 'active')->where('u.moderation_hidden', false)->first(['d.*']);
+            $m = $db->table('starttoo_messages')->where('id', $box->message_id)->first();
+            $room = $m ? $db->table('starttoo_consultations')->where('id', $m->consultation_id)->first() : null;
+            $result = ['state' => 'skipped', 'code' => 'RECIPIENT_OR_MESSAGE_UNAVAILABLE'];
+            $eligible = false;
+            if ($device && $m && $room && $m->created_at >= now()->subDay()->toDateTimeString()) {
+                $recipient = (int) $device->user_id;
+                $isCustomer = (int) $room->customer_id === $recipient;
+                $participant = $isCustomer || (int) $room->artist_id === $recipient;
+                $read = (int) ($isCustomer ? $room->customer_last_read_id : $room->artist_last_read_id) >= (int) $m->id;
+                $eligible = $participant && $recipient !== (int) $m->sender_id && !$read
+                    && !app(Blocks::class)->between($recipient, (int) $m->sender_id)
+                    && app(UserPreferences::class)->get($recipient)['values']['chat'];
+                if ($participant && $read) $result['code'] = 'ALREADY_READ';
+            }
+            if ($eligible) {
+                $sender = $db->table('starttoo_users')->where('id', $m->sender_id)->first(['nickname', 'display_name']);
+                $title = $sender ? Str::limit($sender->nickname ?: ($sender->display_name ?: '스타투'), 30, '…') : '스타투';
+                $body = match ($m->kind) {
+                    'text' => Str::limit($this->multiline((string) $m->body), 120, '…'),
+                    'image' => '사진을 보냈어요.',
+                    'artwork' => '작품을 보냈어요.',
+                    'request' => '상담 요청서를 보냈어요.',
+                    'quote' => '견적을 보냈어요.',
+                    default => '새 메시지가 있어요.',
+                };
+                // 이력에는 메시지 원문을 남기지 않는다.
+                $db->table('starttoo_push_logs')->where('id', $log)->update(['kind' => 'chat', 'title_snapshot' => '스타투', 'body_snapshot' => '새 메시지']);
+                $tag = 'starttoo:chat:'.$room->id;
+                $message = [
+                    'notification' => ['title' => $title, 'body' => $body],
+                    'data' => ['type' => 'chat', 'consultation_id' => (string) $room->id, 'message_id' => (string) $m->id, 'recipient_id' => (string) $device->user_id],
+                    'android' => ['priority' => 'high', 'ttl' => '3600s', 'notification' => ['channel_id' => 'starttoo_chat', 'tag' => $tag, 'icon' => 'ic_stat_starttoo']],
+                    'apns' => ['headers' => ['apns-push-type' => 'alert', 'apns-priority' => '10', 'apns-collapse-id' => $tag],
+                        'payload' => ['aps' => ['sound' => 'default', 'thread-id' => $tag]]],
+                ];
+                $result = app('starttoo.fcm')->send(Crypt::decryptString($device->token_ciphertext), $message);
+            }
+            if ($result['state'] === 'invalid' && $device) {
+                $db->table('starttoo_push_devices')->where('id', $device->id)->where('token_hash', $job->token_hash)->delete();
+            }
+            $audit->finish($log, $result);
+            $retry = $eligible && $result['state'] === 'retry' && $job->attempts < 7;
             $delay = max((int) ($result['delay'] ?? 60), min(3600, 60 * (2 ** min(6, $job->attempts))));
             $db->table('starttoo_push_deliveries')->where('id', $id)->where('lease_key', $key)->update([
                 'state' => $retry ? 'pending' : ($result['state'] === 'sent' ? 'sent' : ($result['state'] === 'skipped' ? 'skipped' : 'failed')),

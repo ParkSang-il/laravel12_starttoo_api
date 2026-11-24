@@ -9,6 +9,8 @@ Route::prefix('v1/projects/starttoo/consultations')->middleware([StarttooDatabas
     Route::get('/', [StarttooConsultationController::class, 'list']);
     Route::post('/', [StarttooConsultationController::class, 'start'])->middleware('throttle:10,1');
     Route::get('unread', [StarttooConsultationController::class, 'unread']);
+    Route::get('realtime', [StarttooConsultationController::class, 'realtime']);
+    Route::post('realtime/auth', [StarttooConsultationController::class, 'realtimeAuth'])->middleware('throttle:60,1');
     Route::get('availability/{artist}', [StarttooConsultationController::class, 'availability'])->whereNumber('artist');
     Route::get('{consultation}', [StarttooConsultationController::class, 'show'])->whereNumber('consultation');
     Route::get('{consultation}/messages', [StarttooConsultationController::class, 'messages'])->whereNumber('consultation');
