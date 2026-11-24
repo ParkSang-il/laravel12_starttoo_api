@@ -45,7 +45,9 @@ class KakaoLocal
         }
         if (!$response->ok()) {
             // 키·권한 오류 내용은 로그에만 남기고 앱에는 일반 안내만 준다.
-            report(new \RuntimeException('Kakao local '.$path.' '.$response->status()));
+            // 카카오 오류 문구(예: 카카오맵 사용 설정 꺼짐)만 남긴다. 키는 남기지 않는다.
+            report(new \RuntimeException('Kakao local '.$path.' '.$response->status().' '
+                .mb_substr((string) ($response->json('message') ?? $response->json('errorType') ?? ''), 0, 200)));
             $this->fail(502, 'ADDRESS_SEARCH_FAILED', '주소를 검색하지 못했어요. 잠시 후 다시 시도해주세요.');
         }
         return $response->json('documents') ?? [];
