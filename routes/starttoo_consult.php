@@ -15,5 +15,8 @@ Route::prefix('v1/projects/starttoo/consultations')->middleware([StarttooDatabas
     Route::get('{consultation}', [StarttooConsultationController::class, 'show'])->whereNumber('consultation');
     Route::get('{consultation}/messages', [StarttooConsultationController::class, 'messages'])->whereNumber('consultation');
     Route::post('{consultation}/messages', [StarttooConsultationController::class, 'send'])->whereNumber('consultation')->middleware('throttle:60,1');
+    Route::post('{consultation}/quotes', [StarttooConsultationController::class, 'quote'])->whereNumber('consultation')->middleware('throttle:20,1');
+    Route::get('{consultation}/quotes/latest', [StarttooConsultationController::class, 'latestQuote'])->whereNumber('consultation');
+    Route::get('{consultation}/quotes/{quote}', [StarttooConsultationController::class, 'quoteDetail'])->whereNumber('consultation')->whereNumber('quote');
     Route::post('{consultation}/read', [StarttooConsultationController::class, 'read'])->whereNumber('consultation')->middleware('throttle:120,1');
 });

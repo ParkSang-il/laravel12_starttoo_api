@@ -326,6 +326,102 @@ class Consultations
         });
     }
 
+    // ── 견적 (P3-4) ──────────────────────────────
+
+    public const QUOTE_DAYS = [3, 7, 14];
+
+    /**
+     * 작가가 견적을 보낸다. 새 버전을 내면 이전 버전은 대체된다. 채팅에 견적 카드 메시지로 올라간다.
+     * client_id가 같으면 다시 보내도 한 건만 만든다.
+     */
+    public function quote(int $viewer, int $id, array $input): array
+    {
+        $v = Validator::make($input, [
+            'client_id' => ['required', 'uuid'],
+            'subject' => ['required', 'string', 'min:1', 'max:100'],
+            'items' => ['required', 'array', 'min:1', 'max:10'],
+            'items.*.label' => ['required', 'string', 'min:1', 'max:30'],
+            'items.*.amount' => ['required', 'integer', 'min:1', 'max:100000000'],
+            'deposit' => ['required', 'integer', 'min:0'],
+            'valid_days' => ['required', 'integer', Rule::in(self::QUOTE_DAYS)],
+            'duration' => ['nullable', 'string', 'max:40'],
+            'includes' => ['nullable', 'string', 'max:300'],
+            'memo' => ['nullable', 'string', 'max:500'],
+        ]);
+        if ($v->fails()) $this->fail(422, 'INVALID_QUOTE', '견적 내용을 확인해주세요.');
+        $in = $v->validated();
+        $room = $this->room($viewer, $id);
+        if ((int) $room->artist_id !== $viewer) $this->fail(403, 'QUOTE_ARTIST_ONLY', '상담 받은 아티스트만 견적을 보낼 수 있어요.');
+        $done = $this->db()->table('starttoo_messages')->where('consultation_id', $room->id)->where('sender_id', $viewer)
+            ->where('client_id', $in['client_id'])->first();
+        if ($done) return $this->format($done, $viewer);
+        $this->assertCanSend($viewer, $room);
+        $items = array_map(fn ($i) => ['label' => trim($i['label']), 'amount' => (int) $i['amount']], $in['items']);
+        $total = array_sum(array_column($items, 'amount'));
+        if ($total > 100000000) $this->fail(422, 'INVALID_QUOTE', '견적 총액이 너무 커요.');
+        if ((int) $in['deposit'] > $total) $this->fail(422, 'INVALID_QUOTE_DEPOSIT', '예약금은 총액보다 클 수 없어요.');
+        $messageId = $this->db()->transaction(function () use ($viewer, $room, $in, $items, $total) {
+            $locked = $this->db()->table('starttoo_consultations')->where('id', $room->id)->lockForUpdate()->first();
+            $now = now();
+            $version = (int) $this->db()->table('starttoo_quotes')->where('consultation_id', $locked->id)->max('version') + 1;
+            // 이전 버전은 대체 처리(이력은 남긴다)
+            $this->db()->table('starttoo_quotes')->where('consultation_id', $locked->id)->whereNull('superseded_at')->update(['superseded_at' => $now]);
+            $quoteId = $this->db()->table('starttoo_quotes')->insertGetId([
+                'consultation_id' => $locked->id, 'version' => $version, 'subject' => trim($in['subject']),
+                'items' => json_encode($items, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), 'total' => $total,
+                'deposit' => (int) $in['deposit'], 'duration' => ($in['duration'] ?? '') ?: null,
+                'includes' => ($in['includes'] ?? '') ?: null, 'memo' => ($in['memo'] ?? '') ?: null,
+                // 마지막 날 자정까지 유효
+                'valid_until' => $now->copy()->addDays((int) $in['valid_days'])->endOfDay(), 'created_at' => $now,
+            ]);
+            $messageId = $this->insertMessage($locked, $viewer, $in['client_id'], 'quote', null, ['quote_id' => $quoteId]);
+            if ($locked->status !== 'booked') {
+                $this->db()->table('starttoo_consultations')->where('id', $locked->id)->update(['status' => 'quoted']);
+            }
+            return $messageId;
+        }, 3);
+        return $this->format($this->db()->table('starttoo_messages')->where('id', $messageId)->first(), $viewer);
+    }
+
+    /** 3-05 견적 상세: 해당 버전 + 같은 방의 모든 버전 요약(최신 먼저). */
+    public function quoteDetail(int $viewer, int $id, int $quoteId): array
+    {
+        $room = $this->room($viewer, $id);
+        $quote = $this->db()->table('starttoo_quotes')->where('consultation_id', $room->id)->where('id', $quoteId)->first();
+        if (!$quote) $this->fail(404, 'QUOTE_NOT_FOUND', '견적을 찾을 수 없어요.');
+        $versions = $this->db()->table('starttoo_quotes')->where('consultation_id', $room->id)->orderByDesc('version')
+            ->get(['id', 'version', 'total', 'created_at', 'superseded_at', 'valid_until']);
+        return ['quote' => $this->quoteView($quote), 'consultation' => $this->summary($viewer, (int) $room->id),
+            'versions' => $versions->map(fn ($q) => ['id' => (int) $q->id, 'version' => (int) $q->version, 'total' => (int) $q->total,
+                'state' => $this->quoteState($q), 'created_at' => $this->time($q->created_at)])->all()];
+    }
+
+    /** 가장 최근 견적(작가가 수정할 때 불러오기). 없으면 null. */
+    public function latestQuote(int $viewer, int $id): ?array
+    {
+        $room = $this->room($viewer, $id);
+        $quote = $this->db()->table('starttoo_quotes')->where('consultation_id', $room->id)->orderByDesc('version')->first();
+        return $quote ? $this->quoteView($quote) : null;
+    }
+
+    /** active 유효 · expired 기간 지남 · superseded 새 버전으로 대체 */
+    private function quoteState(object $q): string
+    {
+        if ($q->superseded_at) return 'superseded';
+        return now()->greaterThan($q->valid_until) ? 'expired' : 'active';
+    }
+
+    private function quoteView(object $q): array
+    {
+        $latest = (int) $this->db()->table('starttoo_quotes')->where('consultation_id', $q->consultation_id)->max('id');
+        return ['id' => (int) $q->id, 'version' => (int) $q->version, 'subject' => $q->subject,
+            'items' => json_decode($q->items, true, 512, JSON_THROW_ON_ERROR), 'total' => (int) $q->total,
+            'deposit' => (int) $q->deposit, 'balance' => (int) $q->total - (int) $q->deposit,
+            'duration' => $q->duration, 'includes' => $q->includes, 'memo' => $q->memo,
+            'valid_until' => $this->time($q->valid_until), 'state' => $this->quoteState($q),
+            'latest_id' => $latest, 'created_at' => $this->time($q->created_at)];
+    }
+
     // ── 실시간 ───────────────────────────────────
 
     /** 앱이 접속할 Reverb 정보. 키가 없거나 방송이 꺼져 있으면 enabled=false(앱은 HTTP 조회로만 동작). */
@@ -451,6 +547,10 @@ class Consultations
             'mine' => $mine, 'kind' => $m->kind, 'body' => $m->body, 'created_at' => $this->time($m->created_at)];
         if (!empty($payload['images'])) $item['images'] = array_map(fn ($p) => app(MediaUrls::class)->url($p, 1080), $payload['images']);
         if (!empty($payload['artwork_id'])) $item['artwork'] = $this->artworkCard($payload['artwork_id'], $viewer);
+        if (!empty($payload['quote_id'])) {
+            $quote = $this->db()->table('starttoo_quotes')->where('id', $payload['quote_id'])->first();
+            if ($quote) $item['quote'] = $this->quoteView($quote);
+        }
         if (!empty($payload['request_id'])) {
             $req = $this->db()->table('starttoo_consultation_requests')->where('id', $payload['request_id'])->first();
             if ($req) $item['request'] = $this->requestView($req, $viewer);

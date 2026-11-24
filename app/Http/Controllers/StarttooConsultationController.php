@@ -50,6 +50,21 @@ class StarttooConsultationController extends Controller
         return $this->json($c->read($this->viewer($request, $sessions, $artworks), $consultation, $request->all()));
     }
 
+    public function quote(Request $request, int $consultation, Consultations $c, AuthSessions $sessions, Artworks $artworks)
+    {
+        return $this->json($c->quote($this->viewer($request, $sessions, $artworks), $consultation, $request->all()));
+    }
+
+    public function quoteDetail(Request $request, int $consultation, int $quote, Consultations $c, AuthSessions $sessions, Artworks $artworks)
+    {
+        return $this->json($c->quoteDetail($this->viewer($request, $sessions, $artworks), $consultation, $quote));
+    }
+
+    public function latestQuote(Request $request, int $consultation, Consultations $c, AuthSessions $sessions, Artworks $artworks)
+    {
+        return $this->json(['quote' => $c->latestQuote($this->viewer($request, $sessions, $artworks), $consultation)]);
+    }
+
     public function realtime(Request $request, Consultations $c, AuthSessions $sessions, Artworks $artworks)
     {
         return $this->json($c->realtime($this->viewer($request, $sessions, $artworks), $request->getHost()));
