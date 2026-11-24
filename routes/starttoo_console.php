@@ -140,6 +140,19 @@ Artisan::command('starttoo:chat-diagnose', function () {
     $this->line('app_realtime_host(앱→Reverb, 점 없는 내부 이름이면 API 도메인으로 대체)='.config('starttoo.realtime_host').':'.config('starttoo.realtime_port').' '.config('starttoo.realtime_scheme')
         .' consultation_enabled='.var_export(config('starttoo.consultation_enabled'), true).' push_enabled='.var_export(config('starttoo.push_enabled'), true));
     $this->line('queue_default='.config('queue.default'));
+    $opt = config('broadcasting.connections.reverb.options', []);
+    $this->line('서버→Reverb 주소='.($opt['scheme'] ?? '?').'://'.($opt['host'] ?? '?').':'.($opt['port'] ?? '?'));
+    $client = app(\App\Services\Starttoo\Consultations::class)->realtime(0, 'www.starttoo.com');
+    $this->line('앱에 알려줄 주소(www.starttoo.com 요청 기준)='.($client['host'] ?? 'null').':'.$client['port'].' enabled='.var_export($client['enabled'], true));
+    // 서버→Reverb 이벤트 발송 시험(진단 전용 채널, 받는 사람 없음)
+    try {
+        app(\Illuminate\Broadcasting\BroadcastManager::class)->connection('reverb')
+            ->broadcast(['starttoo.diagnose'], 'diagnose', ['at' => now()->toIso8601String()]);
+        $this->line('서버→Reverb 발송 시험=OK');
+    } catch (\Throwable $e) {
+        // 요청 주소의 인증 쿼리(auth_key·서명)는 지우고 원인만 보여 준다.
+        $this->error('서버→Reverb 발송 시험=실패: '.mb_substr(preg_replace('/\?\S*/', '', strtok($e->getMessage(), "\n")), 0, 200));
+    }
     $this->info('[큐 대기·실패]');
     try {
         // 이벤트·푸시 작업은 database 큐 연결(별도 DB일 수 있음)에 쌓인다.
