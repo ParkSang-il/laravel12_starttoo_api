@@ -8,7 +8,7 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
-/** 2-01~03. 기존 작품·상점·팔로우를 조회하며 별도 검색용 데이터를 복제하지 않는다. */
+/** 2-01~06. 기존 공개 작품·상점·팔로우를 조회한다. */
 class Discover
 {
     private const TYPES = ['all', 'work', 'design', 'artist', 'shop'];
@@ -26,6 +26,34 @@ class Discover
         return ['styles' => app(Artworks::class)->options()['styles'],
             'parts' => app(Artworks::class)->options()['body_parts'],
             'regions' => app(Profiles::class)->options()['regions'], 'budgets' => self::BUDGETS];
+    }
+
+    public function explore(?int $viewer): array
+    {
+        $f = $this->filters([]);
+        $counts = []; $covers = []; $tags = [];
+        // 검색과 같은 공개·숨김·차단 조건으로 집계한다. 샘플 수치나 가짜 상승 표시를 만들지 않는다.
+        foreach ($this->artworks($f, $viewer)->select('a.id', 'a.styles', 'a.tags')
+            ->orderByDesc('a.created_at')->orderByDesc('a.id')->cursor() as $row) {
+            foreach (array_unique(json_decode($row->styles ?? '[]', true) ?: []) as $style) {
+                $counts[$style] = ($counts[$style] ?? 0) + 1;
+                $covers[$style] ??= $row->id;
+            }
+            foreach (array_unique(json_decode($row->tags ?? '[]', true) ?: []) as $tag) {
+                if (mb_strlen((string) $tag) > 99) continue;
+                $tags[$tag] = ($tags[$tag] ?? 0) + 1;
+            }
+        }
+        $images = $covers ? $this->db()->table('starttoo_artwork_images')
+            ->whereIn('artwork_id', array_values($covers))->orderBy('position')
+            ->get(['artwork_id', 'path'])->groupBy('artwork_id') : collect();
+        $styles = array_map(fn ($style) => [...$style, 'count' => $counts[$style['id']] ?? 0,
+            'image_url' => app(MediaUrls::class)->url($images->get($covers[$style['id']] ?? '')?->first()?->path, 500)],
+            $this->options()['styles']);
+        $tagRows = [];
+        foreach ($tags as $tag => $count) $tagRows[] = ['tag' => (string) $tag, 'count' => $count];
+        usort($tagRows, fn ($a, $b) => ($b['count'] <=> $a['count']) ?: strcmp($a['tag'], $b['tag']));
+        return ['styles' => $styles, 'tags' => array_slice($tagRows, 0, 20)];
     }
 
     private function filters(array $input): array
@@ -55,7 +83,7 @@ class Discover
     {
         $f = $this->filters($input);
         // 정렬 기간 변경 전 커서를 새 점수에 재사용하지 않는다.
-        $signature = hash('sha256', json_encode(['likes48h-follow7d-v2', $f, $viewer], JSON_THROW_ON_ERROR));
+        $signature = hash('sha256', json_encode(['likes48h-follow7d-hashtags-v3', $f, $viewer], JSON_THROW_ON_ERROR));
         $at = now()->format('Y-m-d H:i:s');
         $after = [];
         if (!empty($input['cursor'])) {
@@ -132,6 +160,10 @@ class Discover
             fn ($j) => $j->on('search_shop.user_id', '=', 'u.id')->where('u.artist_status', 'approved'));
         $options = $this->options();
         foreach (preg_split('/\s+/u', $f['q'], -1, PREG_SPLIT_NO_EMPTY) ?: [] as $word) {
+            if (str_starts_with($word, '#')) {
+                $q->whereJsonContains('a.tags', mb_strtolower(mb_substr($word, 1), 'UTF-8'));
+                continue;
+            }
             $like = '%'.addcslashes($word, '\\%_').'%';
             $q->where(function ($w) use ($like, $word, $options) {
                 $w->where('a.title', 'like', $like)->orWhere('a.description', 'like', $like)
@@ -159,6 +191,10 @@ class Discover
             $like = '%'.addcslashes($word, '\\%_').'%';
             $match = $f; $match['q'] = $word;
             $visibleWork = $this->artworks($match, $viewer)->select('a.id')->whereColumn('a.user_id', 'owner.id');
+            if (str_starts_with($word, '#')) {
+                $q->whereExists($visibleWork);
+                continue;
+            }
             $q->where(fn ($w) => $w->where('owner.nickname', 'like', $like)
                 ->orWhere('shop.studio_name', 'like', $like)->orWhere('shop.bio', 'like', $like)->orWhereExists($visibleWork));
         }

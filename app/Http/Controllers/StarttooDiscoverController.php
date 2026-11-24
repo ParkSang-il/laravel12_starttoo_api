@@ -21,6 +21,13 @@ class StarttooDiscoverController extends Controller
             'account' => $identity['account'] ?? null]])->header('Cache-Control', 'no-store');
     }
 
+    public function explore(Request $request, Discover $discover, AuthSessions $sessions)
+    {
+        $identity = $this->identity($request, $sessions);
+        return response()->json(['data' => $discover->explore(isset($identity['account']['id'])
+            ? (int) $identity['account']['id'] : null)])->header('Cache-Control', 'no-store');
+    }
+
     private function identity(Request $request, AuthSessions $sessions): ?array
     {
         if ($request->bearerToken()) return $sessions->authenticate($request->bearerToken(), true);
