@@ -638,4 +638,39 @@ class GroupPlaceTest extends TestCase
         $this->withToken($this->tokens[2])->patchJson($url, ['version' => 2, 'tnr_stage' => 'needed'])->assertForbidden();
     }
 
+    public function test_snapshot_bundles_places_friends_and_records_with_same_permissions(): void
+    {
+        $allowed = $this->createPlace('허용 장소');
+        $hidden = $this->createPlace('다른 사람 장소');
+        $animalPath = $this->path('/'.$allowed['id'].'/animals');
+        $this->withToken($this->tokens[1])->postJson($animalPath, ['name' => '나비'])->assertCreated();
+        $this->withToken($this->tokens[1])->postJson($this->path('/'.$hidden['id'].'/animals'), ['name' => '숨은 친구'])->assertCreated();
+        $this->grant($allowed, 2, 'care')->assertOk();
+        $this->withToken($this->tokens[2])->postJson($this->path('/'.$allowed['id'].'/care-records'), [
+            'request_id' => (string) \Illuminate\Support\Str::uuid(), 'fed_at' => now()->subMinute()->toIso8601String(),
+            'cost' => 1000, 'tags' => [], 'sightings' => [], 'memo' => '묶음 조회',
+        ])->assertCreated();
+        $url = $this->base."/groups/{$this->group}/snapshot";
+
+        $owner = $this->withToken($this->tokens[1])->getJson($url)->assertOk()
+            ->assertJsonPath('data.can_manage', true)->assertJsonCount(2, 'data.places');
+        $this->assertContains('숨은 친구', array_merge(...array_map(
+            fn ($entry) => array_column($entry['animals'], 'name'), $owner->json('data.places'))));
+
+        $member = $this->withToken($this->tokens[2])->getJson($url)->assertOk()
+            ->assertJsonPath('data.can_manage', false)->assertJsonCount(1, 'data.places')
+            ->assertJsonPath('data.places.0.place.id', $allowed['id'])
+            ->assertJsonPath('data.places.0.animals.0.name', '나비')
+            ->assertJsonPath('data.places.0.records.0.memo', '묶음 조회');
+        $this->assertStringNotContainsString($hidden['id'], $member->getContent());
+        $this->assertSame(['나비'], array_column($member->json('data.places.0.animals'), 'name'));
+        // 개별 목록 API와 같은 응답 형식을 유지한다.
+        $this->assertSame($this->withToken($this->tokens[2])->getJson($this->path())->json('data.places'),
+            [$member->json('data.places.0.place')]);
+
+        $this->withToken($this->tokens[3])->getJson($url)->assertOk()->assertJsonCount(0, 'data.places');
+        $this->withToken($this->tokens[4])->getJson($url)->assertForbidden();
+        $this->withToken($this->tokens[1])->getJson($url.'?page=2')->assertUnprocessable();
+    }
+
 }

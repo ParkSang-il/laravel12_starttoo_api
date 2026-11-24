@@ -82,3 +82,12 @@ php artisan test
 Flutter에서는 그룹 상세 → 그룹 돌봄장소에서 서버 목록을 조회한다. 운영자의 신규 등록/수정 화면은 기존 카카오 위치 선택기를 재사용한다. 공유 장소를 기기의 개인 장소 DB와 섞거나 자동 백업하지 않는다. 목록·상세는 앱 복귀/새로고침·화면 재진입 시 권한을 다시 확인하고, 실패 시 이전 상세 위치를 화면에서 지운다. 이미 본 위치·캡처까지 원격 회수할 수는 없고 서버가 오프라인 기기에 즉시 권한 회수를 알리는 기능은 아직 없다.
 
 현재 개발 Mac에는 PHP/Composer/vendor가 없어 PHP 실행 테스트와 DB 적용은 수행하지 못했다. 서버에서 위 명령으로 확인해야 한다. 공식 참고: [Laravel 행 잠금](https://laravel.com/docs/13.x/queries#pessimistic-locking), [외래키](https://laravel.com/docs/13.x/migrations#foreign-key-constraints).
+
+## 그룹 묶음 조회 (`GET groups/{group}/snapshot`)
+
+장소·친구·돌봄 기록을 한 번에 돌려준다. 앱이 장소마다 친구·기록 목록을 따로 요청하면 네트워크 왕복이 요청 수만큼 쌓이므로, 앱의 공동돌봄 새로고침은 이 경로를 먼저 사용한다.
+
+- 권한·항목 형식은 `places`, `places/{place}/animals`, `places/{place}/care-records` 목록 API와 같다(같은 서비스를 재사용). 열람 권한이 없는 장소는 포함하지 않는다.
+- 응답: `{"data": {"group_id", "can_manage", "places": [{"place": {...}, "animals": [...], "records": [...]}]}}`
+- 쿼리 파라미터는 받지 않는다(있으면 422). 각 목록은 서버에서 모든 페이지를 모아 돌려준다.
+- 이 경로가 없는 서버(배포 전)에서는 404가 나오고, 앱은 개별 목록 API로 자동 전환한다.

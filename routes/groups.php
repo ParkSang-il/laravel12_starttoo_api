@@ -43,6 +43,8 @@ Route::prefix('groups/{group}')->whereUuid('group')->group(function () {
     Route::get('places/{place}/care-records', [GroupCareController::class, 'index'])->whereUuid('place');
     Route::get('places/{place}/care-records/{record}', [GroupCareController::class, 'show'])->whereUuid('place')->whereUuid('record');
     Route::post('places/{place}/care-records', [GroupCareController::class, 'create'])->whereUuid('place');
+    // 장소·친구·돌봄 기록을 한 번에 조회한다. 권한 검사는 개별 목록 API와 같다.
+    Route::get('snapshot', [\App\Http\Controllers\GroupSnapshotController::class, 'show']);
     Route::get('places', [GroupPlaceController::class, 'index']);
     Route::post('places', [GroupPlaceController::class, 'create']);
     Route::get('places/{place}', [GroupPlaceController::class, 'show'])->whereUuid('place');
