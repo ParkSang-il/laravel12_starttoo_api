@@ -142,10 +142,15 @@ Artisan::command('starttoo:chat-diagnose', function () {
     $this->line('queue_default='.config('queue.default'));
     $this->info('[큐 대기·실패]');
     try {
+        // 이벤트·푸시 작업은 database 큐 연결(별도 DB일 수 있음)에 쌓인다.
+        $queueDb = \Illuminate\Support\Facades\DB::connection(config('queue.connections.database.connection'));
+        $table = config('queue.connections.database.table', 'jobs');
         foreach (['chat-realtime', 'chat-push'] as $q) {
-            $this->line("$q 대기=".\Illuminate\Support\Facades\DB::table('jobs')->where('queue', $q)->count());
+            $this->line("$q 대기=".$queueDb->table($table)->where('queue', $q)->count());
         }
-        foreach (\Illuminate\Support\Facades\DB::table('failed_jobs')->orderByDesc('id')->limit(3)->get(['queue', 'failed_at', 'exception']) as $f) {
+        $failed = \Illuminate\Support\Facades\DB::connection(config('queue.failed.database') ?: config('queue.connections.database.connection'))
+            ->table(config('queue.failed.table', 'failed_jobs'));
+        foreach ($failed->whereIn('queue', ['chat-realtime', 'chat-push'])->orderByDesc('id')->limit(3)->get(['queue', 'failed_at', 'exception']) as $f) {
             $this->line("실패 {$f->failed_at} {$f->queue}: ".mb_substr(strtok($f->exception, "\n"), 0, 160));
         }
     } catch (\Throwable $e) { $this->warn('큐 테이블 확인 실패: '.$e->getMessage()); }
