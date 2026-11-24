@@ -137,7 +137,7 @@ Artisan::command('starttoo:chat-diagnose', function () {
     $this->info('[설정]');
     $this->line('broadcast='.config('broadcasting.default').' reverb_key='.$set(config('broadcasting.connections.reverb.key'))
         .' reverb_secret='.$set(config('broadcasting.connections.reverb.secret')).' reverb_host(서버→Reverb)='.config('broadcasting.connections.reverb.options.host'));
-    $this->line('app_realtime_host(앱→Reverb)='.config('starttoo.realtime_host').':'.config('starttoo.realtime_port').' '.config('starttoo.realtime_scheme')
+    $this->line('app_realtime_host(앱→Reverb, 점 없는 내부 이름이면 API 도메인으로 대체)='.config('starttoo.realtime_host').':'.config('starttoo.realtime_port').' '.config('starttoo.realtime_scheme')
         .' consultation_enabled='.var_export(config('starttoo.consultation_enabled'), true).' push_enabled='.var_export(config('starttoo.push_enabled'), true));
     $this->line('queue_default='.config('queue.default'));
     $this->info('[큐 대기·실패]');

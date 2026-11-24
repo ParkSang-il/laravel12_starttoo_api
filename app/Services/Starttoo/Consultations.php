@@ -329,11 +329,15 @@ class Consultations
     // ── 실시간 ───────────────────────────────────
 
     /** 앱이 접속할 Reverb 정보. 키가 없거나 방송이 꺼져 있으면 enabled=false(앱은 HTTP 조회로만 동작). */
-    public function realtime(int $viewer): array
+    public function realtime(int $viewer, ?string $requestHost = null): array
     {
         $key = config('broadcasting.connections.reverb.key');
-        $on = config('broadcasting.default') === 'reverb' && $key && config('starttoo.realtime_host');
-        return ['enabled' => (bool) $on, 'key' => $on ? $key : null, 'host' => $on ? config('starttoo.realtime_host') : null,
+        $host = config('starttoo.realtime_host');
+        // 컨테이너 내부 이름(chat-reverb처럼 점이 없음)은 휴대폰에서 찾을 수 없다.
+        // 그 경우 앱이 API를 호출한 공개 도메인을 쓴다(같은 nginx 443의 /app/ 경로로 Reverb 연결).
+        if ((!$host || !str_contains($host, '.')) && $requestHost && str_contains($requestHost, '.')) $host = $requestHost;
+        $on = config('broadcasting.default') === 'reverb' && $key && $host && str_contains($host, '.');
+        return ['enabled' => (bool) $on, 'key' => $on ? $key : null, 'host' => $on ? $host : null,
             'port' => (int) config('starttoo.realtime_port'), 'scheme' => config('starttoo.realtime_scheme'),
             'channel' => "private-starttoo.user.{$viewer}"];
     }

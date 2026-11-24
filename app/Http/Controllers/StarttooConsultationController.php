@@ -52,7 +52,7 @@ class StarttooConsultationController extends Controller
 
     public function realtime(Request $request, Consultations $c, AuthSessions $sessions, Artworks $artworks)
     {
-        return $this->json($c->realtime($this->viewer($request, $sessions, $artworks)));
+        return $this->json($c->realtime($this->viewer($request, $sessions, $artworks), $request->getHost()));
     }
 
     public function realtimeAuth(Request $request, Consultations $c, AuthSessions $sessions, Artworks $artworks)
