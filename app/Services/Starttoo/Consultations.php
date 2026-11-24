@@ -131,6 +131,8 @@ class Consultations
             'media_ids' => ['sometimes', 'array', 'max:5'],
             'media_ids.*' => ['uuid', 'distinct'],
             'artwork_id' => ['nullable', 'uuid'],
+            // 견적 수정 요청 등: 이 방의 견적을 메시지에 첨부
+            'quote_id' => ['nullable', 'integer', 'min:1'],
         ]);
         if ($v->fails()) $this->fail(422, 'INVALID_MESSAGE', '메시지를 확인해주세요.');
         $in = $v->validated();
@@ -145,6 +147,9 @@ class Consultations
         if ($in['kind'] === 'artwork' && (empty($in['artwork_id']) || !$this->visibleArtwork($viewer, $in['artwork_id']))) {
             $this->fail(422, 'INVALID_MESSAGE', '보낼 작품을 확인할 수 없어요.');
         }
+        if (!empty($in['quote_id']) && !$this->db()->table('starttoo_quotes')->where('id', $in['quote_id'])->where('consultation_id', $room->id)->exists()) {
+            $this->fail(422, 'INVALID_MESSAGE', '첨부한 견적을 찾을 수 없어요.');
+        }
         $messageId = $this->db()->transaction(function () use ($viewer, $room, $in, $body) {
             $locked = $this->db()->table('starttoo_consultations')->where('id', $room->id)->lockForUpdate()->first();
             $payload = match ($in['kind']) {
@@ -152,6 +157,7 @@ class Consultations
                 'artwork' => ['artwork_id' => $in['artwork_id']],
                 default => null,
             };
+            if (!empty($in['quote_id'])) $payload = [...($payload ?? []), 'quote_id' => (int) $in['quote_id']];
             $messageId = $this->insertMessage($locked, $viewer, $in['client_id'], $in['kind'], $body ?: null, $payload);
             // 작가가 처음 답하면 「상담 중」
             if ((int) $locked->artist_id === $viewer && $locked->status === 'requested') {
