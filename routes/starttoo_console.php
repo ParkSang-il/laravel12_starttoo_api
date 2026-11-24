@@ -187,3 +187,70 @@ Artisan::command('starttoo:chat-diagnose', function () {
         return 0;
     });
 })->purpose('STARTTOO 상담·채팅 상태 진단(비밀값 미출력)');
+
+// 실시간 종단 시험: 앱과 같은 순서(공개 주소 접속 → 채널 서명 → 구독 → 상담 이벤트 큐 발송 → 수신)를 서버에서 재현한다.
+// 키·서명 값은 출력하지 않는다.
+Artisan::command('starttoo:realtime-selftest {user : 시험할 회원 번호} {--host=www.starttoo.com} {--internal : chat-reverb:8080으로 직접 접속}', function () {
+    $user = (int) $this->argument('user');
+    $key = config('broadcasting.connections.reverb.key');
+    if (!$key) { $this->error('REVERB_APP_KEY 없음'); return 1; }
+    $internal = (bool) $this->option('internal');
+    $host = $internal ? 'chat-reverb' : $this->option('host');
+    $target = $internal ? "tcp://chat-reverb:8080" : "tls://{$host}:443";
+    $step = fn (string $name, bool $ok, string $detail = '') => $ok ? $this->line("✔ $name $detail") : $this->error("✘ $name $detail");
+    $sock = @stream_socket_client($target, $errno, $errstr, 8, STREAM_CLIENT_CONNECT,
+        stream_context_create(['ssl' => ['peer_name' => $host, 'SNI_enabled' => true]]));
+    $step("1. 접속 $target", (bool) $sock, $sock ? '' : "$errno $errstr");
+    if (!$sock) return 1;
+    stream_set_timeout($sock, 10);
+    $wsKey = base64_encode(random_bytes(16));
+    fwrite($sock, "GET /app/{$key}?protocol=7&client=selftest&version=1.0 HTTP/1.1\r\nHost: {$host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+        ."Sec-WebSocket-Key: {$wsKey}\r\nSec-WebSocket-Version: 13\r\n\r\n");
+    $head = '';
+    while (!str_contains($head, "\r\n\r\n") && !feof($sock)) $head .= fread($sock, 1);
+    $step('2. 웹소켓 업그레이드', str_contains($head, ' 101 '), strtok($head, "\r\n"));
+    if (!str_contains($head, ' 101 ')) return 1;
+    $read = function () use ($sock): ?array {
+        $h = fread($sock, 2);
+        if (strlen($h) < 2) return null;
+        $len = ord($h[1]) & 0x7f;
+        if ($len === 126) $len = unpack('n', fread($sock, 2))[1];
+        elseif ($len === 127) $len = unpack('J', fread($sock, 8))[1];
+        $data = '';
+        while (strlen($data) < $len && !feof($sock)) $data .= fread($sock, $len - strlen($data));
+        return json_decode($data, true);
+    };
+    $send = function (array $msg) use ($sock) {
+        $p = json_encode($msg); $len = strlen($p); $mask = random_bytes(4);
+        $h = chr(0x81).($len < 126 ? chr(0x80 | $len) : chr(0x80 | 126).pack('n', $len)).$mask;
+        $m = ''; for ($i = 0; $i < $len; $i++) $m .= $p[$i] ^ $mask[$i % 4];
+        fwrite($sock, $h.$m);
+    };
+    $hello = $read();
+    $socketId = json_decode($hello['data'] ?? '{}', true)['socket_id'] ?? null;
+    $step('3. 연결 확인(connection_established)', (bool) $socketId, $socketId ? '' : json_encode($hello, JSON_UNESCAPED_UNICODE));
+    if (!$socketId) return 1;
+    $channel = "private-starttoo.user.{$user}";
+    $auth = app(ProjectDatabase::class)->run('starttoo', fn () => app(\App\Services\Starttoo\Consultations::class)
+        ->authorizeChannel($user, ['socket_id' => $socketId, 'channel_name' => $channel])['auth']);
+    $send(['event' => 'pusher:subscribe', 'data' => ['channel' => $channel, 'auth' => $auth]]);
+    $sub = $read();
+    $step("4. 구독 $channel", ($sub['event'] ?? '') === 'pusher_internal:subscription_succeeded', $sub['event'] ?? json_encode($sub, JSON_UNESCAPED_UNICODE));
+    if (($sub['event'] ?? '') !== 'pusher_internal:subscription_succeeded') return 1;
+    event(new \App\Events\StarttooConsultationChanged([$user], 0, 'selftest'));
+    $this->line('5. 상담 이벤트를 큐(chat-realtime)로 보냄 — 작업기가 Reverb로 전달하길 최대 15초 기다림');
+    $until = microtime(true) + 15;
+    while (microtime(true) < $until) {
+        $msg = $read();
+        if ($msg === null) continue;
+        if (($msg['event'] ?? '') === 'pusher:ping') { $send(['event' => 'pusher:pong', 'data' => []]); continue; }
+        if (($msg['event'] ?? '') === 'consultation.changed') {
+            $step('6. 이벤트 수신', true, $msg['data'] ?? '');
+            fclose($sock);
+            return 0;
+        }
+    }
+    $step('6. 이벤트 수신', false, '15초 안에 오지 않음: 큐 작업기(starttoo_chat_queue_rt)가 chat-realtime 큐를 처리하는지 확인');
+    fclose($sock);
+    return 1;
+})->purpose('STARTTOO 실시간 종단 시험(비밀값 미출력)');
