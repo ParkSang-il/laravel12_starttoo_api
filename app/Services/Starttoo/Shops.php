@@ -63,7 +63,7 @@ class Shops
             if (!$at || !$id) $this->fail(422, 'INVALID_SHOP_QUERY', '목록을 다시 불러와주세요.');
             $q->where(fn ($w) => $w->where('a.created_at', '<', $at)->orWhere(fn ($s) => $s->where('a.created_at', $at)->where('a.id', '<', $id)));
         }
-        $rows = $q->orderByDesc('a.created_at')->orderByDesc('a.id')->limit(31)->get(['a.id', 'a.kind', 'a.title', 'a.description', 'a.price', 'a.design_status', 'a.created_at']);
+        $rows = $q->orderByDesc('a.created_at')->orderByDesc('a.id')->limit(31)->get(['a.id', 'a.kind', 'a.title', 'a.description', 'a.price', 'a.design_status', 'a.body_part', 'a.size_text', 'a.created_at']);
         $page = $rows->take(30);
         $last = $page->last();
         return ['items' => $this->cards($page), 'next_cursor' => $rows->count() > 30 ? base64_encode($last->created_at.'|'.$last->id) : null];
@@ -79,7 +79,7 @@ class Shops
         // 같은 날 올린 도안을 한 소식으로 묶는다.
         $designs = $this->portfolioQuery($owner, $viewer)->where('a.kind', 'design')
             ->when($before, fn ($q) => $q->where('a.created_at', '<', $before))
-            ->orderByDesc('a.created_at')->limit(40)->get(['a.id', 'a.kind', 'a.title', 'a.description', 'a.price', 'a.design_status', 'a.created_at']);
+            ->orderByDesc('a.created_at')->limit(40)->get(['a.id', 'a.kind', 'a.title', 'a.description', 'a.price', 'a.design_status', 'a.body_part', 'a.size_text', 'a.created_at']);
         $grouped = $designs->groupBy(fn ($d) => Carbon::parse($d->created_at)->format('Y-m-d'))->map(fn ($group) => [
             'id' => 'design-'.Carbon::parse($group->first()->created_at)->format('Ymd'), 'kind' => 'new_design', 'title' => null,
             'body' => '새 도안 '.$group->count().'개를 올렸어요.', 'pinned' => false,
@@ -154,11 +154,17 @@ class Shops
         $ids = collect($rows)->pluck('id')->all();
         $images = $ids ? $this->db()->table('starttoo_artwork_images')->whereIn('artwork_id', $ids)->orderBy('position')
             ->get(['artwork_id', 'path'])->groupBy('artwork_id') : collect();
-        return collect($rows)->map(function ($r) use ($images) {
+        $likes = $ids ? $this->db()->table('starttoo_artwork_interactions')->whereIn('artwork_id', $ids)->where('kind', 'like')
+            ->selectRaw('artwork_id, COUNT(*) as total')->groupBy('artwork_id')->pluck('total', 'artwork_id') : collect();
+        $parts = collect(app(Artworks::class)->options()['body_parts'])->pluck('label', 'id');
+        return collect($rows)->map(function ($r) use ($images, $likes, $parts) {
             $first = optional($images->get($r->id))->first();
             return ['id' => $r->id, 'kind' => $r->kind, 'title' => $r->title, 'description' => $r->description,
                 'price' => $r->price === null ? null : (int) $r->price,
                 'design_status' => $r->kind === 'design' ? $r->design_status : null,
+                'body_part' => isset($r->body_part) ? ($parts[$r->body_part] ?? null) : null,
+                'size_text' => $r->size_text ?? null,
+                'like_count' => (int) ($likes[$r->id] ?? 0),
                 'image_url' => $first ? app(MediaUrls::class)->url($first->path, 500) : null];
         })->values()->all();
     }
