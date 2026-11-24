@@ -25,11 +25,13 @@ class ArtistApplications
     public function show(int $userId): array
     {
         $row = $this->db()->table('starttoo_artist_applications')->where('user_id', $userId)->first();
+        $user = $this->db()->table('starttoo_users')->where('id', $userId)->first(['nickname', 'artist_status']);
         return [
             'identity' => app(IdentityVerifications::class)->summary($userId),
             'license_required' => (bool) config('starttoo.artist_license_required'),
             'regions' => app(Profiles::class)->options()['regions'],
-            'artist_status' => $this->db()->table('starttoo_users')->where('id', $userId)->value('artist_status'),
+            'artist_status' => $user->artist_status ?? null,
+            'nickname' => $user->nickname ?? '',
             'application' => $row ? $this->view($row) : null,
             'limits' => ['min_photos' => self::MIN_PHOTOS, 'max_photos' => self::MAX_PHOTOS],
         ];
@@ -38,6 +40,8 @@ class ArtistApplications
     /** 신청서 제출(처음 또는 보완·반려 후 다시 제출). */
     public function submit(int $userId, array $input): array
     {
+        // 이전 앱이 보낸 별도 활동명은 사용하지 않는다. 사람의 표시 이름은 닉네임 하나다.
+        $input['activity_name'] = $this->db()->table('starttoo_users')->where('id', $userId)->value('nickname');
         $regions = array_column(app(Profiles::class)->options()['regions'], 'id');
         foreach (['activity_name', 'bio', 'portfolio_link', 'license_number'] as $field) {
             if (is_string($input[$field] ?? null)) $input[$field] = trim($input[$field]);
@@ -64,6 +68,7 @@ class ArtistApplications
 
         return $this->db()->transaction(function () use ($userId, $input) {
             $user = $this->db()->table('starttoo_users')->where('id', $userId)->lockForUpdate()->first();
+            $input['activity_name'] = $user->nickname;
             if ($user->artist_status === 'approved') $this->fail(409, 'ALREADY_ARTIST', '이미 아티스트로 활동 중이에요.');
             $row = $this->db()->table('starttoo_artist_applications')->where('user_id', $userId)->lockForUpdate()->first();
             if ($row && in_array($row->status, ['submitted', 'reviewing'], true)) {
@@ -162,7 +167,8 @@ class ArtistApplications
         $paths = json_decode($row->portfolio_paths, true, 512, JSON_THROW_ON_ERROR);
         return [
             'id' => (int) $row->id, 'status' => $row->status, 'version' => (int) $row->version,
-            'activity_name' => $row->activity_name, 'region' => $row->region, 'bio' => $row->bio,
+            'activity_name' => $this->db()->table('starttoo_users')->where('id', $row->user_id)->value('nickname') ?? $row->activity_name,
+            'region' => $row->region, 'bio' => $row->bio,
             'portfolio_link' => $row->portfolio_link,
             'photos' => array_map(fn ($p) => ['path' => $p, 'url' => app(MediaUrls::class)->url($p, 500)], $paths),
             'has_license' => $row->license_number_enc !== null,

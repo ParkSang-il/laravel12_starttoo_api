@@ -23,7 +23,8 @@ class Studios
     public function open(int $userId, object $application): void
     {
         $this->db()->table('starttoo_shops')->insertOrIgnore([
-            'user_id' => $userId, 'activity_name' => $application->activity_name, 'region' => $application->region,
+            'user_id' => $userId, 'activity_name' => $this->db()->table('starttoo_users')->where('id', $userId)->value('nickname') ?? $application->activity_name,
+            'region' => $application->region,
             'bio' => $application->bio, 'consult_status' => 'open', 'created_at' => now(), 'updated_at' => now(),
         ]);
     }
@@ -43,6 +44,7 @@ class Studios
 
     public function update(int $userId, array $input): array
     {
+        $input['activity_name'] = $this->db()->table('starttoo_users')->where('id', $userId)->value('nickname');
         foreach (['activity_name', 'studio_name', 'bio', 'notice', 'business_hours', 'guide'] as $field) {
             if (is_string($input[$field] ?? null)) $input[$field] = trim($input[$field]);
         }
@@ -174,14 +176,17 @@ class Studios
             $shop = $this->db()->table('starttoo_shops')->where('user_id', $userId)->first();
             if (!$shop) $this->fail(404, 'SHOP_NOT_FOUND', '상점을 찾을 수 없어요.');
         }
+        $shop->nickname = $user->nickname;
         return $shop;
     }
 
     public function view(object $shop): array
     {
+        // activity_name은 기존 앱 호환용 필드명이며 응답 값은 언제나 현재 닉네임이다.
+        $nickname = $shop->nickname ?? $this->db()->table('starttoo_users')->where('id', $shop->user_id)->value('nickname') ?? $shop->activity_name;
         $regions = app(Profiles::class)->options()['regions'];
         $label = collect($regions)->firstWhere('id', $shop->region)['label'] ?? $shop->region;
-        return ['user_id' => (int) $shop->user_id, 'activity_name' => $shop->activity_name, 'studio_name' => $shop->studio_name,
+        return ['user_id' => (int) $shop->user_id, 'nickname' => $nickname, 'activity_name' => $nickname, 'studio_name' => $shop->studio_name,
             'region' => $shop->region, 'region_label' => $label, 'bio' => $shop->bio,
             'price_min' => $shop->price_min === null ? null : (int) $shop->price_min,
             'price_max' => $shop->price_max === null ? null : (int) $shop->price_max,

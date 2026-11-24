@@ -226,9 +226,10 @@ class PushSender
     private function shopNewsText(object $n): array
     {
         $db = $this->db();
-        $shop = $db->table('starttoo_shops')->where('user_id', $n->actor_id)->first(['activity_name', 'studio_name']);
+        $shop = $db->table('starttoo_shops')->where('user_id', $n->actor_id)->first(['studio_name']);
+        $nickname = $db->table('starttoo_users')->where('id', $n->actor_id)->value('nickname');
         $news = $db->table('starttoo_shop_news')->where('id', $n->target_id)->first(['kind', 'title', 'body']);
-        $name = $shop ? Str::limit((string) ($shop->studio_name ?: $shop->activity_name), 30, '…') : '아티스트';
+        $name = Str::limit(implode(' · ', array_filter([$nickname ?: '아티스트', $shop->studio_name ?? null])), 30, '…');
         $label = ($news->kind ?? null) === 'holiday' ? '휴무 안내' : '새 소식';
         $text = $news ? $this->multiline(trim(($news->title ? $news->title."\n" : '').$news->body)) : '';
         return ['📢 '.$name.' · '.$label, $text === '' ? '상점에 새 소식이 올라왔어요.' : Str::limit($text, 120, '…')];

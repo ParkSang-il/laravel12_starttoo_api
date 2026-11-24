@@ -134,7 +134,7 @@ class Discover
             $like = '%'.addcslashes($word, '\\%_').'%';
             $q->where(function ($w) use ($like, $word, $options) {
                 $w->where('a.title', 'like', $like)->orWhere('a.description', 'like', $like)
-                    ->orWhere('u.nickname', 'like', $like)->orWhere('search_shop.activity_name', 'like', $like)->orWhere('search_shop.studio_name', 'like', $like);
+                    ->orWhere('u.nickname', 'like', $like)->orWhere('search_shop.studio_name', 'like', $like);
                 foreach ($options['styles'] as $style) if (mb_stripos($style['label'], $word) !== false) $w->orWhereJsonContains('a.styles', $style['id']);
                 foreach ($options['parts'] as $part) if (mb_stripos($part['label'], $word) !== false) $w->orWhere('a.body_part', $part['id']);
             });
@@ -144,8 +144,8 @@ class Discover
         if ($f['styles']) $q->where(function ($w) use ($f) { foreach ($f['styles'] as $style) $w->orWhereJsonContains('a.styles', $style); });
         if ($f['consult_only']) $q->where('search_shop.consult_status', 'open');
         if ($f['available_only']) $q->where('a.kind', 'design')->where('a.design_status', 'available');
-        $this->budget($q, $f['budgets'], 'COALESCE(a.price, search_shop.price_min, IF(search_shop.price_max IS NOT NULL, 0, NULL))',
-            'COALESCE(a.price, search_shop.price_max, IF(search_shop.price_min IS NOT NULL, 100000000, NULL))');
+        $this->budget($q, $f['budgets'], "CASE WHEN a.kind = 'design' THEN a.price ELSE COALESCE(search_shop.price_min, IF(search_shop.price_max IS NOT NULL, 0, NULL)) END",
+            "CASE WHEN a.kind = 'design' THEN a.price ELSE COALESCE(search_shop.price_max, IF(search_shop.price_min IS NOT NULL, 100000000, NULL)) END");
         return $q;
     }
 
@@ -158,7 +158,7 @@ class Discover
             $like = '%'.addcslashes($word, '\\%_').'%';
             $match = $f; $match['q'] = $word;
             $visibleWork = $this->artworks($match, $viewer)->select('a.id')->whereColumn('a.user_id', 'owner.id');
-            $q->where(fn ($w) => $w->where('owner.nickname', 'like', $like)->orWhere('shop.activity_name', 'like', $like)
+            $q->where(fn ($w) => $w->where('owner.nickname', 'like', $like)
                 ->orWhere('shop.studio_name', 'like', $like)->orWhere('shop.bio', 'like', $like)->orWhereExists($visibleWork));
         }
         if ($f['regions']) $q->whereIn('shop.region', $f['regions']);

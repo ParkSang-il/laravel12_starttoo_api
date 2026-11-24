@@ -28,7 +28,7 @@ class ArtworkEdits
             'body_part' => ['nullable', Rule::in(array_column($options['body_parts'], 'id'))],
             'color' => ['nullable', Rule::in(array_column($options['colors'], 'id'))],
             'duration_minutes' => ['nullable', 'integer', 'min:1', 'max:10080'],
-            'price' => ['required_if:kind,design', 'nullable', 'integer', 'min:0', 'max:100000000'],
+            'price' => ['nullable', 'integer', 'min:0', 'max:100000000'],
             'show_in_shop' => ['required', 'boolean'], 'visibility' => ['required', Rule::in(['public', 'hidden'])],
             'image_order' => ['required', 'array', 'min:1', 'max:10'],
         ]);
@@ -88,7 +88,7 @@ class ArtworkEdits
                     'tags' => json_encode(ArtworkHashtags::extract($input['description'] ?? ''), JSON_THROW_ON_ERROR),
                     'styles' => json_encode($input['styles'], JSON_THROW_ON_ERROR), 'body_part' => $input['body_part'] ?? null, 'color' => $input['color'] ?? null,
                     'duration_minutes' => $input['kind'] === 'work' ? ($input['duration_minutes'] ?? null) : null,
-                    'price' => $input['kind'] === 'design' ? $input['price'] : null, 'show_in_shop' => $input['show_in_shop'],
+                    'price' => $input['kind'] === 'design' ? ($input['price'] ?? null) : null, 'show_in_shop' => $input['show_in_shop'],
                     'visibility' => $input['visibility'], 'version' => $row->version + 1, 'updated_at' => now(),
                 ]);
                 $db->table('starttoo_artwork_edits')->insert(['artwork_id' => $id, 'user_id' => $userId, 'request_key' => $input['request_key'], 'payload_hash' => $hash]);

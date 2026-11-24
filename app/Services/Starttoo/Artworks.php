@@ -145,7 +145,7 @@ class Artworks
             'body_part' => ['nullable', 'string', Rule::in(array_column($options['body_parts'], 'id'))],
             'color' => ['nullable', 'string', Rule::in(array_column($options['colors'], 'id'))],
             'duration_minutes' => ['nullable', 'integer', 'min:1', 'max:10080'],
-            'price' => ['required_if:kind,design', 'nullable', 'integer', 'min:0', 'max:100000000'],
+            'price' => ['nullable', 'integer', 'min:0', 'max:100000000'],
             'show_in_shop' => ['required', 'boolean'],
         ]);
         if ($validator->fails() || !array_is_list($input['styles'] ?? [])) {
@@ -165,7 +165,7 @@ class Artworks
             'styles' => array_values($valid['styles']), 'body_part' => $valid['body_part'] ?? null,
             'color' => $valid['color'] ?? null,
             'duration_minutes' => $valid['kind'] === 'work' && isset($valid['duration_minutes']) ? (int) $valid['duration_minutes'] : null,
-            'price' => $valid['kind'] === 'design' ? (int) $valid['price'] : null,
+            'price' => $valid['kind'] === 'design' && isset($valid['price']) ? (int) $valid['price'] : null,
             'show_in_shop' => (bool) $valid['show_in_shop']];
         // 필드 순서를 고정하고 사진 순서까지 포함한다. 같은 키의 다른 내용은 409로 거절한다.
         $hash = hash('sha256', json_encode([$values, $mediaIds], JSON_THROW_ON_ERROR));
