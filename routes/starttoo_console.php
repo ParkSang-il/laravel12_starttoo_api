@@ -114,3 +114,19 @@ Artisan::command('starttoo:artist-review {application} {decision} {--operator=} 
         return 0;
     } catch (\InvalidArgumentException $e) { $this->error($e->getMessage()); return 1; }
 })->purpose('Review an artist application: reviewing | needs_changes | approved | rejected');
+
+// 공개 지도 좌표 흐림 기준이 바뀌었을 때 저장된 상점의 공개 좌표를 다시 계산한다(외부 API 호출 없음).
+Artisan::command('starttoo:shops-reblur', function () {
+    return app(ProjectDatabase::class)->run('starttoo', function () {
+        $db = app(ProjectDatabase::class)->database();
+        $studios = app(\App\Services\Starttoo\Studios::class);
+        $count = 0;
+        foreach ($db->table('starttoo_shops')->whereNotNull('lat')->whereNotNull('lng')->get(['user_id', 'lat', 'lng']) as $shop) {
+            [$lat, $lng] = $studios->blur((int) $shop->user_id, (float) $shop->lat, (float) $shop->lng);
+            $db->table('starttoo_shops')->where('user_id', $shop->user_id)->update(['map_lat' => $lat, 'map_lng' => $lng]);
+            $count++;
+        }
+        $this->info("공개 좌표를 다시 계산했습니다: {$count}개 상점");
+        return 0;
+    });
+})->purpose('STARTTOO 상점 공개 지도 좌표 재계산');

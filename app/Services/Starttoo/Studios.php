@@ -227,14 +227,15 @@ class Studios
     }
 
     /**
-     * 공개 지도용 좌표: 회원·좌표마다 고정된 방향으로 150~300m 옮긴다.
+     * 공개 지도용 좌표: 회원·좌표마다 고정된 방향으로 200~400m 옮긴다.
      * 같은 위치는 항상 같은 값이 나와 여러 번 조회해 평균을 내도 정확한 위치가 드러나지 않는다.
      */
     public function blur(int $userId, float $lat, float $lng): array
     {
         $seed = crc32($userId.'|'.round($lat, 5).'|'.round($lng, 5).'|'.config('app.key'));
         $angle = deg2rad($seed % 360);
-        $meters = 150 + intdiv($seed, 360) % 151;
+        // 앱은 반경 500m 원으로 표시한다. 200~400m 옮기면 실제 위치는 항상 원 안이고 위치는 특정되지 않는다.
+        $meters = 200 + intdiv($seed, 360) % 201;
         $dLat = $meters * cos($angle) / 111320;
         $dLng = $meters * sin($angle) / (111320 * max(cos(deg2rad($lat)), 0.01));
         return [round($lat + $dLat, 7), round($lng + $dLng, 7)];
