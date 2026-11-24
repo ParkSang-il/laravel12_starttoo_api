@@ -16,7 +16,8 @@ class Posts
             ->join('starttoo_users as u', 'u.id', '=', 'p.user_id')
             ->where('u.status', 'active')->where('u.moderation_hidden', false)->where('p.moderation_hidden', false)
             ->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_post_images as i')->whereColumn('i.post_id', 'p.id'))
-            ->select('p.*', 'u.nickname as author_nickname', 'u.display_name as author_display_name', 'u.avatar_path as author_avatar');
+            ->select('p.*', 'u.nickname as author_nickname', 'u.display_name as author_display_name', 'u.avatar_path as author_avatar',
+                'u.artist_status as author_artist_status');
         app(Blocks::class)->filter($query, 'p.user_id', $viewerId);
         if ($authorId !== null) $query->where('p.user_id', $authorId);
         if ($viewerId !== null && $authorId === null && in_array($scope, ['public', 'following'], true)) {
@@ -50,6 +51,7 @@ class Posts
                 'created_at' => $row->created_at,
                 'author' => ['id' => (int) $row->user_id, 'nickname' => $row->author_nickname ?? $row->author_display_name,
                     'avatar_url' => app(MediaUrls::class)->url($row->author_avatar, 300),
+                    'is_artist' => ($row->author_artist_status ?? null) === 'approved',
                     'following' => in_array((int) $row->user_id, $following, true)],
                 'images' => $photos->map(fn ($image) => ['id' => (int) $image->id, 'url' => app(MediaUrls::class)->url($image->path, 500)])->all()];
         }
@@ -86,6 +88,7 @@ class Posts
             'created_at' => $row->created_at,
             'author' => ['id' => (int) $author->id, 'nickname' => $author->nickname ?? $author->display_name,
                 'avatar_url' => app(MediaUrls::class)->url($author->avatar_path, 300),
+                'is_artist' => ($author->artist_status ?? null) === 'approved',
                 'following' => in_array((int) $author->id, app(Follows::class)->following([(int) $author->id], $viewerId), true)],
             'images' => $db->table('starttoo_post_images')->where('post_id', $id)->orderBy('position')->get()
                 ->map(fn ($image) => ['id' => (int) $image->id, 'url' => app(MediaUrls::class)->url($image->path, 500)])->all(),
