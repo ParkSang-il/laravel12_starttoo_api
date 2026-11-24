@@ -99,7 +99,7 @@ class PushSender
             // 안내 알림(심사 결과)은 소셜 알림 설정과 관계없이 보낸다.
             $notice = $n && in_array($n->kind, Notifications::NOTICE_KINDS, true);
             $eligible = $n && $n->created_at >= now()->subDay()->toDateTimeString()
-                && ($notice || app(UserPreferences::class)->get((int) $device->user_id)['values']['social']);
+                && ($notice || app(UserPreferences::class)->pushAllowed((int) $device->user_id, $n->kind));
             if ($eligible) {
                 $body = match ($n->kind) {
                     'like' => '회원님의 게시물에 새 좋아요가 있어요.',

@@ -31,9 +31,11 @@ class Discover
     public function explore(?int $viewer): array
     {
         $f = $this->filters([]);
-        $counts = []; $covers = []; $tags = [];
+        $counts = []; $covers = []; $tags = []; $recent = []; $previous = [];
+        $week = now()->subDays(7)->format('Y-m-d H:i:s');
+        $twoWeeks = now()->subDays(14)->format('Y-m-d H:i:s');
         // 검색과 같은 공개·숨김·차단 조건으로 집계한다. 샘플 수치나 가짜 상승 표시를 만들지 않는다.
-        foreach ($this->artworks($f, $viewer)->select('a.id', 'a.styles', 'a.tags')
+        foreach ($this->artworks($f, $viewer)->select('a.id', 'a.styles', 'a.tags', 'a.created_at')
             ->orderByDesc('a.created_at')->orderByDesc('a.id')->cursor() as $row) {
             foreach (array_unique(json_decode($row->styles ?? '[]', true) ?: []) as $style) {
                 $counts[$style] = ($counts[$style] ?? 0) + 1;
@@ -42,6 +44,8 @@ class Discover
             foreach (array_unique(json_decode($row->tags ?? '[]', true) ?: []) as $tag) {
                 if (mb_strlen((string) $tag) > 99) continue;
                 $tags[$tag] = ($tags[$tag] ?? 0) + 1;
+                if ($row->created_at >= $week) $recent[$tag] = ($recent[$tag] ?? 0) + 1;
+                elseif ($row->created_at >= $twoWeeks) $previous[$tag] = ($previous[$tag] ?? 0) + 1;
             }
         }
         $images = $covers ? $this->db()->table('starttoo_artwork_images')
@@ -51,7 +55,12 @@ class Discover
             'image_url' => app(MediaUrls::class)->url($images->get($covers[$style['id']] ?? '')?->first()?->path, 500)],
             $this->options()['styles']);
         $tagRows = [];
-        foreach ($tags as $tag => $count) $tagRows[] = ['tag' => (string) $tag, 'count' => $count];
+        foreach ($tags as $tag => $count) {
+            $now = $recent[$tag] ?? 0; $before = $previous[$tag] ?? 0;
+            // NEW: 최근 7일에 처음 등록된 태그, UP: 직전 7일보다 등록이 늘어난 태그
+            $mark = $now > 0 && $now === $count ? 'NEW' : ($now > $before && $before > 0 ? 'UP' : null);
+            $tagRows[] = ['tag' => (string) $tag, 'count' => $count, 'mark' => $mark];
+        }
         usort($tagRows, fn ($a, $b) => ($b['count'] <=> $a['count']) ?: strcmp($a['tag'], $b['tag']));
         return ['styles' => $styles, 'tags' => array_slice($tagRows, 0, 20)];
     }
@@ -136,6 +145,50 @@ class Discover
             $result['next_cursor'] = base64_encode(json_encode(['f' => $signature, 'at' => $at, 'after' => $next], JSON_THROW_ON_ERROR));
         }
         return $result;
+    }
+
+    /**
+     * 2-06 인기 발견. 주간(7일)·월간(30일) 신규 팔로우 순 TOP 5와 직전 같은 기간 대비 순위 변동,
+     * 같은 기간 저장 수가 많은 작품 3개. 집계 시각을 함께 돌려준다.
+     */
+    public function popular(array $input, ?int $viewer): array
+    {
+        if (Validator::make($input, ['period' => ['nullable', Rule::in(['week', 'month'])]])->fails()) $this->fail();
+        $period = $input['period'] ?? 'week';
+        $days = $period === 'month' ? 30 : 7;
+        $now = now();
+        $from = $now->copy()->subDays($days);
+        $prevFrom = $now->copy()->subDays($days * 2);
+        $f = $this->filters([]);
+        $followScore = fn ($start, $end) => $this->db()->table('starttoo_follows')->whereBetween('created_at', [$start, $end])
+            ->groupBy('target_user_id')->selectRaw('target_user_id, COUNT(*) as score');
+        $ranked = function ($start, $end, ?int $limit) use ($f, $viewer, $followScore) {
+            $q = $this->people($f, $viewer)->joinSub($followScore($start, $end), 'pop', fn ($j) => $j->on('pop.target_user_id', '=', 'owner.id'))
+                ->select('shop.*', 'owner.avatar_path', 'owner.nickname', 'pop.score')
+                ->orderByDesc('pop.score')->orderByDesc('shop.created_at')->orderByDesc('owner.id');
+            return $limit ? $q->limit($limit)->get() : $q->get(['owner.id']);
+        };
+        $current = $ranked($from, $now, 5);
+        $previous = [];
+        foreach ($ranked($prevFrom, $from, null) as $i => $row) $previous[(int) $row->user_id] = $i + 1;
+        $artists = $current->values()->map(function ($row, $i) use ($previous) {
+            $rank = $i + 1;
+            $before = $previous[(int) $row->user_id] ?? null;
+            return [...app(Studios::class)->view($row), 'nickname' => $row->nickname,
+                'avatar_url' => app(MediaUrls::class)->url($row->avatar_path, 300),
+                'rank' => $rank, 'score' => (int) $row->score,
+                // new: 직전 기간 순위 없음, up/down: 오른·내린 칸 수, same: 변동 없음
+                'movement' => $before === null ? 'new' : ($before > $rank ? 'up' : ($before < $rank ? 'down' : 'same')),
+                'change' => $before === null ? 0 : abs($before - $rank)];
+        })->all();
+        $saves = $this->db()->table('starttoo_artwork_interactions')->where('kind', 'save')->whereBetween('created_at', [$from, $now])
+            ->groupBy('artwork_id')->selectRaw('artwork_id, COUNT(*) as saves');
+        $rows = $this->artworks($f, $viewer)->joinSub($saves, 'pop_saves', fn ($j) => $j->on('pop_saves.artwork_id', '=', 'a.id'))
+            ->select('a.*', 'pop_saves.saves')->orderByDesc('pop_saves.saves')->orderByDesc('a.created_at')->orderByDesc('a.id')->limit(3)->get();
+        $cards = $this->artworkCards($rows);
+        foreach ($rows->values() as $i => $row) $cards[$i]['saves'] = (int) $row->saves;
+        return ['period' => $period, 'from' => $from->toIso8601String(), 'until' => $now->toIso8601String(),
+            'artists' => $artists, 'artworks' => $cards];
     }
 
     private function page(Builder $q, string $id, string $time, string $score, mixed $after): array

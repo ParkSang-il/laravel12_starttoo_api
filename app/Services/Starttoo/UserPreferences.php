@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Validator;
 
 class UserPreferences
 {
-    public const DEFAULTS = ['chat' => true, 'booking' => true, 'social' => true, 'privateSave' => false, 'dm' => true];
+    public const DEFAULTS = ['chat' => true, 'booking' => true, 'social' => true, 'shopNews' => true, 'privateSave' => false, 'dm' => true];
 
     public function get(int $user): array
     {
@@ -22,6 +22,13 @@ class UserPreferences
             ->where('s.user_id', $user)->where('r.document_id', 'marketing')->orderByDesc('r.recorded_at')->orderByDesc('r.id')->first(['r.accepted', 'r.recorded_at']);
         $values['mkt'] = $change && (!$signup || $change->recorded_at >= $signup->recorded_at) ? (bool) $change->accepted : (bool) ($signup->accepted ?? false);
         return ['values' => $values, 'version' => (int) ($row->version ?? 0)];
+    }
+
+    /** 알림 종류별 푸시 허용 여부. 상점 소식은 별도 설정, 나머지 소셜 알림은 소셜 설정을 따른다. */
+    public function pushAllowed(int $user, string $kind): bool
+    {
+        $values = $this->get($user)['values'];
+        return $kind === 'shop_news' ? $values['shopNews'] : $values['social'];
     }
 
     public function savedPublic(int $user): bool
@@ -46,7 +53,7 @@ class UserPreferences
 
     public function change(int $user, array $input): array
     {
-        if (Validator::make($input, ['key' => ['required', 'in:chat,booking,social,mkt,privateSave,dm'], 'value' => ['required', 'boolean'],
+        if (Validator::make($input, ['key' => ['required', 'in:chat,booking,social,shopNews,mkt,privateSave,dm'], 'value' => ['required', 'boolean'],
             'version' => ['required', 'integer', 'min:0'], 'request_key' => ['required', 'uuid']])->fails() || !is_bool($input['value'] ?? null)) $this->fail(422, 'INVALID_PREFERENCES', '설정 값을 확인해주세요.');
         $db = app(ProjectDatabase::class)->database();
         return $db->transaction(function () use ($db, $user, $input) {

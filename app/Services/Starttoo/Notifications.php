@@ -21,7 +21,7 @@ class Notifications
             'comment_id' => $comment, 'event_key' => $eventKey,
             'created_at' => $occurredAt ?? now(),
         ]);
-        if ($inserted && config('starttoo.push_enabled') && app(UserPreferences::class)->get($recipient)['values']['social']) {
+        if ($inserted && config('starttoo.push_enabled') && app(UserPreferences::class)->pushAllowed($recipient, $kind)) {
             $id = $this->db()->table('starttoo_notifications')->where('event_key', $eventKey)->value('id');
             $this->db()->table('starttoo_push_outbox')->insertOrIgnore(['notification_id' => $id, 'created_at' => now()]);
             $outboxId = (int) $this->db()->table('starttoo_push_outbox')->where('notification_id', $id)->value('id');
