@@ -11,6 +11,8 @@ return [
     'kakao_app_id' => env('STARTTOO_KAKAO_APP_ID'),
     // 상점 주소 → 좌표 변환(카카오 로컬 API). 서버에만 둔다.
     'kakao_rest_key' => env('STARTTOO_KAKAO_REST_KEY'),
+    // Phase 3 상담·채팅. false면 상담 시작·메시지 전송을 서버에서 막는다(조회는 허용).
+    'consultation_enabled' => (bool) env('STARTTOO_CONSULTATION_ENABLED', true),
     // 네이버 로그인 사용 여부. 앱 등록 전에는 꺼 둔다.
     'naver_enabled' => (bool) env('STARTTOO_NAVER_ENABLED', false),
     // Apple 로그인 identity token의 aud(iOS 번들 ID).
