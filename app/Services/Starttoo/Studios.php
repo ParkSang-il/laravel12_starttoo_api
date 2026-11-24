@@ -36,7 +36,7 @@ class Studios
             ->selectRaw("SUM(kind = 'work') as works, SUM(kind = 'design') as designs, SUM(kind = 'design' AND design_status = 'available' AND visibility = 'public') as open_designs")
             ->first();
         $social = app(Follows::class)->state($userId, $userId);
-        return ['shop' => $this->view($shop), 'counts' => [
+        return ['shop' => $this->ownerView($shop), 'counts' => [
             'works' => (int) ($counts->works ?? 0), 'designs' => (int) ($counts->designs ?? 0),
             'open_designs' => (int) ($counts->open_designs ?? 0),
         ], 'social' => $social];
@@ -45,7 +45,7 @@ class Studios
     public function update(int $userId, array $input): array
     {
         $input['activity_name'] = $this->db()->table('starttoo_users')->where('id', $userId)->value('nickname');
-        foreach (['activity_name', 'studio_name', 'bio', 'notice', 'business_hours', 'guide'] as $field) {
+        foreach (['activity_name', 'studio_name', 'bio', 'notice', 'business_hours', 'guide', 'address', 'address_detail'] as $field) {
             if (is_string($input[$field] ?? null)) $input[$field] = trim($input[$field]);
         }
         $regions = array_column(app(Profiles::class)->options()['regions'], 'id');
@@ -63,14 +63,33 @@ class Studios
             'guide' => ['nullable', 'string', 'max:300'],
             'cover_media_id' => ['nullable', 'uuid'],
             'remove_cover' => ['sometimes', 'boolean'],
+            // 위치: 주소 검색 결과의 address만 받고 좌표는 서버가 다시 찾는다. 키가 없으면 위치를 바꾸지 않는다.
+            'address' => ['sometimes', 'nullable', 'string', 'max:200'],
+            'address_detail' => ['sometimes', 'nullable', 'string', 'max:100'],
         ]);
         if ($validator->fails()) $this->fail(422, 'INVALID_SHOP', '상점 정보를 확인해주세요.');
         $input = $validator->validated();
         if (isset($input['price_min'], $input['price_max']) && $input['price_min'] > $input['price_max']) {
             $this->fail(422, 'INVALID_SHOP_PRICE', '최소 가격이 최대 가격보다 클 수 없어요.');
         }
+        $location = null;
+        if (array_key_exists('address', $input)) {
+            $current = $this->db()->table('starttoo_shops')->where('user_id', $userId)->first(['address', 'lat']);
+            if (($input['address'] ?? '') === '') {
+                $location = ['address' => null, 'address_detail' => null, 'area' => null, 'lat' => null, 'lng' => null, 'map_lat' => null, 'map_lng' => null];
+            } elseif ($current && $current->address === $input['address'] && $current->lat !== null) {
+                $location = ['address_detail' => ($input['address_detail'] ?? '') ?: null];
+            } else {
+                // 트랜잭션 밖에서 외부 API를 호출한다.
+                $found = app(KakaoLocal::class)->geocode($input['address']);
+                if (!$found) $this->fail(422, 'ADDRESS_NOT_FOUND', '주소를 찾지 못했어요. 주소 검색에서 다시 선택해주세요.');
+                [$mapLat, $mapLng] = $this->blur($userId, $found['lat'], $found['lng']);
+                $location = ['address' => $found['address'], 'address_detail' => ($input['address_detail'] ?? '') ?: null,
+                    'area' => $found['area'] ?: null, 'lat' => $found['lat'], 'lng' => $found['lng'], 'map_lat' => $mapLat, 'map_lng' => $mapLng];
+            }
+        }
         $oldCover = null;
-        $result = $this->db()->transaction(function () use ($userId, $input, &$oldCover) {
+        $result = $this->db()->transaction(function () use ($userId, $input, $location, &$oldCover) {
             $shop = $this->db()->table('starttoo_shops')->where('user_id', $userId)->lockForUpdate()->first();
             if (!$shop) $this->fail(404, 'SHOP_NOT_FOUND', '상점을 찾을 수 없어요.');
             if ((int) $shop->version !== (int) $input['version']) {
@@ -90,8 +109,9 @@ class Studios
                 'consult_status' => $input['consult_status'], 'notice' => $input['notice'] ?? null,
                 'business_hours' => ($input['business_hours'] ?? '') ?: null, 'guide' => ($input['guide'] ?? '') ?: null,
                 'cover_path' => $cover, 'version' => (int) $shop->version + 1, 'updated_at' => now(),
+                ...($location ?? []),
             ]);
-            return $this->view($this->db()->table('starttoo_shops')->where('user_id', $userId)->first());
+            return $this->ownerView($this->db()->table('starttoo_shops')->where('user_id', $userId)->first());
         });
         if ($oldCover) {
             app(ArtworkUploads::class)->forget([$oldCover]);
@@ -193,7 +213,31 @@ class Studios
             'consult_status' => $shop->consult_status, 'notice' => $shop->notice,
             'cover_url' => $shop->cover_path ? app(MediaUrls::class)->url($shop->cover_path, 1080) : null,
             'business_hours' => $shop->business_hours ?? null, 'guide' => $shop->guide ?? null,
+            // 공개 위치는 동 단위와 흐린 좌표만 준다. 정확한 주소·좌표는 ownerView에서만.
+            'area' => $shop->area ?? null,
+            'map_lat' => isset($shop->map_lat) ? (float) $shop->map_lat : null,
+            'map_lng' => isset($shop->map_lng) ? (float) $shop->map_lng : null,
             'version' => (int) $shop->version];
+    }
+
+    /** 본인 스튜디오용: 공개 정보 + 정확한 주소. */
+    public function ownerView(object $shop): array
+    {
+        return [...$this->view($shop), 'address' => $shop->address ?? null, 'address_detail' => $shop->address_detail ?? null];
+    }
+
+    /**
+     * 공개 지도용 좌표: 회원·좌표마다 고정된 방향으로 150~300m 옮긴다.
+     * 같은 위치는 항상 같은 값이 나와 여러 번 조회해 평균을 내도 정확한 위치가 드러나지 않는다.
+     */
+    public function blur(int $userId, float $lat, float $lng): array
+    {
+        $seed = crc32($userId.'|'.round($lat, 5).'|'.round($lng, 5).'|'.config('app.key'));
+        $angle = deg2rad($seed % 360);
+        $meters = 150 + intdiv($seed, 360) % 151;
+        $dLat = $meters * cos($angle) / 111320;
+        $dLng = $meters * sin($angle) / (111320 * max(cos(deg2rad($lat)), 0.01));
+        return [round($lat + $dLat, 7), round($lng + $dLng, 7)];
     }
 
     private function fail(int $status, string $code, string $message): never

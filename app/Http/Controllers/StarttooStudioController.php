@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\Starttoo\AuthSessions;
+use App\Services\Starttoo\KakaoLocal;
 use App\Services\Starttoo\Studios;
 use Illuminate\Http\Request;
 
@@ -17,6 +18,17 @@ class StarttooStudioController extends Controller
     public function updateShop(Request $request, Studios $studios, AuthSessions $sessions)
     {
         return $this->json($studios->update($this->artist($request, $sessions, $studios), $request->all()));
+    }
+
+    /** 상점 위치 등록용 주소 검색(카카오 로컬 API 대리 호출). */
+    public function addressSearch(Request $request, Studios $studios, AuthSessions $sessions, KakaoLocal $local)
+    {
+        $this->artist($request, $sessions, $studios);
+        $q = $request->query('q');
+        if (!is_string($q) || mb_strlen(trim($q)) > 80) {
+            return response()->json(['code' => 'INVALID_ADDRESS_QUERY', 'message' => '검색어를 확인해주세요.'], 422);
+        }
+        return $this->json(['items' => $local->search($q)]);
     }
 
     public function artworks(Request $request, Studios $studios, AuthSessions $sessions)

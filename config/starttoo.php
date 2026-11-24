@@ -9,6 +9,8 @@ return [
     'google_client_id' => env('STARTTOO_GOOGLE_CLIENT_ID', '232633950959-ata4nqqoc7ghd3tgte5sc2jedlu5tifh.apps.googleusercontent.com'),
     // 카카오 앱 ID(숫자). 다른 앱에서 발급된 액세스 토큰으로 로그인하지 못하게 비교한다.
     'kakao_app_id' => env('STARTTOO_KAKAO_APP_ID'),
+    // 상점 주소 → 좌표 변환(카카오 로컬 API). 서버에만 둔다.
+    'kakao_rest_key' => env('STARTTOO_KAKAO_REST_KEY'),
     // 네이버 로그인 사용 여부. 앱 등록 전에는 꺼 둔다.
     'naver_enabled' => (bool) env('STARTTOO_NAVER_ENABLED', false),
     // Apple 로그인 identity token의 aud(iOS 번들 ID).

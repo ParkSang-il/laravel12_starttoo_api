@@ -69,7 +69,10 @@ class Discover
     {
         $options = $this->options();
         $rules = ['q' => ['nullable', 'string', 'max:100'], 'type' => ['nullable', Rule::in(self::TYPES)],
-            'sort' => ['nullable', Rule::in(['popular', 'latest'])], 'cursor' => ['nullable', 'string', 'max:4096'],
+            'sort' => ['nullable', Rule::in(['popular', 'latest', 'distance'])], 'cursor' => ['nullable', 'string', 'max:4096'],
+            // 2-05 가까운 순: 기준 위치(국내 범위). 거리순은 기준 위치가 있어야 한다.
+            'near_lat' => ['nullable', 'numeric', 'between:33,39', 'required_if:sort,distance', 'required_with:near_lng'],
+            'near_lng' => ['nullable', 'numeric', 'between:124,132', 'required_if:sort,distance', 'required_with:near_lat'],
             'consult_only' => ['sometimes', 'boolean'], 'available_only' => ['sometimes', 'boolean'],
             'count_only' => ['sometimes', 'boolean']];
         foreach (['styles', 'parts', 'regions', 'budgets'] as $key) {
@@ -85,6 +88,9 @@ class Discover
             $f[$key] = $values;
         }
         if (in_array('all', $f['regions'], true)) $f['regions'] = [];
+        // 약 10m 단위로 맞춰 커서 서명이 흔들리지 않게 한다.
+        $f['near'] = isset($input['near_lat'], $input['near_lng'])
+            ? [round((float) $input['near_lat'], 4), round((float) $input['near_lng'], 4)] : null;
         return $f;
     }
 
@@ -92,7 +98,7 @@ class Discover
     {
         $f = $this->filters($input);
         // 정렬 기간 변경 전 커서를 새 점수에 재사용하지 않는다.
-        $signature = hash('sha256', json_encode(['likes48h-follow7d-hashtags-v3', $f, $viewer], JSON_THROW_ON_ERROR));
+        $signature = hash('sha256', json_encode(['likes48h-follow7d-hashtags-distance-v4', $f, $viewer], JSON_THROW_ON_ERROR));
         $at = now()->format('Y-m-d H:i:s');
         $after = [];
         if (!empty($input['cursor'])) {
@@ -127,6 +133,7 @@ class Discover
                 ->groupBy('artwork_id')->selectRaw('artwork_id, COUNT(*) as score');
             $art->leftJoinSub($likes, 'rank_likes', fn ($j) => $j->on('rank_likes.artwork_id', '=', 'a.id'));
             $score = $f['sort'] === 'popular' ? 'COALESCE(rank_likes.score, 0)' : 'CAST(0 AS UNSIGNED)';
+            // 작품은 거리 정렬이 없어 최신순으로 본다.
             [$rows, $next['artworks']] = $this->page($art->select('a.*')->selectRaw($score.' as search_score'), 'a.id', 'a.created_at', $score, $after['artworks'] ?? null);
             $result['artworks'] = $this->artworkCards($rows);
         }
@@ -134,12 +141,21 @@ class Discover
             ->groupBy('target_user_id')->selectRaw('target_user_id, COUNT(*) as score');
         $people->leftJoinSub($follows, 'rank_follows', fn ($j) => $j->on('rank_follows.target_user_id', '=', 'owner.id'));
         $score = $f['sort'] === 'popular' ? 'COALESCE(rank_follows.score, 0)' : 'CAST(0 AS UNSIGNED)';
+        $distance = 'NULL';
+        if ($f['near']) {
+            // 공개(흐린) 좌표 기준 거리(m). 위치 미등록 상점은 맨 뒤.
+            [$lat, $lng] = array_map(fn ($v) => sprintf('%.6F', $v), $f['near']);
+            $distance = "(CASE WHEN shop.map_lat IS NULL THEN NULL ELSE 6371000 * 2 * ASIN(SQRT(POW(SIN(RADIANS(shop.map_lat - $lat) / 2), 2)"
+                ." + COS(RADIANS($lat)) * COS(RADIANS(shop.map_lat)) * POW(SIN(RADIANS(shop.map_lng - $lng) / 2), 2))) END)";
+            if ($f['sort'] === 'distance') $score = "CAST(GREATEST(0, 100000000 - COALESCE(ROUND($distance), 100000000)) AS UNSIGNED)";
+        }
         foreach (['artists' => 'artist', 'shops' => 'shop'] as $group => $type) {
             if (!in_array($f['type'], ['all', $type], true)) continue;
             [$rows, $next[$group]] = $this->page((clone $people)->select('shop.*', 'owner.avatar_path', 'owner.nickname')
-                ->selectRaw($score.' as search_score'), 'owner.id', 'shop.created_at', $score, $after[$group] ?? null);
+                ->selectRaw($score.' as search_score')->selectRaw($distance.' as distance_m'), 'owner.id', 'shop.created_at', $score, $after[$group] ?? null);
             $result[$group] = $rows->map(fn ($row) => [...app(Studios::class)->view($row),
-                'nickname' => $row->nickname, 'avatar_url' => app(MediaUrls::class)->url($row->avatar_path, 300)])->all();
+                'nickname' => $row->nickname, 'avatar_url' => app(MediaUrls::class)->url($row->avatar_path, 300),
+                'distance_m' => $row->distance_m === null ? null : (int) round((float) $row->distance_m)])->all();
         }
         if (collect($next)->contains(fn ($value) => $value !== false)) {
             $result['next_cursor'] = base64_encode(json_encode(['f' => $signature, 'at' => $at, 'after' => $next], JSON_THROW_ON_ERROR));
@@ -149,7 +165,7 @@ class Discover
 
     /**
      * 2-06 인기 발견. 주간(7일)·월간(30일) 신규 팔로우 순 TOP 5와 직전 같은 기간 대비 순위 변동,
-     * 같은 기간 저장 수가 많은 작품 3개. 집계 시각을 함께 돌려준다.
+     * 같은 기간 새 좋아요가 많은 작품 3개. 집계 시각을 함께 돌려준다.
      */
     public function popular(array $input, ?int $viewer): array
     {
@@ -181,12 +197,13 @@ class Discover
                 'movement' => $before === null ? 'new' : ($before > $rank ? 'up' : ($before < $rank ? 'down' : 'same')),
                 'change' => $before === null ? 0 : abs($before - $rank)];
         })->all();
-        $saves = $this->db()->table('starttoo_artwork_interactions')->where('kind', 'save')->whereBetween('created_at', [$from, $now])
-            ->groupBy('artwork_id')->selectRaw('artwork_id, COUNT(*) as saves');
-        $rows = $this->artworks($f, $viewer)->joinSub($saves, 'pop_saves', fn ($j) => $j->on('pop_saves.artwork_id', '=', 'a.id'))
-            ->select('a.*', 'pop_saves.saves')->orderByDesc('pop_saves.saves')->orderByDesc('a.created_at')->orderByDesc('a.id')->limit(3)->get();
+        // 좋아요 급상승: 기간 안에 새로 받은(현재 남아 있는) 좋아요 수 순
+        $likes = $this->db()->table('starttoo_artwork_interactions')->where('kind', 'like')->whereBetween('created_at', [$from, $now])
+            ->groupBy('artwork_id')->selectRaw('artwork_id, COUNT(*) as likes');
+        $rows = $this->artworks($f, $viewer)->joinSub($likes, 'pop_likes', fn ($j) => $j->on('pop_likes.artwork_id', '=', 'a.id'))
+            ->select('a.*', 'pop_likes.likes')->orderByDesc('pop_likes.likes')->orderByDesc('a.created_at')->orderByDesc('a.id')->limit(3)->get();
         $cards = $this->artworkCards($rows);
-        foreach ($rows->values() as $i => $row) $cards[$i]['saves'] = (int) $row->saves;
+        foreach ($rows->values() as $i => $row) $cards[$i]['likes'] = (int) $row->likes;
         return ['period' => $period, 'from' => $from->toIso8601String(), 'until' => $now->toIso8601String(),
             'artists' => $artists, 'artworks' => $cards];
     }
