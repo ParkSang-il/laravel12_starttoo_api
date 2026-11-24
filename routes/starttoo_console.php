@@ -130,3 +130,42 @@ Artisan::command('starttoo:shops-reblur', function () {
         return 0;
     });
 })->purpose('STARTTOO 상점 공개 지도 좌표 재계산');
+
+// 상담·채팅 진단: 실시간·큐·푸시·상점 상태. 키·토큰·메시지 내용은 출력하지 않는다.
+Artisan::command('starttoo:chat-diagnose', function () {
+    $set = fn ($v) => $v ? 'SET' : 'MISSING';
+    $this->info('[설정]');
+    $this->line('broadcast='.config('broadcasting.default').' reverb_key='.$set(config('broadcasting.connections.reverb.key'))
+        .' reverb_secret='.$set(config('broadcasting.connections.reverb.secret')).' reverb_host(서버→Reverb)='.config('broadcasting.connections.reverb.options.host'));
+    $this->line('app_realtime_host(앱→Reverb)='.config('starttoo.realtime_host').':'.config('starttoo.realtime_port').' '.config('starttoo.realtime_scheme')
+        .' consultation_enabled='.var_export(config('starttoo.consultation_enabled'), true).' push_enabled='.var_export(config('starttoo.push_enabled'), true));
+    $this->line('queue_default='.config('queue.default'));
+    $this->info('[큐 대기·실패]');
+    try {
+        foreach (['chat-realtime', 'chat-push'] as $q) {
+            $this->line("$q 대기=".\Illuminate\Support\Facades\DB::table('jobs')->where('queue', $q)->count());
+        }
+        foreach (\Illuminate\Support\Facades\DB::table('failed_jobs')->orderByDesc('id')->limit(3)->get(['queue', 'failed_at', 'exception']) as $f) {
+            $this->line("실패 {$f->failed_at} {$f->queue}: ".mb_substr(strtok($f->exception, "\n"), 0, 160));
+        }
+    } catch (\Throwable $e) { $this->warn('큐 테이블 확인 실패: '.$e->getMessage()); }
+    return app(ProjectDatabase::class)->run('starttoo', function () {
+        $db = app(ProjectDatabase::class)->database();
+        $this->info('[최근 상담방]');
+        foreach ($db->table('starttoo_consultations as c')->leftJoin('starttoo_shops as s', 's.user_id', '=', 'c.artist_id')
+            ->orderByDesc('c.updated_at')->limit(5)->get(['c.id', 'c.customer_id', 'c.artist_id', 'c.status', 's.consult_status', 'c.last_message_id', 'c.customer_last_read_id', 'c.artist_last_read_id']) as $r) {
+            $this->line("방 {$r->id}: 고객 {$r->customer_id} → 작가 {$r->artist_id} 상태={$r->status} 상점상담={$r->consult_status} 마지막={$r->last_message_id} 읽음(고객/작가)={$r->customer_last_read_id}/{$r->artist_last_read_id}");
+        }
+        $this->info('[채팅 푸시 발송함]');
+        foreach ($db->table('starttoo_push_outbox')->whereNotNull('message_id')->orderByDesc('id')->limit(5)->get() as $b) {
+            $states = $db->table('starttoo_push_deliveries')->where('outbox_id', $b->id)->pluck('state')->implode(',');
+            $this->line("발송함 {$b->id} 메시지 {$b->message_id} 펼침=".($b->expanded_at ?? '아직')." 기기별=[{$states}]");
+        }
+        $this->info('[채팅 푸시 결과]');
+        foreach ($db->table('starttoo_push_logs')->where('source_type', 'chat')->orderByDesc('id')->limit(5)->get(['created_at', 'platform', 'result', 'reason', 'http_status']) as $l) {
+            $this->line("{$l->created_at} {$l->platform} {$l->result} {$l->reason} {$l->http_status}");
+        }
+        $this->line('등록 기기 수='.$db->table('starttoo_push_devices')->count());
+        return 0;
+    });
+})->purpose('STARTTOO 상담·채팅 상태 진단(비밀값 미출력)');

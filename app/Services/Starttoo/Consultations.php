@@ -62,8 +62,9 @@ class Consultations
             'artist_id' => ['required', 'integer', 'min:1'],
             'client_id' => ['required', 'uuid'],
             'artwork_id' => ['nullable', 'uuid'],
-            'body_part' => ['nullable', Rule::in($parts)],
-            'size' => ['nullable', Rule::in(self::SIZES)],
+            // 필수: 부위·크기·참고(작품 또는 이미지 1장 이상)
+            'body_part' => ['required', Rule::in($parts)],
+            'size' => ['required', Rule::in(self::SIZES)],
             'budget' => ['nullable', 'string', 'max:40'],
             'preferred_time' => ['nullable', 'string', 'max:40'],
             'memo' => ['nullable', 'string', 'max:1000'],
@@ -74,8 +75,8 @@ class Consultations
         if ($v->fails()) $this->fail(422, 'INVALID_CONSULTATION', '상담 요청 내용을 확인해주세요.');
         $in = $v->validated();
         $artist = (int) $in['artist_id'];
-        if (empty($in['memo']) && empty($in['artwork_id']) && empty($in['media_ids'])) {
-            $this->fail(422, 'INVALID_CONSULTATION', '요청 내용이나 참고 작품·이미지를 하나 이상 넣어주세요.');
+        if (empty($in['artwork_id']) && empty($in['media_ids'])) {
+            $this->fail(422, 'INVALID_CONSULTATION', '참고 작품이나 참고 이미지를 1장 이상 넣어주세요.');
         }
         // 같은 전송 키로 이미 만든 요청이면 그대로 돌려준다(응답 유실 후 재시도).
         $room = $this->db()->table('starttoo_consultations')->where('customer_id', $viewer)->where('artist_id', $artist)->first();

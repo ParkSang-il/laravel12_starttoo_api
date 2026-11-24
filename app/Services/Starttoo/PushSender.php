@@ -215,6 +215,12 @@ class PushSender
             if ($eligible) {
                 $sender = $db->table('starttoo_users')->where('id', $m->sender_id)->first(['nickname', 'display_name']);
                 $title = $sender ? Str::limit($sender->nickname ?: ($sender->display_name ?: '스타투'), 30, '…') : '스타투';
+                // 같은 방 알림은 하나로 묶이므로(오프라인이었다면 마지막 것만 도착) 안 읽은 수를 제목에 붙인다.
+                $myRead = (int) ((int) $room->customer_id === (int) $device->user_id ? $room->customer_last_read_id : $room->artist_last_read_id);
+                $pending = $db->table('starttoo_messages')->where('consultation_id', $room->id)->where('id', '>', $myRead)
+                    ->where('id', '<=', $m->id)->where(fn ($w) => $w->whereNull('sender_id')->orWhere('sender_id', '<>', $device->user_id))
+                    ->limit(100)->count();
+                if ($pending > 1) $title .= ' · 새 메시지 '.($pending > 99 ? '99+' : $pending).'개';
                 $body = match ($m->kind) {
                     'text' => Str::limit($this->multiline((string) $m->body), 120, '…'),
                     'image' => '사진을 보냈어요.',
