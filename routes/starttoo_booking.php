@@ -18,7 +18,7 @@ Route::prefix('v1/projects/starttoo/bookings')->middleware([StarttooDatabase::cl
     Route::post('settings', [C::class, 'updateSettings'])->middleware('throttle:30,1');
     Route::post('settings/closure', [C::class, 'closure'])->middleware('throttle:60,1');
     Route::get('{booking}', [C::class, 'show'])->whereNumber('booking');
-    foreach (['change', 'cancel', 'confirm', 'reject', 'complete'] as $action) {
+    foreach (['change', 'propose', 'cancel', 'confirm', 'reject', 'complete'] as $action) {
         Route::post("{booking}/$action", [C::class, $action])->whereNumber('booking')->middleware('throttle:30,1');
     }
     Route::post('{booking}/change/accept', [C::class, 'acceptChange'])->whereNumber('booking')->middleware('throttle:30,1');

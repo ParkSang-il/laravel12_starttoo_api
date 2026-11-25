@@ -199,7 +199,7 @@ class Bookings
             }
             if ($at->equalTo(Carbon::parse($b->starts_at))) $this->fail(422, 'INVALID_BOOKING', '지금 예약과 다른 시간을 골라주세요.');
             $this->assertSlot((int) $b->artist_id, $at, (int) $b->id);
-            $this->update($b, ['status' => 'change_requested', 'change_starts_at' => $at]);
+            $this->update($b, ['status' => 'change_requested', 'change_starts_at' => $at, 'change_by' => 'customer']);
             $this->message($b, $viewer, '예약 일정 변경을 요청했어요 · '.$this->label(Carbon::parse($b->starts_at)).' → '.$this->label($at), 'change_requested');
         });
     }
@@ -213,7 +213,7 @@ class Bookings
         return $this->mutate($viewer, $id, 'customer', function ($b) use ($viewer, $input) {
             if (!in_array($b->status, self::ACTIVE, true)) $this->fail(409, 'BOOKING_STATE', '취소할 수 없는 예약이에요.');
             $held = in_array($b->status, self::HOLDING, true);
-            $this->update($b, ['status' => 'cancelled', 'cancel_reason' => $input['reason'], 'cancelled_by' => 'customer', 'cancelled_at' => now(), 'change_starts_at' => null]);
+            $this->update($b, ['status' => 'cancelled', 'cancel_reason' => $input['reason'], 'cancelled_by' => 'customer', 'cancelled_at' => now(), 'change_starts_at' => null, 'change_by' => null]);
             $this->message($b, $viewer, '예약을 취소했어요 · '.$this->label(Carbon::parse($b->starts_at)), 'cancelled', $held ? 'consulting' : null);
         });
     }
@@ -227,14 +227,37 @@ class Bookings
             if ($b->status !== 'pending') $this->fail(409, 'BOOKING_STATE', '확정 대기 중인 요청만 확정할 수 있어요.');
             $at = Carbon::parse($b->starts_at);
             if ($at->isPast()) $this->fail(409, 'BOOKING_STATE', '이미 지난 시간이에요. 고객과 일정을 다시 정해주세요.');
-            $this->assertHoldFree($b, $at);
-            $this->update($b, ['status' => 'confirmed', 'confirmed_at' => now()]);
-            $this->message($b, $viewer, '예약이 확정됐어요 · '.$this->label($at), 'confirmed', 'booked');
-            foreach ($this->db()->table('starttoo_bookings')->where('artist_id', $viewer)->where('status', 'pending')->where('starts_at', $at)
-                ->where('id', '<>', $b->id)->lockForUpdate()->get() as $other) {
-                $this->update($other, ['status' => 'rejected', 'reject_reason' => 'slot_taken', 'cancelled_at' => now()]);
-                $this->message($other, $viewer, '요청한 시간에 다른 예약이 확정돼 예약 요청이 거절됐어요. 다른 시간으로 다시 요청해주세요.', 'rejected');
-            }
+            $this->hold($b, $at, $viewer, '예약이 확정됐어요 · '.$this->label($at));
+        });
+    }
+
+    /** 확정 대기 → 확정(그 시간을 잡고, 같은 시간의 다른 확정 대기 요청은 자동 거절) */
+    private function hold(object $b, Carbon $at, int $actor, string $body): void
+    {
+        $this->assertHoldFree($b, $at);
+        $this->update($b, ['status' => 'confirmed', 'starts_at' => $at, 'confirmed_at' => now(), 'change_starts_at' => null, 'change_by' => null]);
+        $this->message($b, $actor, $body, 'confirmed', 'booked');
+        foreach ($this->db()->table('starttoo_bookings')->where('artist_id', $b->artist_id)->where('status', 'pending')->where('starts_at', $at)
+            ->where('id', '<>', $b->id)->lockForUpdate()->get() as $other) {
+            $this->update($other, ['status' => 'rejected', 'reject_reason' => 'slot_taken', 'cancelled_at' => now(), 'change_starts_at' => null, 'change_by' => null]);
+            $this->message($other, $actor, '요청한 시간에 다른 예약이 확정돼 예약 요청이 거절됐어요. 다른 시간으로 다시 요청해주세요.', 'rejected');
+        }
+    }
+
+    /**
+     * 일정 조율: 작가가 다른 시간을 제안(확정 대기 · 확정 예약). 고객이 수락하면 그 시간으로 확정된다.
+     * 고객의 변경 횟수 · 무료 기간 규정과 상관없다.
+     */
+    public function propose(int $viewer, int $id, array $input): array
+    {
+        $at = $this->parseSlot($input);
+        return $this->mutate($viewer, $id, 'artist', function ($b) use ($viewer, $at) {
+            if (!in_array($b->status, ['pending', 'confirmed'], true)) $this->fail(409, 'BOOKING_STATE', '확정 대기 · 확정 예약만 일정을 조율할 수 있어요.');
+            if ($b->change_starts_at) $this->fail(409, 'BOOKING_STATE', '이미 응답을 기다리는 일정 제안이 있어요.');
+            if ($at->equalTo(Carbon::parse($b->starts_at))) $this->fail(422, 'INVALID_BOOKING', '지금 예약과 다른 시간을 골라주세요.');
+            $this->assertSlot((int) $b->artist_id, $at, (int) $b->id);
+            $this->update($b, ['status' => $b->status === 'confirmed' ? 'change_requested' : 'pending', 'change_starts_at' => $at, 'change_by' => 'artist']);
+            $this->message($b, $viewer, '작가가 다른 시간을 제안했어요 · '.$this->label(Carbon::parse($b->starts_at)).' → '.$this->label($at), 'change_proposed');
         });
     }
 
@@ -242,30 +265,49 @@ class Bookings
     {
         return $this->mutate($viewer, $id, 'artist', function ($b) use ($viewer) {
             if ($b->status !== 'pending') $this->fail(409, 'BOOKING_STATE', '확정 대기 중인 요청만 거절할 수 있어요.');
-            $this->update($b, ['status' => 'rejected', 'reject_reason' => 'artist', 'cancelled_at' => now()]);
+            $this->update($b, ['status' => 'rejected', 'reject_reason' => 'artist', 'cancelled_at' => now(), 'change_starts_at' => null, 'change_by' => null]);
             $this->message($b, $viewer, '예약 요청이 거절됐어요 · '.$this->label(Carbon::parse($b->starts_at)), 'rejected');
         });
     }
 
+    /** 변경 요청(고객) · 일정 제안(작가)을 상대가 수락 */
     public function acceptChange(int $viewer, int $id): array
     {
-        return $this->mutate($viewer, $id, 'artist', function ($b) use ($viewer) {
-            if ($b->status !== 'change_requested' || !$b->change_starts_at) $this->fail(409, 'BOOKING_STATE', '변경 요청이 없어요.');
+        return $this->mutate($viewer, $id, 'any', function ($b) use ($viewer) {
+            $this->assertResponder($b, $viewer);
             $at = Carbon::parse($b->change_starts_at);
-            if ($at->isPast()) $this->fail(409, 'BOOKING_STATE', '변경 희망 시간이 이미 지났어요.');
+            if ($at->isPast()) $this->fail(409, 'BOOKING_STATE', '제안된 시간이 이미 지났어요.');
+            if ($b->status === 'pending') {
+                // 작가 제안을 고객이 수락 → 그 시간으로 바로 확정
+                $this->hold($b, $at, $viewer, '제안한 시간으로 예약이 확정됐어요 · '.$this->label($at));
+                return;
+            }
             $this->assertHoldFree($b, $at);
-            $this->update($b, ['status' => 'confirmed', 'starts_at' => $at, 'change_starts_at' => null, 'change_count' => (int) $b->change_count + 1]);
+            $byCustomer = ($b->change_by ?? 'customer') === 'customer';
+            $this->update($b, ['status' => 'confirmed', 'starts_at' => $at, 'change_starts_at' => null, 'change_by' => null,
+                // 고객 변경 요청만 변경 횟수에 센다
+                'change_count' => (int) $b->change_count + ($byCustomer ? 1 : 0)]);
             $this->message($b, $viewer, '예약 일정이 변경됐어요 · '.$this->label($at), 'change_accepted');
         });
     }
 
     public function rejectChange(int $viewer, int $id): array
     {
-        return $this->mutate($viewer, $id, 'artist', function ($b) use ($viewer) {
-            if ($b->status !== 'change_requested') $this->fail(409, 'BOOKING_STATE', '변경 요청이 없어요.');
-            $this->update($b, ['status' => 'confirmed', 'change_starts_at' => null]);
-            $this->message($b, $viewer, '일정 변경 요청이 거절됐어요. 기존 일정('.$this->label(Carbon::parse($b->starts_at)).')으로 진행해요.', 'change_rejected');
+        return $this->mutate($viewer, $id, 'any', function ($b) use ($viewer) {
+            $this->assertResponder($b, $viewer);
+            $byArtist = $b->change_by === 'artist';
+            $this->update($b, ['status' => $b->status === 'pending' ? 'pending' : 'confirmed', 'change_starts_at' => null, 'change_by' => null]);
+            $this->message($b, $viewer, ($byArtist ? '제안한 시간이 거절됐어요. ' : '일정 변경 요청이 거절됐어요. ')
+                .'기존 일정('.$this->label(Carbon::parse($b->starts_at)).')'.($b->status === 'pending' ? '으로 확정을 기다려요.' : '으로 진행해요.'), 'change_rejected');
         });
+    }
+
+    /** 변경 희망 시간에 응답할 사람: 고객 요청이면 작가, 작가 제안이면 고객 */
+    private function assertResponder(object $b, int $viewer): void
+    {
+        if (!$b->change_starts_at || !in_array($b->status, ['pending', 'change_requested'], true)) $this->fail(409, 'BOOKING_STATE', '응답할 일정 변경이 없어요.');
+        $responder = $b->change_by === 'artist' ? (int) $b->customer_id : (int) $b->artist_id;
+        if ($responder !== $viewer) $this->fail(403, 'BOOKING_FORBIDDEN', '상대방이 응답할 일정이에요.');
     }
 
     /** 시술 완료(시작 시각이 지난 확정 예약). 상담 건이 완료로 닫힌다. */
@@ -280,7 +322,7 @@ class Bookings
 
     private function finish(object $b, int $actor): void
     {
-        $this->update($b, ['status' => 'completed', 'completed_at' => now(), 'change_starts_at' => null]);
+        $this->update($b, ['status' => 'completed', 'completed_at' => now(), 'change_starts_at' => null, 'change_by' => null]);
         $this->message($b, $actor, '시술이 완료됐어요. 이용해주셔서 감사해요!', 'completed', 'completed');
     }
 
@@ -299,7 +341,8 @@ class Bookings
                 $done++;
             }, 3);
         }
-        foreach ($this->db()->table('starttoo_bookings')->where('status', 'pending')->where('starts_at', '<', now())->pluck('id') as $id) {
+        foreach ($this->db()->table('starttoo_bookings')->where('status', 'pending')->where('starts_at', '<', now())
+            ->where(fn ($q) => $q->whereNull('change_starts_at')->orWhere('change_starts_at', '<', now()))->pluck('id') as $id) {
             $this->db()->transaction(function () use ($id, &$expired) {
                 $b = $this->db()->table('starttoo_bookings')->where('id', $id)->lockForUpdate()->first();
                 if (!$b || $b->status !== 'pending') return;
@@ -344,7 +387,9 @@ class Bookings
             'upcoming' => $q->whereIn('status', self::ACTIVE),
             'past' => $q->where('status', 'completed'),
             'cancelled' => $q->whereIn('status', ['cancelled', 'rejected', 'expired']),
-            'action' => $q->whereIn('status', ['pending', 'change_requested']),
+            // 작가가 처리할 것: 확정 대기 · 고객 변경 요청(작가가 낸 제안은 고객 응답 대기라 뺀다)
+            'action' => $q->whereIn('status', ['pending', 'change_requested'])
+                ->where(fn ($w) => $w->whereNull('change_by')->orWhere('change_by', '<>', 'artist')),
             'confirmed' => $q->where('status', 'confirmed'),
             default => null,
         };
@@ -433,7 +478,7 @@ class Bookings
             // 같은 작가의 시간 다툼을 막기 위해 작가 회원 줄을 먼저 잠근다.
             $this->db()->table('starttoo_users')->where('id', $b->artist_id)->lockForUpdate()->first();
             $b = $this->db()->table('starttoo_bookings')->where('id', $id)->lockForUpdate()->first();
-            $mine = $who === 'artist' ? (int) $b->artist_id === $viewer : (int) $b->customer_id === $viewer;
+            $mine = match ($who) { 'artist' => (int) $b->artist_id === $viewer, 'customer' => (int) $b->customer_id === $viewer, default => true };
             if (!$mine) $this->fail(403, 'BOOKING_FORBIDDEN', $who === 'artist' ? '아티스트만 처리할 수 있어요.' : '예약한 회원만 처리할 수 있어요.');
             $fn($b);
         }, 3);
@@ -506,6 +551,11 @@ class Bookings
             'id' => (int) $b->id, 'role' => $asArtist ? 'artist' : 'customer', 'status' => $b->status,
             'starts_at' => $at->toIso8601String(), 'change_starts_at' => $b->change_starts_at ? Carbon::parse($b->change_starts_at)->toIso8601String() : null,
             'change_count' => (int) $b->change_count, 'free_days' => $freeDays, 'max_changes' => $maxChanges,
+            // 변경 희망 시간을 낸 쪽(customer 변경 요청 · artist 일정 제안)과, 지금 보는 사람이 응답할 차례인지
+            'change_by' => $b->change_starts_at ? ($b->change_by ?? 'customer') : null,
+            'can_respond' => (bool) $b->change_starts_at && in_array($b->status, ['pending', 'change_requested'], true)
+                && (($b->change_by ?? 'customer') === 'artist' ? !$asArtist : $asArtist),
+            'can_propose' => $asArtist && in_array($b->status, ['pending', 'confirmed'], true) && !$b->change_starts_at && $at->isFuture(),
             'can_change' => !$asArtist && $b->status === 'confirmed' && (int) $b->change_count < $maxChanges && $daysLeft >= $freeDays,
             'can_cancel' => !$asArtist && $active,
             // 작가 규정: 시술 N일 전까지 무료 변경·취소(예약금 결제는 Phase 6)
@@ -514,7 +564,7 @@ class Bookings
             'subject' => $b->subject, 'total' => (int) $b->total, 'deposit' => (int) $b->deposit, 'duration' => $b->duration,
             'body_part_label' => $request && $request->body_part ? ($parts[$request->body_part] ?? null) : null, 'size' => $request->size ?? null,
             'image_url' => app(MediaUrls::class)->url($image, 300),
-            'consultation_id' => (int) $b->consultation_id, 'case_id' => (int) $b->case_id, 'quote_id' => (int) $b->quote_id,
+            'artist_id' => (int) $b->artist_id, 'consultation_id' => (int) $b->consultation_id, 'case_id' => (int) $b->case_id, 'quote_id' => (int) $b->quote_id,
             'other' => ['id' => $otherId, 'nickname' => $withdrawn ? '탈퇴한 회원' : ($other->nickname ?? ''),
                 'avatar_url' => $withdrawn ? null : app(MediaUrls::class)->url($other->avatar_path ?? null, 300)],
             'shop' => ['studio_name' => $shop->studio_name ?? null, 'region_label' => $shop && $shop->region ? ($regions[$shop->region] ?? null) : null,

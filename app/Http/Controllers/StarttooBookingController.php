@@ -26,6 +26,7 @@ class StarttooBookingController extends Controller
     public function room(Request $r, int $consultation, Bookings $b, AuthSessions $s, Artworks $a) { return $this->json(['booking' => $b->forRoom($this->viewer($r, $s, $a), $consultation)]); }
     public function show(Request $r, int $booking, Bookings $b, AuthSessions $s, Artworks $a) { return $this->json($b->detail($this->viewer($r, $s, $a), $booking)); }
     public function change(Request $r, int $booking, Bookings $b, AuthSessions $s, Artworks $a) { return $this->json($b->change($this->viewer($r, $s, $a), $booking, $r->all())); }
+    public function propose(Request $r, int $booking, Bookings $b, AuthSessions $s, Artworks $a) { return $this->json($b->propose($this->viewer($r, $s, $a), $booking, $r->all())); }
     public function cancel(Request $r, int $booking, Bookings $b, AuthSessions $s, Artworks $a) { return $this->json($b->cancel($this->viewer($r, $s, $a), $booking, $r->all())); }
     public function confirm(Request $r, int $booking, Bookings $b, AuthSessions $s, Artworks $a) { return $this->json($b->confirm($this->viewer($r, $s, $a), $booking)); }
     public function reject(Request $r, int $booking, Bookings $b, AuthSessions $s, Artworks $a) { return $this->json($b->reject($this->viewer($r, $s, $a), $booking)); }
