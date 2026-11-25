@@ -271,11 +271,12 @@ class Community
         return $v->validated();
     }
 
-    /** 작가 태그: 후기 글에서만, 승인된 작가만(본인 제외) */
+    /** 작가 태그: 후기 글에서만 · 후기 글은 필수, 승인된 작가만(본인 제외) */
     private function artistFor(int $viewer, array $in): ?int
     {
         $id = (int) ($in['artist_id'] ?? 0);
-        if ($in['category'] !== 'review' || $id < 1) return null;
+        if ($in['category'] !== 'review') return null;
+        if ($id < 1) $this->fail(422, 'INVALID_COMMUNITY', '후기 글은 태그할 작가를 골라주세요.');
         if ($id === $viewer || !$this->artistCard($id, $viewer)) $this->fail(422, 'INVALID_COMMUNITY', '태그할 수 없는 작가예요.');
         return $id;
     }
