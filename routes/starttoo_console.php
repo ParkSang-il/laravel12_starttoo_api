@@ -256,7 +256,7 @@ Artisan::command('starttoo:realtime-selftest {user : 시험할 회원 번호} {-
 })->purpose('STARTTOO 실시간 종단 시험(비밀값 미출력)');
 
 // 상담 건 점검: 대화방 수 · 건이 없는 대화방 · 상태별 건 수. --fix면 건이 없는 대화방을 현재 상태 그대로 한 건으로 만든다.
-Artisan::command('starttoo:cases-check {--fix}', function () {
+Artisan::command('starttoo:cases-check {--fix} {--user=}', function () {
     app(ProjectDatabase::class)->run('starttoo', function () {
         $db = app(ProjectDatabase::class)->database();
         $hasTable = $db->getSchemaBuilder()->hasTable('starttoo_consultation_cases');
@@ -268,6 +268,14 @@ Artisan::command('starttoo:cases-check {--fix}', function () {
         $this->line("대화방=$rooms · 건 없는 대화방=$missing · 전체 건=".$db->table('starttoo_consultation_cases')->count());
         foreach ($db->table('starttoo_consultation_cases')->selectRaw('status, count(*) as n')->groupBy('status')->get() as $row) {
             $this->line("  {$row->status}={$row->n}");
+        }
+        // --user=회원번호: 관리 목록 API가 그 회원에게 돌려주는 필터별 숫자(3-06 customer · 3-07 artist)
+        if ($user = (int) $this->option('user')) {
+            $c = app(\App\Services\Starttoo\Consultations::class);
+            foreach (['customer', 'artist'] as $role) {
+                $counts = $c->caseCounts($user, $role);
+                $this->line("[$role] ".collect($counts)->map(fn ($n, $k) => "$k=$n")->implode(' '));
+            }
         }
         if (!$missing || !$this->option('fix')) return;
         foreach ($db->table('starttoo_consultations')->whereNull('current_case_id')->orderBy('id')->get() as $room) {
