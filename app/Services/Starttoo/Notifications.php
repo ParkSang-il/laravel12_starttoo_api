@@ -175,7 +175,9 @@ class Notifications
         if (!$n) $this->fail(404, 'NOTIFICATION_NOT_FOUND', '더 이상 확인할 수 없는 알림이에요.');
         app(PushAudit::class)->opened('notification', (string) $id, $viewer);
         return [...$this->read($viewer, $id), 'target_type' => $n->target_type, 'target_id' => $n->target_id,
-            'actor_id' => (int) $n->actor_id, 'kind' => $n->kind, 'variant' => $n->variant];
+            'actor_id' => (int) $n->actor_id, 'kind' => $n->kind, 'variant' => $n->variant,
+            // 승인된 작가면 앱이 프로필을 거치지 않고 바로 상점을 연다
+            'actor_is_artist' => $this->db()->table('starttoo_users')->where('id', $n->actor_id)->value('artist_status') === 'approved'];
     }
 
     public function listing(int $viewer, array $input): array
@@ -201,7 +203,7 @@ class Notifications
             if (!is_array($c) || ($c['user'] ?? null) !== $viewer || ($c['filter'] ?? null) !== $filter || !is_int($c['id'] ?? null) || $c['id'] < 1) $this->fail(422, 'INVALID_NOTIFICATIONS', '알림 목록을 다시 불러와주세요.');
             $q->where('n.id', '<', $c['id']);
         }
-        $rows = $q->orderByDesc('n.id')->limit(21)->get(['n.*', 'actor.nickname', 'actor.display_name']);
+        $rows = $q->orderByDesc('n.id')->limit(21)->get(['n.*', 'actor.nickname', 'actor.display_name', 'actor.artist_status']);
         $page = $rows->take(20);
         return ['items' => $page->map(fn ($n) => [
             'id' => (int) $n->id, 'kind' => $n->kind,
@@ -209,6 +211,7 @@ class Notifications
             'variant' => $n->variant,
             'actor_name' => $n->nickname ?: $n->display_name,
             'actor_id' => (int) $n->actor_id, 'target_type' => $n->target_type, 'target_id' => $n->target_id,
+            'actor_is_artist' => $n->artist_status === 'approved',
             'comment_id' => $n->comment_id === null ? null : (int) $n->comment_id,
             'read' => $n->read_at !== null, 'created_at' => Carbon::parse($n->created_at)->toIso8601String(),
         ])->all(), 'unread_count' => $this->unread($viewer),
