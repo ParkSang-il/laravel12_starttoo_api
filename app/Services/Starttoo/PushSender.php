@@ -117,6 +117,10 @@ class PushSender
                     'artist_review' => '아티스트 신청 심사 소식이 있어요.',
                     'shop_news' => '팔로우한 아티스트의 상점 소식이 있어요.',
                     'fit_result' => 'AI 작업 결과가 준비됐어요.',
+                    'review_new' => '상점에 새 리뷰가 등록됐어요.',
+                    'review_reply' => '회원님의 리뷰에 작가 답변이 달렸어요.',
+                    'comm_comment' => '회원님의 커뮤니티 글에 새 댓글이 있어요.',
+                    default => '새 알림이 있어요.',
                 };
                 // 이력에는 본문 원문 대신 안내 문구만 남긴다.
                 $db->table('starttoo_push_logs')->where('id', $log)->update(['kind' => $n->kind, 'title_snapshot' => '스타투', 'body_snapshot' => $body]);
@@ -362,6 +366,21 @@ class PushSender
             $text = $this->multiline((string) ($row->content ?? ''));
             return $text === '' ? '' : Str::limit($text, 80, '…');
         };
+        // Phase 5: 리뷰 · 커뮤니티 댓글
+        if ($n->kind === 'review_new') {
+            $review = $db->table('starttoo_reviews')->where('id', $n->target_id)->first(['rating', 'content']);
+            $text = $review ? Str::limit($this->multiline((string) $review->content), 80, '…') : '';
+            $stars = $review ? str_repeat('★', (int) $review->rating) : '';
+            return ['⭐ 새 리뷰', $text !== '' ? trim("{$stars} {$name}: {$text}") : "{$name}님이 리뷰를 남겼어요."];
+        }
+        if ($n->kind === 'review_reply') {
+            $reply = $this->multiline((string) $db->table('starttoo_reviews')->where('id', $n->target_id)->value('reply'));
+            return ['💬 작가 답변', $reply !== '' ? "{$name}: ".Str::limit($reply, 80, '…') : "{$name}님이 회원님의 리뷰에 답변을 남겼어요."];
+        }
+        if ($n->kind === 'comm_comment') {
+            $text = $n->comment_id ? $this->multiline((string) $db->table('starttoo_community_comments')->where('id', $n->comment_id)->value('content')) : '';
+            return ['💬 새 댓글', $text !== '' ? "{$name}: ".Str::limit($text, 80, '…') : "{$name}님이 회원님의 글에 댓글을 남겼어요."];
+        }
         return match ($n->kind) {
             'like' => ['❤️ 새 좋아요', "{$name}님이 회원님의 {$target}을 좋아해요."],
             'comment_like' => ['❤️ 댓글 좋아요', "{$name}님이 회원님의 댓글을 좋아해요."],

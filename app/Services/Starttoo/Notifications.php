@@ -39,7 +39,14 @@ class Notifications
     public const NOTICE_KINDS = ['artist_review', 'fit_result'];
 
     /** 이전 버전 앱이 모르는 알림 종류(notices=1을 보낸 앱에만 목록에 준다). */
-    public const NEW_KINDS = ['artist_review', 'shop_news', 'fit_result'];
+    public const NEW_KINDS = ['artist_review', 'shop_news', 'fit_result', 'review_new', 'review_reply', 'comm_comment'];
+
+    /**
+     * Phase 5 알림(소셜 알림 설정을 따른다). 목록에는 notices=3 을 보낸 앱에만 준다.
+     * review_new: 내 상점에 새 리뷰(대상 = 리뷰) · review_reply: 내 리뷰에 작가 답변(대상 = 리뷰)
+     * comm_comment: 내 커뮤니티 글에 새 댓글(대상 = 글, comment_id = 댓글). kind 칸이 16자라 줄여 쓴다.
+     */
+    public const PHASE5_KINDS = ['review_new', 'review_reply', 'comm_comment'];
 
     /**
      * 안내 알림. 소셜 알림 설정과 관계없이 보낸다(계정·심사 안내).
@@ -85,6 +92,30 @@ class Notifications
             $targets->orWhere(function ($follow) use ($viewer) {
                 $follow->where('n.kind', 'follow')->where('n.target_type', 'user')->where('n.target_id', (string) $viewer)
                     ->whereExists(fn ($f) => $f->selectRaw('1')->from('starttoo_follows as f')->whereColumn('f.user_id', 'n.actor_id')->where('f.target_user_id', $viewer));
+            });
+            // 리뷰: 새 리뷰(작가에게) · 작가 답변(리뷰 쓴 고객에게). 숨긴 리뷰 · 지운 답변은 안 보인다.
+            $targets->orWhere(function ($review) use ($viewer) {
+                $review->whereIn('n.kind', ['review_new', 'review_reply'])->where('n.target_type', 'review')
+                    ->whereExists(function ($r) use ($viewer) {
+                        $r->selectRaw('1')->from('starttoo_reviews as nr')->whereRaw('nr.id = CAST(n.target_id AS UNSIGNED)')
+                            ->where('nr.moderation_hidden', false)
+                            ->where(function ($who) use ($viewer) {
+                                $who->where(fn ($new) => $new->where('n.kind', 'review_new')->where('nr.artist_id', $viewer)->whereColumn('nr.customer_id', 'n.actor_id'))
+                                    ->orWhere(fn ($reply) => $reply->where('n.kind', 'review_reply')->where('nr.customer_id', $viewer)
+                                        ->whereColumn('nr.artist_id', 'n.actor_id')->whereNotNull('nr.reply'));
+                            });
+                    });
+            });
+            // 커뮤니티: 내 글에 달린 댓글. 지운 · 숨긴 댓글과 글은 안 보인다.
+            $targets->orWhere(function ($community) use ($viewer) {
+                $community->where('n.kind', 'comm_comment')->where('n.target_type', 'community')
+                    ->whereExists(function ($c) use ($viewer) {
+                        $c->selectRaw('1')->from('starttoo_community_comments as ncc')
+                            ->join('starttoo_community_posts as ncp', 'ncp.id', '=', 'ncc.post_id')
+                            ->whereColumn('ncc.id', 'n.comment_id')->whereRaw('ncc.post_id = CAST(n.target_id AS UNSIGNED)')
+                            ->whereColumn('ncc.user_id', 'n.actor_id')->where('ncc.moderation_hidden', false)
+                            ->where('ncp.user_id', $viewer)->where('ncp.moderation_hidden', false);
+                    });
             });
             foreach (['artwork' => 'a', 'post' => 'p'] as $type => $alias) {
                 $targets->orWhere(function ($content) use ($viewer, $type, $alias) {
@@ -150,13 +181,16 @@ class Notifications
     public function listing(int $viewer, array $input): array
     {
         if (Validator::make($input, ['filter' => ['nullable', 'in:all,reservation,social,notice'], 'cursor' => ['nullable', 'string', 'max:512'],
-            'notices' => ['nullable', 'in:0,1,2']])->fails()) $this->fail(422, 'INVALID_NOTIFICATIONS', '알림 조회 조건을 확인해주세요.');
+            'notices' => ['nullable', 'in:0,1,2,3']])->fails()) $this->fail(422, 'INVALID_NOTIFICATIONS', '알림 조회 조건을 확인해주세요.');
         $filter = $input['filter'] ?? 'all';
         // 안내 알림을 모르는 이전 앱은 목록 전체를 버리므로 notices=1을 보낸 앱에만 준다.
         // AI 결과 알림(fit_result)은 notices=2 를 보낸 앱에만 준다.
-        $notices = in_array($input['notices'] ?? '0', ['1', '2'], true);
+        // 리뷰 · 커뮤니티 알림(PHASE5_KINDS)은 notices=3 을 보낸 앱에만 준다.
+        $level = (int) ($input['notices'] ?? '0');
+        $notices = $level >= 1;
         $q = $this->visible($viewer);
-        if (($input['notices'] ?? '0') !== '2') $q->where('n.kind', '<>', 'fit_result');
+        if ($level < 2) $q->where('n.kind', '<>', 'fit_result');
+        if ($level < 3) $q->whereNotIn('n.kind', self::PHASE5_KINDS);
         if ($filter === 'reservation') $q->whereRaw('1 = 0');
         elseif ($filter === 'notice') $notices ? $q->whereIn('n.kind', self::NOTICE_KINDS) : $q->whereRaw('1 = 0');
         elseif ($filter === 'social') $q->whereNotIn('n.kind', $notices ? self::NOTICE_KINDS : self::NEW_KINDS);

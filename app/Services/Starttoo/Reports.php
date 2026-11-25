@@ -116,6 +116,11 @@ class Reports
                     'version' => $detail['version'], 'author_id' => $subject];
             }
             $openKey = hash('sha256', $viewer.':'.$type.':'.$input['target_id']);
+            // 중복 신고 금지: 같은 회원이 같은 대상을 한 번만 신고할 수 있다(처리 · 기각된 뒤에도).
+            // 같은 요청의 재전송(request_key 동일)은 위 retry에서 이미 성공으로 돌려준다.
+            if ($db->table('starttoo_reports')->where('reporter_id', $viewer)->where('target_type', $type)->where('target_id', $input['target_id'])->exists()) {
+                $this->fail(409, 'ALREADY_REPORTED', '이미 신고한 대상이에요. 운영팀이 확인하고 있어요.');
+            }
             $existing = $db->table('starttoo_reports')->where('open_key', $openKey)->first();
             $id = $existing?->id;
             if (!$existing) {

@@ -157,7 +157,7 @@ class Community
     /** 댓글 등록 → 그 글의 댓글 목록 전체를 돌려준다 */
     public function comment(int $viewer, int $id, array $input): array
     {
-        $this->visible($id, $viewer);
+        $post = $this->visible($id, $viewer);
         $content = trim((string) ($input['content'] ?? ''));
         $key = (string) ($input['request_key'] ?? '');
         if ($content === '' || mb_strlen($content) > 1000 || Validator::make(['k' => $key], ['k' => ['required', 'uuid']])->fails()) {
@@ -166,14 +166,21 @@ class Community
         $db = $this->db();
         if (!$db->table('starttoo_community_comments')->where('user_id', $viewer)->where('request_key', $key)->exists()) {
             try {
-                $db->transaction(function () use ($db, $viewer, $id, $content, $key) {
+                $commentId = $db->transaction(function () use ($db, $viewer, $id, $content, $key) {
                     $db->table('starttoo_community_posts')->where('id', $id)->lockForUpdate()->first();
-                    $db->table('starttoo_community_comments')->insert([
+                    $commentId = $db->table('starttoo_community_comments')->insertGetId([
                         'post_id' => $id, 'user_id' => $viewer, 'request_key' => $key, 'content' => $content,
                         'created_at' => now(), 'updated_at' => now(),
                     ]);
                     $this->recount($id);
+                    return $commentId;
                 }, 3);
+                // 글쓴이에게 「새 댓글」 알림(내 글에 내가 쓴 댓글은 emit이 건너뛴다. 실패해도 댓글은 그대로)
+                try {
+                    app(Notifications::class)->emit((int) $post->user_id, $viewer, 'comm_comment', 'community', (string) $id, (int) $commentId);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
             } catch (QueryException $e) {
                 if (!$db->table('starttoo_community_comments')->where('user_id', $viewer)->where('request_key', $key)->exists()) throw $e;
             }

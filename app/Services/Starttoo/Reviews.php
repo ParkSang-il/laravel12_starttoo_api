@@ -65,7 +65,18 @@ class Reviews
             if ($done = $db->table('starttoo_reviews')->where('booking_id', $b->id)->where('customer_id', $viewer)->first()) return $this->format($done, $viewer);
             throw $e;
         }
+        // 작가에게 「새 리뷰」 알림(실패해도 리뷰 등록은 그대로)
+        $this->notify((int) $b->artist_id, $viewer, 'review_new', (int) $id);
         return $this->format($db->table('starttoo_reviews')->where('id', $id)->first(), $viewer);
+    }
+
+    private function notify(int $recipient, int $actor, string $kind, int $reviewId): void
+    {
+        try {
+            app(Notifications::class)->emit($recipient, $actor, $kind, 'review', (string) $reviewId);
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     /** 수정: 평점 · 태그 · 내용 · 사진(keep = 남길 기존 사진 순번, media_ids = 새 사진) */
@@ -114,6 +125,12 @@ class Reviews
         $this->db()->table('starttoo_reviews')->where('id', $id)->update([
             'reply' => $content === '' ? null : $content, 'replied_at' => $content === '' ? null : now(),
         ]);
+        // 답변을 처음 달 때만 고객에게 알림. 답변을 지우면 알림도 거둔다(다시 달면 다시 알림).
+        if ($content === '') {
+            try { app(Notifications::class)->withdraw($viewer, 'review_reply', 'review', (string) $id); } catch (\Throwable $e) { report($e); }
+        } elseif ($r->reply === null) {
+            $this->notify((int) $r->customer_id, $viewer, 'review_reply', $id);
+        }
         return $this->format($this->db()->table('starttoo_reviews')->where('id', $id)->first(), $viewer);
     }
 
