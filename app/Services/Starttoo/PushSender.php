@@ -116,6 +116,7 @@ class PushSender
                     'new_post' => '팔로우한 회원이 새 게시물을 올렸어요.',
                     'artist_review' => '아티스트 신청 심사 소식이 있어요.',
                     'shop_news' => '팔로우한 아티스트의 상점 소식이 있어요.',
+                    'fit_result' => 'AI 작업 결과가 준비됐어요.',
                 };
                 // 이력에는 본문 원문 대신 안내 문구만 남긴다.
                 $db->table('starttoo_push_logs')->where('id', $log)->update(['kind' => $n->kind, 'title_snapshot' => '스타투', 'body_snapshot' => $body]);
@@ -325,6 +326,14 @@ class PushSender
     /** 아티스트 심사 단계별 안내 문구. */
     private function noticeText(object $n): array
     {
+        // AI 결과(variant = 종류:상태)
+        if ($n->kind === 'fit_result') {
+            [$type, $status] = array_pad(explode(':', (string) $n->variant), 2, '');
+            $name = ['extract' => '도안 추출', 'fill' => '타투 필러', 'coverup' => '커버업'][$type] ?? '가상 피팅';
+            return $status === 'ready'
+                ? ["✨ {$name} 결과가 나왔어요", '눌러서 결과를 확인해보세요.']
+                : ["{$name}을 만들지 못했어요", '사용 횟수는 차감되지 않았어요. 다시 시도해주세요.'];
+        }
         return match ($n->variant ?? null) {
             'submitted' => ['📮 아티스트 신청 접수', '신청서가 접수됐어요. 보통 영업일 3일 안에 결과를 알려드려요.'],
             'reviewing' => ['🔍 아티스트 심사 시작', '포트폴리오 심사를 시작했어요. 조금만 기다려주세요.'],

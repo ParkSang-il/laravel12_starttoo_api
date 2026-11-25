@@ -34,7 +34,9 @@ class StarttooFitController extends Controller
             $input = null;
         }
         if (!is_array($input)) return response()->json(['code' => 'INVALID_FIT', 'message' => '피팅 요청을 확인해주세요.'], 422);
-        return $this->json($f->create($viewer, $input, $r->file('composite'), $r->file('photo'), $r->file('stencil')));
+        $files = [];
+        foreach (['composite', 'photo', 'stencil', 'mask', 'result'] as $k) $files[$k] = $r->file($k);
+        return $this->json($f->create($viewer, $input, $files));
     }
 
     private function viewer(Request $request, AuthSessions $sessions, Artworks $artworks): int

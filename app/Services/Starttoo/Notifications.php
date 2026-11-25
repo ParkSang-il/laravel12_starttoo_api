@@ -35,10 +35,11 @@ class Notifications
     }
 
     /** 안내 알림(심사 결과 등)의 종류. 보낸 회원이 없어 actor는 받는 회원 자신으로 기록한다. */
-    public const NOTICE_KINDS = ['artist_review'];
+    /** fit_result: AI 피팅 · 타투 도구 결과(variant = 종류:상태). 목록에는 notices=2 를 보낸 앱에만 준다. */
+    public const NOTICE_KINDS = ['artist_review', 'fit_result'];
 
     /** 이전 버전 앱이 모르는 알림 종류(notices=1을 보낸 앱에만 목록에 준다). */
-    public const NEW_KINDS = ['artist_review', 'shop_news'];
+    public const NEW_KINDS = ['artist_review', 'shop_news', 'fit_result'];
 
     /**
      * 안내 알림. 소셜 알림 설정과 관계없이 보낸다(계정·심사 안내).
@@ -149,11 +150,13 @@ class Notifications
     public function listing(int $viewer, array $input): array
     {
         if (Validator::make($input, ['filter' => ['nullable', 'in:all,reservation,social,notice'], 'cursor' => ['nullable', 'string', 'max:512'],
-            'notices' => ['nullable', 'in:0,1']])->fails()) $this->fail(422, 'INVALID_NOTIFICATIONS', '알림 조회 조건을 확인해주세요.');
+            'notices' => ['nullable', 'in:0,1,2']])->fails()) $this->fail(422, 'INVALID_NOTIFICATIONS', '알림 조회 조건을 확인해주세요.');
         $filter = $input['filter'] ?? 'all';
         // 안내 알림을 모르는 이전 앱은 목록 전체를 버리므로 notices=1을 보낸 앱에만 준다.
-        $notices = ($input['notices'] ?? '0') === '1';
+        // AI 결과 알림(fit_result)은 notices=2 를 보낸 앱에만 준다.
+        $notices = in_array($input['notices'] ?? '0', ['1', '2'], true);
         $q = $this->visible($viewer);
+        if (($input['notices'] ?? '0') !== '2') $q->where('n.kind', '<>', 'fit_result');
         if ($filter === 'reservation') $q->whereRaw('1 = 0');
         elseif ($filter === 'notice') $notices ? $q->whereIn('n.kind', self::NOTICE_KINDS) : $q->whereRaw('1 = 0');
         elseif ($filter === 'social') $q->whereNotIn('n.kind', $notices ? self::NOTICE_KINDS : self::NEW_KINDS);
