@@ -14,6 +14,7 @@ require __DIR__.'/starttoo_safety.php';
 require __DIR__.'/starttoo_artist.php';
 require __DIR__.'/starttoo_discover.php';
 require __DIR__.'/starttoo_consult.php';
+require __DIR__.'/starttoo_booking.php';
 
 Route::prefix('v1/projects/{projectCode}')
     ->where(['projectCode' => '[a-z][a-z0-9-]{1,49}'])

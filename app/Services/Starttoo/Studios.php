@@ -40,7 +40,7 @@ class Studios
             'works' => (int) ($counts->works ?? 0), 'designs' => (int) ($counts->designs ?? 0),
             'open_designs' => (int) ($counts->open_designs ?? 0),
             'new_consults' => app(Consultations::class)->newRequestCount($userId),
-        ], 'social' => $social];
+        ], 'social' => $social, 'bookings' => app(Bookings::class)->dashboard($userId)];
     }
 
     public function update(int $userId, array $input): array

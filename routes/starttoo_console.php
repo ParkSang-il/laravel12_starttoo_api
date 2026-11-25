@@ -292,3 +292,11 @@ Artisan::command('starttoo:cases-check {--fix} {--user=}', function () {
         $this->info("건 없는 대화방 {$missing}개에 건을 만들었어요.");
     });
 })->purpose('상담 건 점검(개인정보 없이 숫자만)');
+
+// Phase 4: 시술일 지난 확정 예약 → 자동 완료, 시간 지난 확정 대기 → 만료
+Artisan::command('starttoo:bookings-sweep', function () {
+    $r = app(ProjectDatabase::class)->run('starttoo', fn () => app(\App\Services\Starttoo\Bookings::class)->sweep());
+    $this->info("자동 완료 {$r['done']}건 · 만료 {$r['expired']}건");
+    return 0;
+})->purpose('예약 자동 완료·만료');
+\Illuminate\Support\Facades\Schedule::command('starttoo:bookings-sweep')->hourly()->withoutOverlapping();

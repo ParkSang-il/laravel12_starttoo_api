@@ -336,7 +336,7 @@ class Consultations
         return $room;
     }
 
-    private function assertCanSend(int $viewer, object $room): void
+    public function assertCanSend(int $viewer, object $room): void
     {
         if (!$this->enabled()) $this->fail(403, 'CONSULTATION_DISABLED', $this->reasonMessage('CONSULTATION_DISABLED'));
         $other = (int) $room->customer_id === $viewer ? (int) $room->artist_id : (int) $room->customer_id;
@@ -472,7 +472,7 @@ class Consultations
     }
 
     /** active 유효 · expired 기간 지남 · superseded 새 버전으로 대체 */
-    private function quoteState(object $q): string
+    public function quoteState(object $q): string
     {
         if ($q->superseded_at) return 'superseded';
         // 종료된 상담 건의 견적으로는 예약할 수 없다.
@@ -602,6 +602,24 @@ class Consultations
             'message' => '이 아티스트와 진행 중인 상담이 있어요. 요청서를 이어서 보낼까요?', 'consultation_id' => (int) $room->id], 409));
     }
 
+    /**
+     * Phase 4 예약 등에서 대화방에 안내(system) 메시지를 남기고, 필요하면 상담 건 상태를 바꾼다.
+     * 보내는 사람 = 행동한 회원(상대에게 푸시). 종료·완료 대화방에도 남는다(일반 메시지 제한과 무관).
+     */
+    public function systemMessage(int $roomId, int $actor, string $body, array $payload, ?int $caseId = null, ?string $caseStatus = null): void
+    {
+        $room = $this->db()->table('starttoo_consultations')->where('id', $roomId)->lockForUpdate()->first();
+        if (!$room) return;
+        if ($caseId && $caseStatus) {
+            $this->db()->table('starttoo_consultation_cases')->where('id', $caseId)->update(['status' => $caseStatus, 'updated_at' => now()]);
+            if ((int) $room->current_case_id === $caseId) {
+                $this->db()->table('starttoo_consultations')->where('id', $room->id)->update(['status' => $caseStatus]);
+                $room->status = $caseStatus;
+            }
+        }
+        $this->insertMessage($room, $actor, null, 'system', $body, $payload);
+    }
+
     /** 현재 건과 대화방 상태를 함께 바꾼다(대화방 status = 현재 건 상태). */
     private function setCaseStatus(object $room, string $status): void
     {
@@ -635,6 +653,9 @@ class Consultations
                 ->update(['status' => 'closed', 'close_reason' => $reason, 'closed_from' => $case->status, 'closed_at' => $now, 'updated_at' => $now]);
             $this->db()->table('starttoo_consultations')->where('id', $locked->id)->update(['status' => 'closed']);
             $locked->status = 'closed';
+            // 아직 확정 전인 예약 요청은 함께 정리한다(확정된 예약이 있는 건은 OPEN이 아니라 여기까지 오지 않는다).
+            $this->db()->table('starttoo_bookings')->where('case_id', $case->id)->where('status', 'pending')
+                ->update(['status' => 'rejected', 'reject_reason' => 'closed', 'cancelled_at' => $now, 'updated_at' => $now]);
             // 종료 사유는 고객에게 보여주지 않는다(아티스트 기록용).
             $body = '아티스트가 상담을 종료했어요';
             $this->insertMessage($locked, $viewer, null, 'system', $body, ['case_id' => (int) $case->id, 'event' => 'closed']);
@@ -744,6 +765,8 @@ class Consultations
                 'seen' => $quoteMessage > 0 && (int) $room->customer_last_read_id >= $quoteMessage] : null,
             'request_image_count' => count($images),
             'request_image_url' => $images ? app(MediaUrls::class)->url($images[0], 300) : null,
+            // 이 건의 가장 최근 예약(3-06 「예약 전환」 카드 → 4-02)
+            'booking_id' => ($bid = $this->db()->table('starttoo_bookings')->where('case_id', $k->id)->orderByDesc('id')->value('id')) ? (int) $bid : null,
         ]);
     }
 
@@ -834,6 +857,8 @@ class Consultations
         if (!empty($m->moderation_hidden)) return ['kind' => 'hidden', 'body' => null] + $item;
         if (!empty($payload['images'])) $item['images'] = array_map(fn ($p) => app(MediaUrls::class)->url($p, 1080), $payload['images']);
         if (!empty($payload['artwork_id'])) $item['artwork'] = $this->artworkCard($payload['artwork_id'], $viewer);
+        // 예약 안내 메시지: 누르면 예약 상세로
+        if (!empty($payload['booking_id'])) $item['booking_id'] = (int) $payload['booking_id'];
         if (!empty($payload['quote_id'])) {
             $quote = $this->db()->table('starttoo_quotes')->where('id', $payload['quote_id'])->first();
             if ($quote) $item['quote'] = $this->quoteView($quote);
