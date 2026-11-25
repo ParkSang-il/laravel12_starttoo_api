@@ -43,7 +43,8 @@ class Fittings
     private const WEAR = [
         '어깨' => ['wearing a black athletic tank top', 'wearing a black athletic tank top'],
         '쇄골·가슴' => ['wearing a black high-neck sports bra that fully covers the chest, only the collarbone and upper chest above it visible', 'wearing a black crew-neck t-shirt pulled down slightly at the collar, only the collarbone visible'],
-        '등' => ['wearing a black sports bra and black athletic leggings, photographed from behind', 'wearing black athletic shorts, photographed from behind, upper back bare'],
+        // 여성 등: 브라 끈이 등을 가리지 않게 목 뒤로만 묶는 오픈백 홀터 상의(등 전체가 맨살), 로우라이즈 레깅스
+        '등' => ['wearing a black open-back halter top tied only at the back of the neck, so the entire back from the shoulder blades down to the lower back is completely bare skin with no straps or fabric crossing it, and low-rise black leggings, photographed from behind, hair tied up', 'wearing black athletic shorts, photographed from behind, upper back bare'],
         '옆구리' => ['wearing a black sports bra and black athletic leggings, arm raised to show the side ribs', 'wearing black athletic shorts and a black tank top lifted at the side to show the ribs'],
         '허벅지' => ['wearing black athletic bike shorts', 'wearing black athletic shorts'],
         '상완' => ['wearing a black sleeveless athletic top', 'wearing a black sleeveless athletic top'],
