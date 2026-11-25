@@ -503,6 +503,8 @@ class Fittings
     /** 나노바나나 합성(큐 또는 조회 요청에서). 성공 · 실패 모두 AI 입력 임시 파일은 지운다. */
     public function process(string $id): void
     {
+        // 사진 여러 장 · AI 응답(base64)을 함께 다뤄 기본 128MB로는 모자랄 수 있다
+        @ini_set('memory_limit', '512M');
         $lock = Cache::lock('starttoo:fit-result:'.$id, 100);
         if (!$lock->get()) return;
         try {
@@ -538,6 +540,16 @@ class Fittings
         } finally {
             $lock->release();
         }
+    }
+
+    /** 큐 작업이 강제 종료(메모리 · 시간 초과)되면 처리 중으로 남지 않게 실패로 바꾸고 알린다(횟수 차감 없음). */
+    public function markFailed(string $id): void
+    {
+        $r = $this->db()->table('starttoo_fit_results')->where('id', $id)->first();
+        if (!$r || $r->status !== 'processing') return;
+        $this->db()->table('starttoo_fit_results')->where('id', $id)->update(['status' => 'failed', 'error' => 'ai_failed', 'input_path' => null, 'stencil_path' => null, 'updated_at' => now()]);
+        $this->deleteFiles(array_filter([$r->input_path, $r->stencil_path]));
+        $this->announce($id);
     }
 
     /**
@@ -801,18 +813,20 @@ class Fittings
     /** AI 결과에서 마스크(흰색) 밖은 원본 사진 픽셀로 되돌린다. 경계는 살짝 부드럽게. */
     private function keepOutsideMask(string $original, string $generated, string $mask): string
     {
-        $src = @imagecreatefromstring($original);
-        $gen = @imagecreatefromstring($generated);
-        $msk = @imagecreatefromstring($mask);
-        if (!$src || !$gen || !$msk) return $generated;
+        // 큰 사진 여러 장을 한꺼번에 올리면 메모리가 모자라므로 한 장씩 만들고 바로 지운다.
+        $src = $this->fitImage($original, 1600);
+        if (!$src) return $generated;
+        $w = imagesx($src);
+        $h = imagesy($src);
+        $g = $this->resizedTo($generated, $w, $h);
+        $m = $this->resizedTo($mask, $w, $h);
+        if (!$g || !$m) {
+            imagedestroy($src);
+            if ($g) imagedestroy($g);
+            if ($m) imagedestroy($m);
+            return $generated;
+        }
         try {
-            $w = imagesx($src);
-            $h = imagesy($src);
-            // AI 결과 · 마스크를 원본 크기로 맞춘다
-            $g = imagecreatetruecolor($w, $h);
-            imagecopyresampled($g, $gen, 0, 0, 0, 0, $w, $h, imagesx($gen), imagesy($gen));
-            $m = imagecreatetruecolor($w, $h);
-            imagecopyresampled($m, $msk, 0, 0, 0, 0, $w, $h, imagesx($msk), imagesy($msk));
             imagefilter($m, IMG_FILTER_GAUSSIAN_BLUR);
             for ($y = 0; $y < $h; $y++) {
                 for ($x = 0; $x < $w; $x++) {
@@ -828,16 +842,41 @@ class Fittings
                     imagesetpixel($g, $x, $y, ($mix(16) << 16) | ($mix(8) << 8) | $mix(0));
                 }
             }
-            imagedestroy($m);
             ob_start();
-            imagepng($g);
-            imagedestroy($g);
+            imagejpeg($g, null, 92);
             return (string) ob_get_clean();
         } finally {
             imagedestroy($src);
-            imagedestroy($gen);
-            imagedestroy($msk);
+            imagedestroy($g);
+            imagedestroy($m);
         }
+    }
+
+    /** 바이트 → 긴 변 [max] 이하로 줄인 이미지(원본은 바로 지운다) */
+    private function fitImage(string $bytes, int $max): ?\GdImage
+    {
+        $img = @imagecreatefromstring($bytes);
+        if (!$img) return null;
+        $w = imagesx($img);
+        $h = imagesy($img);
+        $s = min(1, $max / max($w, $h));
+        if ($s >= 1) return $img;
+        $out = imagecreatetruecolor((int) round($w * $s), (int) round($h * $s));
+        imagecopyresampled($out, $img, 0, 0, 0, 0, imagesx($out), imagesy($out), $w, $h);
+        imagedestroy($img);
+        return $out;
+    }
+
+    /** 바이트 → 정확히 w×h 로 늘린 이미지(원본은 바로 지운다) */
+    private function resizedTo(string $bytes, int $w, int $h): ?\GdImage
+    {
+        $img = @imagecreatefromstring($bytes);
+        if (!$img) return null;
+        if (imagesx($img) === $w && imagesy($img) === $h) return $img;
+        $out = imagecreatetruecolor($w, $h);
+        imagecopyresampled($out, $img, 0, 0, 0, 0, $w, $h, imagesx($img), imagesy($img));
+        imagedestroy($img);
+        return $out;
     }
 
     /** 흰 배경 → 투명(밝을수록 투명). 선 · 명암은 남는다. */
