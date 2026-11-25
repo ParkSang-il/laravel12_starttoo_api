@@ -70,9 +70,17 @@ class Fittings
 
     public function remaining(int $viewer): int
     {
-        $used = $this->db()->table('starttoo_fit_results')->where('user_id', $viewer)
-            ->where('created_at', '>=', today())->where('status', '<>', 'failed')->count();
+        // 피팅 · 추출 · 필러 · 커버업 공통 하루 횟수. 실패와 기기에서 만든 결과(cost_units 0)는 세지 않는다.
+        $used = (int) $this->db()->table('starttoo_fit_results')->where('user_id', $viewer)
+            ->where('created_at', '>=', today())->where('status', '<>', 'failed')->sum('cost_units');
         return max(0, (int) config('starttoo.fit_daily_limit', 3) - $used);
+    }
+
+    /** 필러는 3안(AI 3번)을 1회로 세는 대신 하루 1번만 */
+    public function fillUsedToday(int $viewer): bool
+    {
+        return $this->db()->table('starttoo_fit_results')->where('user_id', $viewer)->where('type', 'fill')
+            ->where('created_at', '>=', today())->where('status', '<>', 'failed')->exists();
     }
 
     /** FIT-01 피팅 메인: 남은 횟수 · 최근 결과 */
@@ -82,6 +90,7 @@ class Fittings
             'enabled' => (bool) config('starttoo.fit_enabled', true) && app(NanoBanana::class)->configured(),
             'daily_limit' => (int) config('starttoo.fit_daily_limit', 3),
             'remaining' => $this->remaining($viewer),
+            'fill_used' => $this->fillUsedToday($viewer),
             'recent' => $this->db()->table('starttoo_fit_results')->where('user_id', $viewer)->where('status', '<>', 'failed')
                 ->orderByDesc('created_at')->limit(6)->get()->map(fn ($r) => $this->format($r))->all(),
         ];
@@ -329,61 +338,112 @@ class Fittings
 
     // ── FIT-06 → 07 합성 ────────────────────────
 
+    /** 화면에서 고르는 값(서버가 아는 것만 저장) */
+    private const OPTIONS = [
+        'extract' => ['extract_type' => ['line', 'shade', 'color'], 'line' => ['가늘게', '보통', '굵게'], 'background' => ['투명', '흰색']],
+        'fill' => ['style' => ['점묘 · 도트', '기하 패턴', '연기 · 구름', '잎 · 덩굴', '별 · 우주', '바람 · 파도'], 'density' => ['가볍게', '보통', '빽빽하게'], 'follow_tone' => [true, false]],
+        'coverup' => ['old_color' => ['블랙', '컬러', '오래돼서 흐려짐']],
+        'blend' => [],
+    ];
+
     /**
-     * 합성 요청(multipart). payload: request_key, consent=true, source(photo|virtual), part, face, artwork_id | (파일 stencil), model_id(virtual)
-     * 파일: composite(배치 이미지, 필수) · photo(내 사진 원본 축소본, source=photo 필수) · stencil(직접 가져온 도안)
+     * AI 작업 요청(multipart). 종류별 입력:
+     * - blend(가상 피팅): composite(배치) · photo(내 사진) 또는 model_id · artwork_id 또는 stencil
+     * - extract(도안 추출): photo(펴서 자른 타투) · options.extract_type shade|color. local=true면 기기에서 만든 result를 바로 보관(횟수 0)
+     * - fill(필러 3안): photo · mask(채울 곳 흰색) · options.style · density · follow_tone. 하루 1번
+     * - coverup(커버업): photo(기존) · composite(새 도안 배치) · mask(기존 타투) · options.old_color · meta(진단)
+     *
+     * @param  array<string, ?UploadedFile>  $files  composite · photo · stencil · mask · result
      */
-    public function create(int $viewer, array $input, ?UploadedFile $composite, ?UploadedFile $photo, ?UploadedFile $stencil): array
+    public function create(int $viewer, array $input, array $files): array
     {
-        $this->assertEnabled();
+        $type = in_array($input['type'] ?? 'blend', ['blend', 'extract', 'fill', 'coverup'], true) ? ($input['type'] ?? 'blend') : 'blend';
+        $local = $type === 'extract' && filter_var($input['local'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        if (!$local) $this->assertEnabled();
         if (Validator::make($input, [
             'request_key' => ['required', 'uuid'],
             'consent' => ['required', 'accepted'],
-            'source' => ['required', 'in:photo,virtual'],
+            'source' => ['nullable', 'in:photo,virtual'],
             'part' => ['nullable', 'string', 'max:20'],
             'face' => ['nullable', 'string', 'max:20'],
             'artwork_id' => ['nullable', 'uuid'],
             'model_id' => ['nullable', 'integer'],
+            'options' => ['nullable', 'array'],
+            'meta' => ['nullable', 'array'],
         ])->fails()) {
-            $this->fail(422, 'INVALID_FIT', '피팅 요청을 확인해주세요.');
+            $this->fail(422, 'INVALID_FIT', '요청 내용을 확인해주세요.');
         }
         if (!empty($input['part']) && !isset(self::PARTS[$input['part']])) $this->fail(422, 'INVALID_FIT', '부위를 다시 골라주세요.');
+        $options = [];
+        foreach (self::OPTIONS[$type] as $key => $allowed) {
+            if (array_key_exists($key, $input['options'] ?? [])) {
+                $v = $input['options'][$key];
+                if (!in_array($v, $allowed, true)) $this->fail(422, 'INVALID_FIT', '옵션을 다시 골라주세요.');
+                $options[$key] = $v;
+            }
+        }
+        // 커버업 진단(기기 계산): 숫자 · 짧은 문자만
+        $meta = [];
+        foreach (['size_ratio', 'dark_ratio', 'covered_ratio'] as $k) {
+            if (isset($input['meta'][$k]) && is_numeric($input['meta'][$k])) $meta[$k] = round((float) $input['meta'][$k], 3);
+        }
+        foreach (['grade', 'size_grade', 'dark_grade', 'color_grade'] as $k) {
+            if (isset($input['meta'][$k]) && in_array($input['meta'][$k], ['good', 'warn', 'hard'], true)) $meta[$k] = $input['meta'][$k];
+        }
+
         $image = ['file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192', 'dimensions:max_width=4096,max_height=4096'];
-        $files = ['composite' => $composite, 'photo' => $photo, 'stencil' => $stencil];
-        $rules = ['composite' => ['required', ...$image], 'photo' => ['nullable', ...$image], 'stencil' => ['nullable', ...$image]];
+        $need = match ($type) {
+            'blend' => ['composite'],
+            'extract' => $local ? ['result', 'photo'] : ['photo'],
+            'fill' => ['photo', 'mask'],
+            'coverup' => ['photo', 'composite', 'mask'],
+        };
+        $rules = [];
+        foreach (['composite', 'photo', 'stencil', 'mask', 'result'] as $k) $rules[$k] = [in_array($k, $need, true) ? 'required' : 'nullable', ...$image];
         if (Validator::make($files, $rules)->fails()) $this->fail(422, 'INVALID_FIT', '사진은 8MB 이하의 JPG·PNG·WebP로 선택해주세요.');
 
         $db = $this->db();
         if ($existing = $db->table('starttoo_fit_results')->where('user_id', $viewer)->where('request_key', $input['request_key'])->first()) {
             return $this->format($existing) + ['remaining' => $this->remaining($viewer)];
         }
+        $source = $input['source'] ?? 'photo';
         $modelId = null;
         $beforePath = null;
-        if ($input['source'] === 'virtual') {
+        if ($type === 'blend' && $source === 'virtual') {
             $model = $db->table('starttoo_fit_models')->where('id', (int) ($input['model_id'] ?? 0))->where('status', 'ready')->first();
             if (!$model) $this->fail(422, 'INVALID_FIT', '가상 모델 사진을 다시 골라주세요.');
             $modelId = (int) $model->id;
             $beforePath = $model->image_path;
-        } elseif (!$photo) {
+        } elseif (empty($files['photo'])) {
             $this->fail(422, 'INVALID_FIT', '사진을 다시 선택해주세요.');
         }
         $artworkId = $input['artwork_id'] ?? null;
         if ($artworkId) {
             $ok = app(Artworks::class)->feedQuery($viewer, 'public')->where('a.id', $artworkId)->where('a.kind', 'design')->exists();
-            if (!$ok) $this->fail(409, 'FIT_STENCIL_UNAVAILABLE', '이 도안은 지금 피팅할 수 없어요. 다른 도안을 골라주세요.');
-        } elseif (!$stencil) {
+            if (!$ok) $this->fail(409, 'FIT_STENCIL_UNAVAILABLE', '이 도안은 지금 쓸 수 없어요. 다른 도안을 골라주세요.');
+        } elseif ($type === 'blend' && empty($files['stencil'])) {
             $this->fail(422, 'INVALID_FIT', '입힐 도안을 골라주세요.');
         }
-        if ($this->remaining($viewer) <= 0) {
-            $this->fail(429, 'FIT_DAILY_LIMIT', '오늘 AI 피팅을 모두 사용했어요. 내일 다시 이용해주세요.');
+        if (!$local) {
+            if ($type === 'fill' && $this->fillUsedToday($viewer)) {
+                $this->fail(429, 'FIT_FILL_LIMIT', '타투 필러는 하루 1번 만들 수 있어요. 내일 다시 이용해주세요.');
+            }
+            if ($this->remaining($viewer) <= 0) {
+                $this->fail(429, 'FIT_DAILY_LIMIT', '오늘 AI 횟수를 모두 사용했어요. 내일 다시 이용해주세요.');
+            }
         }
 
         $photos = app(ArtworkPhotos::class);
         $saved = [];
         try {
-            $saved['input'] = $this->storeTemp($composite);
-            if ($stencil) $saved['stencil'] = $this->storeTemp($stencil);
-            if ($photo) $saved['before'] = $photos->storeBytes((string) $photo->get());
+            // AI 입력: 피팅 · 커버업은 배치 이미지, 추출 · 필러는 사진 원본
+            if (in_array($type, ['blend', 'coverup'], true)) $saved['input'] = $this->storeTemp($files['composite']);
+            elseif (!$local) $saved['input'] = $this->storeTemp($files['photo']);
+            if (!empty($files['stencil'])) $saved['stencil'] = $this->storeTemp($files['stencil']);
+            // 마스크는 결과 화면(비침 보기)에서도 쓰므로 보관한다(PNG 그대로)
+            if (!empty($files['mask'])) $saved['mask'] = $this->storeKeep($files['mask']);
+            if (!empty($files['photo'])) $saved['before'] = $photos->storeBytes((string) $files['photo']->get());
+            if ($local) $saved['result'] = $this->storeKeep($files['result']);
         } catch (Throwable $e) {
             $photos->delete(array_values($saved));
             throw $e;
@@ -391,10 +451,13 @@ class Fittings
         $id = (string) Str::uuid();
         try {
             $db->table('starttoo_fit_results')->insert([
-                'id' => $id, 'user_id' => $viewer, 'request_key' => $input['request_key'], 'artwork_id' => $artworkId,
-                'model_id' => $modelId, 'source' => $input['source'], 'part' => $input['part'] ?? null, 'face' => $input['face'] ?? null,
-                'input_path' => $saved['input'], 'stencil_path' => $saved['stencil'] ?? null,
-                'before_path' => $saved['before'] ?? $beforePath, 'status' => 'processing',
+                'id' => $id, 'user_id' => $viewer, 'request_key' => $input['request_key'], 'type' => $type, 'artwork_id' => $artworkId,
+                'model_id' => $modelId, 'source' => $source, 'part' => $input['part'] ?? null, 'face' => $input['face'] ?? null,
+                'input_path' => $saved['input'] ?? null, 'stencil_path' => $saved['stencil'] ?? null, 'mask_path' => $saved['mask'] ?? null,
+                'before_path' => $saved['before'] ?? $beforePath, 'result_path' => $saved['result'] ?? null,
+                'options' => $options ? json_encode($options, JSON_UNESCAPED_UNICODE) : null,
+                'meta' => $meta ? json_encode($meta) : null, 'cost_units' => $local ? 0 : 1,
+                'status' => $local ? 'ready' : 'processing',
                 'consent_at' => now(), 'created_at' => now(), 'updated_at' => now(),
             ]);
         } catch (QueryException $e) {
@@ -404,13 +467,28 @@ class Fittings
             }
             throw $e;
         }
-        try {
-            \App\Jobs\ProcessStarttooFitResult::dispatch($id);
-        } catch (Throwable $e) {
-            // 큐에 넣지 못해도 결과 조회가 직접 처리한다.
-            report($e);
+        if (!$local) {
+            try {
+                \App\Jobs\ProcessStarttooFitResult::dispatch($id);
+            } catch (Throwable $e) {
+                // 큐에 넣지 못해도 결과 조회가 직접 처리한다.
+                report($e);
+            }
         }
         return $this->format($db->table('starttoo_fit_results')->where('id', $id)->first()) + ['remaining' => $this->remaining($viewer)];
+    }
+
+    /** PNG(투명) 그대로 보관(마스크 · 기기에서 만든 추출 도안). 변환하지 않는다. */
+    private function storeKeep(UploadedFile $file): string
+    {
+        $bytes = (string) $file->get();
+        $info = @getimagesizefromstring($bytes);
+        $ext = ($info['mime'] ?? '') === 'image/png' ? 'png' : 'jpg';
+        $path = 'artwork/starttoo/fit/'.now('Asia/Seoul')->format('Y/m/d').'/'.Str::uuid().'.'.$ext;
+        if (!Storage::disk('starttoo')->put($path, $bytes, ['visibility' => 'private', 'ContentType' => $ext === 'png' ? 'image/png' : 'image/jpeg'])) {
+            $this->fail(503, 'FIT_FAILED', '사진을 저장하지 못했어요. 다시 시도해주세요.');
+        }
+        return $path;
     }
 
     private function storeTemp(UploadedFile $file): string
@@ -432,35 +510,248 @@ class Fittings
             if (!$r || $r->status !== 'processing') return;
             $this->db()->table('starttoo_fit_results')->where('id', $id)->update(['updated_at' => now()]);
             try {
-                $disk = Storage::disk('starttoo');
-                $composite = (string) $disk->get($r->input_path);
-                $stencilBytes = $r->stencil_path ? (string) $disk->get($r->stencil_path) : $this->artworkImage($r->artwork_id);
-                if ($composite === '' || $stencilBytes === '') throw new \RuntimeException('FIT_INPUT_MISSING');
-                $where = '';
-                if ($r->part && isset(self::PARTS[$r->part])) {
-                    $p = self::PARTS[$r->part];
-                    $where = ' on the '.$p['en'].($r->face && isset($p['faces'][$r->face]) ? ' ('.$p['faces'][$r->face].')' : '');
+                if (($r->type ?? 'blend') === 'fill') {
+                    // 필러는 한 번에 1안씩(큐 작업 시간 제한). 3안이 모이기 전에는 다음 작업을 다시 넣는다.
+                    $paths = json_decode((string) $r->result_paths, true) ?: [];
+                    $paths[] = $this->runFillOne($r, count($paths));
+                    if (count($paths) < 3) {
+                        $this->db()->table('starttoo_fit_results')->where('id', $id)->update(['result_paths' => json_encode($paths), 'result_path' => $paths[0], 'updated_at' => now()]);
+                        try { \App\Jobs\ProcessStarttooFitResult::dispatch($id); } catch (Throwable $e) { report($e); }
+                        return;
+                    }
+                    $values = ['result_path' => $paths[0], 'result_paths' => json_encode($paths)];
+                } else {
+                    $values = match ($r->type ?? 'blend') {
+                        'extract' => $this->runExtract($r),
+                        'coverup' => $this->runCoverup($r),
+                        default => $this->runBlend($r),
+                    };
                 }
-                $prompt = 'Image 1 is a photo of a body'.$where.' with a tattoo design roughly overlaid as a flat, semi-transparent sticker to show the intended placement. '
-                    .'Image 2 is the original tattoo design artwork. '
-                    .'Edit image 1 so that the tattoo looks like a real, fully healed tattoo inked into this skin. '
-                    .'Keep exactly the same position, size, rotation and mirroring as the overlay in image 1, and keep the design\'s lines, shapes, shading and colors faithful to image 2 (do not redesign, simplify or add elements). '
-                    .'Ignore any white or paper background of the design: only the ink goes on the skin. '
-                    .'Wrap the ink naturally around the curvature and muscles of the body, follow the skin\'s lighting, shadows, pores and fine texture, with ink sitting under the skin — no sticker edges, outlines, glow or halo. '
-                    .'Do not change anything else: same person, skin tone, pose, background, clothing, framing and aspect ratio. No text, no watermark, no extra tattoos.';
-                $bytes = app(NanoBanana::class)->generate($prompt, [[$composite, $this->mime($composite)], [$stencilBytes, $this->mime($stencilBytes)]]);
-                if ($r->source === 'virtual') $bytes = $this->labelVirtual($bytes);
-                $path = app(ArtworkPhotos::class)->storeBytes($bytes);
-                $this->db()->table('starttoo_fit_results')->where('id', $id)->update(['result_path' => $path, 'status' => 'ready', 'input_path' => null, 'stencil_path' => null, 'updated_at' => now()]);
+                $this->db()->table('starttoo_fit_results')->where('id', $id)->update($values + ['status' => 'ready', 'input_path' => null, 'stencil_path' => null, 'updated_at' => now()]);
             } catch (Throwable $e) {
                 $code = str_starts_with($e->getMessage(), 'FIT_AI_NO_IMAGE') ? 'blocked' : 'ai_failed';
                 report(new \RuntimeException('Fit result failed: '.Str::limit($e->getMessage(), 80)));
                 $this->db()->table('starttoo_fit_results')->where('id', $id)->update(['status' => 'failed', 'error' => $code, 'input_path' => null, 'stencil_path' => null, 'updated_at' => now()]);
             }
             $this->deleteFiles(array_filter([$r->input_path, $r->stencil_path]));
+            $this->announce($id);
         } finally {
             $lock->release();
         }
+    }
+
+    /**
+     * 끝난 작업 알림: 앱이 열려 있으면 소켓(개인 채널), 앱을 나갔으면 푸시(안내 알림 fit_result).
+     * 소켓은 항상 보내고, 푸시는 기기가 알아서 앞에 떠 있을 땐 앱이 무시한다.
+     */
+    private function announce(string $id): void
+    {
+        $r = $this->db()->table('starttoo_fit_results')->where('id', $id)->first();
+        if (!$r || $r->status === 'processing') return;
+        try {
+            event(new \App\Events\StarttooFitChanged((int) $r->user_id, $r->id, $r->type ?? 'blend', $r->status, $this->remaining((int) $r->user_id)));
+        } catch (Throwable $e) {
+            report($e);
+        }
+        try {
+            app(Notifications::class)->notice((int) $r->user_id, 'fit_result', 'fit_result', $r->id, ($r->type ?? 'blend').':'.$r->status);
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
+    // ── 종류별 AI 처리 ───────────────────────────
+
+    private function where(object $r): string
+    {
+        if (!$r->part || !isset(self::PARTS[$r->part])) return '';
+        $p = self::PARTS[$r->part];
+        return ' on the '.$p['en'].($r->face && isset($p['faces'][$r->face]) ? ' ('.$p['faces'][$r->face].')' : '');
+    }
+
+    private function read(?string $path): string
+    {
+        $bytes = $path ? (string) Storage::disk('starttoo')->get($path) : '';
+        if ($bytes === '') throw new \RuntimeException('FIT_INPUT_MISSING');
+        return $bytes;
+    }
+
+    /** 가상 피팅: 배치 이미지 + 원본 도안 → 실제 시술처럼 */
+    private function runBlend(object $r): array
+    {
+        $composite = $this->read($r->input_path);
+        $stencilBytes = $r->stencil_path ? $this->read($r->stencil_path) : $this->artworkImage($r->artwork_id);
+        if ($stencilBytes === '') throw new \RuntimeException('FIT_INPUT_MISSING');
+        $prompt = 'Image 1 is a photo of a body'.$this->where($r).' with a tattoo design roughly overlaid as a flat, semi-transparent sticker to show the intended placement. '
+            .'Image 2 is the original tattoo design artwork. '
+            .'Edit image 1 so that the tattoo looks like a real, fully healed tattoo inked into this skin. '
+            .'Keep exactly the same position, size, rotation and mirroring as the overlay in image 1, and keep the design\'s lines, shapes, shading and colors faithful to image 2 (do not redesign, simplify or add elements). '
+            .'Ignore any white or paper background of the design: only the ink goes on the skin. '
+            .'IMPORTANT: a tattoo exists only on bare skin. Any part of the overlay that falls outside the visible skin — on clothing, straps, hair, the background or past the body\'s edge — must be completely removed, as if the design were cut off exactly at the skin boundary. '
+            .'Never draw ink on fabric or background, and never extend the design beyond the silhouette of the body. '
+            .'Wrap the ink naturally around the curvature and muscles of the body, follow the skin\'s lighting, shadows, pores and fine texture, with ink sitting under the skin — no sticker edges, outlines, glow or halo. '
+            .'Do not change anything else: same person, skin tone, pose, background, clothing, framing and aspect ratio. No text, no watermark, no extra tattoos.';
+        $bytes = app(NanoBanana::class)->generate($prompt, [[$composite, $this->mime($composite)], [$stencilBytes, $this->mime($stencilBytes)]]);
+        if ($r->source === 'virtual') $bytes = $this->labelVirtual($bytes);
+        return ['result_path' => app(ArtworkPhotos::class)->storeBytes($bytes)];
+    }
+
+    /** 도안 추출(명암 · 컬러): 피부 · 조명을 지우고 평평한 도안으로 */
+    private function runExtract(object $r): array
+    {
+        $photo = $this->read($r->input_path);
+        $o = json_decode((string) $r->options, true) ?: [];
+        $color = ($o['extract_type'] ?? 'shade') === 'color';
+        $weight = ['가늘게' => 'thin, delicate', '굵게' => 'bold, thick'][$o['line'] ?? '보통'] ?? 'clean, even';
+        $prompt = 'This is a cropped photo of an existing tattoo on skin. Recreate the exact same tattoo design as a flat, clean tattoo flash artwork on a pure white background. '
+            .'Remove all skin, skin texture, hair, pores, lighting, reflections, shadows and body curvature — output it as if drawn flat on paper, seen straight on. '
+            .'Keep the composition, shapes, proportions and details identical to the tattoo; do not add, remove or redesign any element. '
+            .'Use '.$weight.' line work. '
+            .($color ? 'Keep the original ink colors, clean and saturated, with the same shading. ' : 'Output in black ink only: crisp black outlines with grayscale shading, stippling and dotwork preserved. ')
+            .'No text, no watermark, no border, no extra decoration.';
+        $bytes = app(NanoBanana::class)->generate($prompt, [[$photo, $this->mime($photo)]]);
+        $png = ($o['background'] ?? '투명') === '투명' ? $this->whiteToAlpha($bytes) : $this->toPng($bytes);
+        return ['result_path' => $this->storePng($png)];
+    }
+
+    /** 타투 필러 1안: 칠한 영역만 다시 그리기. 영역 밖은 원본 픽셀로 다시 덮는다. [$n]번째 안(0~2)은 구도를 바꾼다. */
+    private function runFillOne(object $r, int $n): string
+    {
+        $photo = $this->read($r->input_path);
+        $mask = $this->read($r->mask_path);
+        $o = json_decode((string) $r->options, true) ?: [];
+        $style = [
+            '점묘 · 도트' => 'dotwork and stippling gradients', '기하 패턴' => 'geometric patterns (sacred geometry, lines and dots)',
+            '연기 · 구름' => 'black-and-grey smoke and soft clouds', '잎 · 덩굴' => 'leaves, vines and botanical line work',
+            '별 · 우주' => 'stars, small planets and cosmic dust', '바람 · 파도' => 'Japanese irezumi wind bars and waves',
+        ][$o['style'] ?? '점묘 · 도트'] ?? 'dotwork';
+        $density = ['가볍게' => 'light and airy, with plenty of skin showing', '빽빽하게' => 'dense, covering the area heavily'][$o['density'] ?? '보통'] ?? 'medium density';
+        $tone = ($o['follow_tone'] ?? true) ? 'Match the line weight, ink darkness and style of the existing tattoos so it looks like one connected piece. ' : '';
+        $twist = ['', 'Use a different, more open composition. ', 'Use a bolder, more flowing composition. '][$n] ?? '';
+        $prompt = 'Image 1 is a photo of skin'.$this->where($r).' with existing tattoos. Image 2 is a black-and-white mask: the WHITE area is the empty skin to fill. '
+            .'Add tattoo filler (background) work ONLY inside the white mask area: '.$style.', '.$density.'. '.$tone.$twist
+            .'The filler must flow around and connect the existing tattoos without overlapping or changing them. '
+            .'Render it as a real healed tattoo in the skin, following the body curvature and lighting. '
+            .'Do not change anything outside the white area: existing tattoos, skin, background, framing and aspect ratio stay identical. No text, no watermark.';
+        $bytes = app(NanoBanana::class)->generate($prompt, [[$photo, $this->mime($photo)], [$mask, 'image/png']]);
+        return app(ArtworkPhotos::class)->storeBytes($this->keepOutsideMask($photo, $bytes, $mask));
+    }
+
+    /** 커버업: 기존 타투 위에 새 도안을 덮은 모습. 기존 선은 새 도안의 진한 부분 아래로 묻히게. */
+    private function runCoverup(object $r): array
+    {
+        $composite = $this->read($r->input_path);
+        $stencilBytes = $r->stencil_path ? (string) Storage::disk('starttoo')->get($r->stencil_path) : $this->artworkImage($r->artwork_id);
+        $o = json_decode((string) $r->options, true) ?: [];
+        $old = ['컬러' => 'colored', '오래돼서 흐려짐' => 'old, faded'][$o['old_color'] ?? '블랙'] ?? 'black';
+        $prompt = 'Image 1 is a photo of skin'.$this->where($r).' that has an existing '.$old.' tattoo, with a NEW tattoo design roughly overlaid on top as a flat semi-transparent sticker to show the cover-up placement. '
+            .($stencilBytes !== '' ? 'Image 2 is the new design artwork. ' : '')
+            .'Edit image 1 to show a realistic, fully healed cover-up tattoo: the new design inked over the old tattoo at exactly the same position, size and rotation as the overlay. '
+            .'The old tattoo\'s lines should be buried under the darkest, densest parts of the new design, as a skilled cover-up artist would do; where the new design is light, the old ink may faintly show through. '
+            .'Keep the new design faithful (do not redesign it). Follow the skin\'s curvature, lighting and texture. '
+            .'Ink exists only on bare skin: cut off any part of the design that falls on clothing, hair, the background or past the body\'s edge. '
+            .'Do not change anything else: same skin, background, framing and aspect ratio. No text, no watermark.';
+        $images = [[$composite, $this->mime($composite)]];
+        if ($stencilBytes !== '') $images[] = [$stencilBytes, $this->mime($stencilBytes)];
+        $bytes = app(NanoBanana::class)->generate($prompt, $images);
+        return ['result_path' => app(ArtworkPhotos::class)->storeBytes($bytes)];
+    }
+
+    // ── 이미지 처리(GD) ──────────────────────────
+
+    /** AI 결과에서 마스크(흰색) 밖은 원본 사진 픽셀로 되돌린다. 경계는 살짝 부드럽게. */
+    private function keepOutsideMask(string $original, string $generated, string $mask): string
+    {
+        $src = @imagecreatefromstring($original);
+        $gen = @imagecreatefromstring($generated);
+        $msk = @imagecreatefromstring($mask);
+        if (!$src || !$gen || !$msk) return $generated;
+        try {
+            $w = imagesx($src);
+            $h = imagesy($src);
+            // AI 결과 · 마스크를 원본 크기로 맞춘다
+            $g = imagecreatetruecolor($w, $h);
+            imagecopyresampled($g, $gen, 0, 0, 0, 0, $w, $h, imagesx($gen), imagesy($gen));
+            $m = imagecreatetruecolor($w, $h);
+            imagecopyresampled($m, $msk, 0, 0, 0, 0, $w, $h, imagesx($msk), imagesy($msk));
+            imagefilter($m, IMG_FILTER_GAUSSIAN_BLUR);
+            for ($y = 0; $y < $h; $y++) {
+                for ($x = 0; $x < $w; $x++) {
+                    $a = ((imagecolorat($m, $x, $y) >> 8) & 0xFF) / 255; // 마스크 밝기(흰색 = AI)
+                    if ($a >= 0.99) continue;
+                    $o = imagecolorat($src, $x, $y);
+                    if ($a <= 0.01) {
+                        imagesetpixel($g, $x, $y, $o);
+                        continue;
+                    }
+                    $n = imagecolorat($g, $x, $y);
+                    $mix = fn ($s) => (int) round((($n >> $s) & 0xFF) * $a + (($o >> $s) & 0xFF) * (1 - $a));
+                    imagesetpixel($g, $x, $y, ($mix(16) << 16) | ($mix(8) << 8) | $mix(0));
+                }
+            }
+            imagedestroy($m);
+            ob_start();
+            imagepng($g);
+            imagedestroy($g);
+            return (string) ob_get_clean();
+        } finally {
+            imagedestroy($src);
+            imagedestroy($gen);
+            imagedestroy($msk);
+        }
+    }
+
+    /** 흰 배경 → 투명(밝을수록 투명). 선 · 명암은 남는다. */
+    private function whiteToAlpha(string $bytes): string
+    {
+        $img = @imagecreatefromstring($bytes);
+        if (!$img) return $bytes;
+        try {
+            $w = imagesx($img);
+            $h = imagesy($img);
+            $out = imagecreatetruecolor($w, $h);
+            imagealphablending($out, false);
+            imagesavealpha($out, true);
+            for ($y = 0; $y < $h; $y++) {
+                for ($x = 0; $x < $w; $x++) {
+                    $c = imagecolorat($img, $x, $y);
+                    $r = ($c >> 16) & 0xFF;
+                    $g = ($c >> 8) & 0xFF;
+                    $b = $c & 0xFF;
+                    $max = max($r, $g, $b);
+                    $min = min($r, $g, $b);
+                    // 흰색에 가까울수록 투명. 채도가 있으면(컬러 잉크) 유지
+                    $white = $min / 255;
+                    $alpha = ($max - $min) > 40 ? 0 : (int) round(max(0, ($white - 0.55) / 0.45) * 127);
+                    imagesetpixel($out, $x, $y, imagecolorallocatealpha($out, $r, $g, $b, min(127, $alpha)));
+                }
+            }
+            ob_start();
+            imagepng($out);
+            imagedestroy($out);
+            return (string) ob_get_clean();
+        } finally {
+            imagedestroy($img);
+        }
+    }
+
+    private function toPng(string $bytes): string
+    {
+        $img = @imagecreatefromstring($bytes);
+        if (!$img) return $bytes;
+        ob_start();
+        imagepng($img);
+        imagedestroy($img);
+        return (string) ob_get_clean();
+    }
+
+    private function storePng(string $png): string
+    {
+        $path = 'artwork/starttoo/fit/'.now('Asia/Seoul')->format('Y/m/d').'/'.Str::uuid().'.png';
+        if (!Storage::disk('starttoo')->put($path, $png, ['visibility' => 'private', 'ContentType' => 'image/png'])) {
+            throw new \RuntimeException('FIT_STORE_FAILED');
+        }
+        return $path;
     }
 
     private function artworkImage(?string $artworkId): string
@@ -526,9 +817,12 @@ class Fittings
     {
         $r = $this->own($viewer, $id);
         $this->db()->table('starttoo_fit_results')->where('id', $id)->delete();
-        $paths = array_filter([$r->input_path, $r->stencil_path]);
+        $paths = array_filter([$r->input_path, $r->stencil_path, $r->mask_path]);
         // 상담에 첨부한 결과 파일은 상담 기록과 함께 남긴다. 가상 모델 사진(before)은 공용이라 지우지 않는다.
-        if (!$r->attached_at) $paths[] = $r->result_path;
+        if (!$r->attached_at) {
+            $paths[] = $r->result_path;
+            foreach (json_decode((string) $r->result_paths, true) ?: [] as $p) $paths[] = $p;
+        }
         if ($r->source === 'photo' && !$r->attached_at) $paths[] = $r->before_path;
         $this->deleteFiles(array_values(array_filter($paths)));
         return ['deleted' => true];
@@ -566,10 +860,17 @@ class Fittings
         $artwork = $r->artwork_id ? $this->db()->table('starttoo_artworks as a')->join('starttoo_users as u', 'u.id', '=', 'a.user_id')
             ->where('a.id', $r->artwork_id)->first(['a.id', 'a.title', 'a.user_id', 'u.nickname']) : null;
         $urls = app(MediaUrls::class);
+        $many = json_decode((string) ($r->result_paths ?? ''), true) ?: [];
         return [
-            'id' => $r->id, 'status' => $r->status, 'error' => $r->error, 'source' => $r->source,
+            'id' => $r->id, 'type' => $r->type ?? 'blend', 'status' => $r->status, 'error' => $r->error, 'source' => $r->source,
             'part' => $r->part, 'face' => $r->face,
             'result_url' => $urls->url($r->result_path, 1600), 'before_url' => $urls->url($r->before_path, 1600),
+            'result_urls' => array_values(array_map(fn ($p) => $urls->url($p, 1600), $many)),
+            'mask_url' => $urls->url($r->mask_path ?? null, 1600),
+            'options' => json_decode((string) ($r->options ?? ''), true) ?: (object) [],
+            'meta' => json_decode((string) ($r->meta ?? ''), true) ?: (object) [],
+            // 필러는 처리 중에도 몇 안이 만들어졌는지 보여준다
+            'progress' => count($many),
             'thumb_url' => $urls->url($r->result_path, 400),
             'artwork' => $artwork ? ['id' => $artwork->id, 'title' => $artwork->title, 'artist_id' => (int) $artwork->user_id, 'artist_nickname' => $artwork->nickname] : null,
             'attached' => $r->attached_at !== null,
