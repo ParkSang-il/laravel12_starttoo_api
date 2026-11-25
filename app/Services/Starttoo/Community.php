@@ -50,8 +50,8 @@ class Community
             'has_more' => $rows->count() > self::PAGE, 'total' => $total,
         ];
         if ($page === 1 && filter_var($input['hot'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
-            // 최근 7일 글 중 좋아요 + 댓글이 가장 많은 글
-            $hot = $this->listQuery($viewer)->where('p.created_at', '>=', now()->subDays(7))
+            // 이번 주(월요일 0시 ~ 지금)에 올라온 글 중 좋아요 + 댓글이 가장 많은 글
+            $hot = $this->listQuery($viewer)->where('p.created_at', '>=', now()->startOfWeek(Carbon::MONDAY))
                 ->whereRaw('(p.like_count + p.comment_count) > 0')
                 ->orderByRaw('(p.like_count + p.comment_count * 2) desc')->orderByDesc('p.id')->select('p.*')->first();
             $out['hot'] = $hot ? $this->format($hot, $viewer) : null;
