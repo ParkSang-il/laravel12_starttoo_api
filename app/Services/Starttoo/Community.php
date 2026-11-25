@@ -55,6 +55,13 @@ class Community
                 ->whereRaw('(p.like_count + p.comment_count) > 0')
                 ->orderByRaw('(p.like_count + p.comment_count * 2) desc')->orderByDesc('p.id')->select('p.*')->first();
             $out['hot'] = $hot ? $this->format($hot, $viewer) : null;
+            // 실시간 인기글: 최근 24시간 동안 받은 좋아요 + 댓글×2가 가장 많은 글(언제 쓴 글이든)
+            $since = now()->subDay()->toDateTimeString();
+            $now = $this->listQuery($viewer)->select('p.*')
+                ->selectRaw('((select count(*) from starttoo_community_likes l where l.post_id = p.id and l.created_at >= ?)'
+                    .' + 2 * (select count(*) from starttoo_community_comments c where c.post_id = p.id and c.moderation_hidden = 0 and c.created_at >= ?)) as recent_score', [$since, $since])
+                ->having('recent_score', '>', 0)->orderByDesc('recent_score')->orderByDesc('p.id')->first();
+            $out['hot_now'] = $now ? $this->format($now, $viewer) : null;
         }
         return $out;
     }
