@@ -312,10 +312,12 @@ class Fittings
         if (!$photo || Validator::make(['photo' => $photo], ['photo' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192']])->fails()) {
             $this->fail(422, 'INVALID_FIT', '사진을 다시 선택해주세요.');
         }
-        // 회원당 분당 · 하루 호출 수 제한(남용 방지)
+        @ini_set('memory_limit', '512M');
+        // 회원당 하루 호출 수 제한(이미지 모델로 마스크를 만들면 1장 비용이 든다). 넘으면 자르지 않고 합성.
+        $limit = (int) config('starttoo.fit_skin_daily_limit', 10);
         $key = 'starttoo:fit-skin:'.$viewer.':'.today()->toDateString();
         $count = (int) Cache::get($key, 0);
-        if ($count >= 60) $this->fail(429, 'FIT_SKIN_LIMIT', '오늘 피부 영역 찾기를 너무 많이 했어요. 내일 다시 시도해주세요.');
+        if ($limit > 0 && $count >= $limit) $this->fail(429, 'FIT_SKIN_LIMIT', '오늘 피부 영역 찾기를 모두 사용했어요. 도안이 옷에 걸치지 않게 놓아주세요.');
         Cache::put($key, $count + 1, now()->endOfDay());
         $bw = $this->buildSkinMask((string) $photo->get());
         return ['mask' => $bw ? base64_encode($this->alphaMask($bw)) : null];
@@ -362,9 +364,10 @@ class Fittings
                 .'Do NOT include clothing, sleeves, straps, fabric, hair, jewelry or background');
         } catch (Throwable $e) {
             report(new \RuntimeException('Fit skin mask failed: '.Str::limit($e->getMessage(), 80)));
-            return null;
+            $items = [];
         }
-        if (!$items) return null;
+        // 텍스트 모델이 영역을 주지 않으면(새 모델은 마스크를 안 줌) 이미지 모델에게 마스크 그림을 받는다
+        if (!$items) return $this->skinMaskByImage($jpeg, $w, $h);
         $out = imagecreatetruecolor($w, $h);
         $white = imagecolorallocate($out, 255, 255, 255);
         $any = false;
@@ -399,6 +402,53 @@ class Fittings
         imagepng($out);
         imagedestroy($out);
         return (string) ob_get_clean();
+    }
+
+    /**
+     * 이미지 모델(나노바나나)로 피부 마스크 그림을 받는다: 맨살 = 흰색, 나머지 = 검정.
+     * 받은 그림을 사진 크기로 맞추고 밝기로 잘라 흑백 PNG 로 만든다. 실패하면 null.
+     */
+    private function skinMaskByImage(string $jpeg, int $w, int $h): ?string
+    {
+        try {
+            $prompt = implode("\n", [
+                'Create a segmentation MASK of this photo. Output an image with exactly the same framing, size and aspect ratio.',
+                '- Paint every pixel of visible BARE HUMAN SKIN (arms, hands, shoulders, legs, torso, neck) pure white (#FFFFFF).',
+                '- Paint EVERYTHING ELSE pure black (#000000): clothing, sleeves, straps, fabric, underwear, hair, jewelry, objects and the background.',
+                '- Flat solid colors only: no gray, no shading, no texture, no outlines, no text. The silhouette of the skin must match the photo exactly — do not move, resize or simplify it.',
+            ]);
+            $bytes = app(NanoBanana::class)->generate($prompt, [[$jpeg, 'image/jpeg']], $this->aspectOf($jpeg));
+            $m = $this->resizedTo($this->matchSize($bytes, $jpeg), $w, $h);
+            if (!$m) return null;
+            $out = imagecreatetruecolor($w, $h);
+            $white = imagecolorallocate($out, 255, 255, 255);
+            $count = 0;
+            for ($y = 0; $y < $h; $y++) {
+                for ($x = 0; $x < $w; $x++) {
+                    $c = imagecolorat($m, $x, $y);
+                    $lum = ((($c >> 16) & 0xFF) * 299 + (($c >> 8) & 0xFF) * 587 + ($c & 0xFF) * 114) / 1000;
+                    if ($lum > 140) {
+                        imagesetpixel($out, $x, $y, $white);
+                        $count++;
+                    }
+                }
+            }
+            imagedestroy($m);
+            // 거의 다 흰색이거나 거의 없으면 마스크로 못 쓴다(AI가 사진을 그대로 돌려준 경우 등)
+            $ratio = $count / max(1, $w * $h);
+            if ($ratio < 0.02 || $ratio > 0.97) {
+                imagedestroy($out);
+                report(new \RuntimeException('Fit skin mask failed: image mask ratio '.round($ratio, 2)));
+                return null;
+            }
+            ob_start();
+            imagepng($out);
+            imagedestroy($out);
+            return (string) ob_get_clean();
+        } catch (Throwable $e) {
+            report(new \RuntimeException('Fit skin mask failed: '.Str::limit($e->getMessage(), 80)));
+            return null;
+        }
     }
 
     /** 흑백 마스크 → 흰색은 불투명 흰색, 검정은 투명(앱이 dstIn 으로 자를 때 씀) */
