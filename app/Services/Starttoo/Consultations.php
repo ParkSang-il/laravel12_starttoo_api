@@ -336,6 +336,8 @@ class Consultations
         if (app(Blocks::class)->between($viewer, $other)) $this->fail(403, 'CONVERSATION_BLOCKED', '차단한 회원과는 메시지를 주고받을 수 없어요.');
         $status = $this->db()->table('starttoo_users')->where('id', $other)->value('status');
         if ($status !== 'active') $this->fail(403, 'CONVERSATION_UNAVAILABLE', '대화 상대가 메시지를 받을 수 없는 상태예요.');
+        // 종료된 상담: 고객이 새 요청서를 보내 새 건이 열릴 때까지 양쪽 모두 보낼 수 없다.
+        if ($room->status === 'closed') $this->fail(403, 'CONSULTATION_CLOSED', '종료된 상담이에요. 새 상담 요청서를 보내면 다시 대화할 수 있어요.');
     }
 
     private function insertMessage(object $room, ?int $sender, ?string $clientId, string $kind, ?string $body, ?array $payload): int
@@ -557,19 +559,22 @@ class Consultations
                 'preview' => $this->preview($last), 'created_at' => $this->time($last->created_at)] : null,
             'last_message_at' => $this->time($r->last_message_at),
             'request' => $request ? $this->requestView($request, $viewer) : null,
-            'can_send' => ($sendBlock = $this->sendBlock($viewer, $otherId, $other->status ?? null)) === null,
+            'can_send' => ($sendBlock = $this->sendBlock($viewer, $otherId, $other->status ?? null, $r->status)) === null,
             // 보낼 수 없는 이유: disabled · withdrawn · unavailable · blocked_by_me · blocked (상대가 차단했는지는 따로 알리지 않는다)
             'send_block' => $sendBlock,
             'ended' => ($other->status ?? null) !== 'active',
-            'case' => $case ? $this->caseBrief($case) : null,
+            'case' => $case ? $this->caseBrief($case, !$asCustomer) : null,
             'last_sender' => $r->last_message_id ? $this->lastSenderRole($r) : null,
         ];
     }
 
-    private function caseBrief(object $k): array
+    /** 종료 사유는 아티스트에게만 보낸다. */
+    private function caseBrief(object $k, bool $asArtist): array
     {
+        $reason = $asArtist ? $k->close_reason : null;
         return ['id' => (int) $k->id, 'status' => $k->status, 'open' => in_array($k->status, self::OPEN, true),
-            'close_reason' => $k->close_reason, 'close_reason_label' => $k->close_reason ? (self::CLOSE_REASONS[$k->close_reason] ?? null) : null,
+            'closed_from' => $k->closed_from ?? null,
+            'close_reason' => $reason, 'close_reason_label' => $reason ? (self::CLOSE_REASONS[$reason] ?? null) : null,
             'closed_at' => $this->time($k->closed_at), 'created_at' => $this->time($k->created_at)];
     }
 
@@ -599,8 +604,9 @@ class Consultations
     }
 
     /**
-     * 아티스트가 진행 중인 상담 건을 종료한다(사유 선택). 대화는 계속할 수 있고,
-     * 고객이 새 요청서를 보내면 같은 대화방에 새 건이 열린다. 이 건의 견적은 「종료」가 된다.
+     * 아티스트가 진행 중인 상담 건을 종료한다(사유 선택, 고객에게는 미노출).
+     * 종료되면 양쪽 모두 메시지를 보낼 수 없고, 고객이 새 요청서를 보내면 같은 대화방에 새 건이 열려 다시 대화한다.
+     * 이 건의 견적은 「종료」가 된다.
      */
     public function close(int $viewer, int $id, array $input): array
     {
@@ -618,10 +624,11 @@ class Consultations
             }
             $now = now();
             $this->db()->table('starttoo_consultation_cases')->where('id', $case->id)
-                ->update(['status' => 'closed', 'close_reason' => $reason, 'closed_at' => $now, 'updated_at' => $now]);
+                ->update(['status' => 'closed', 'close_reason' => $reason, 'closed_from' => $case->status, 'closed_at' => $now, 'updated_at' => $now]);
             $this->db()->table('starttoo_consultations')->where('id', $locked->id)->update(['status' => 'closed']);
             $locked->status = 'closed';
-            $body = '아티스트가 상담을 종료했어요'.($reason && $reason !== 'other' ? ' · '.self::CLOSE_REASONS[$reason] : '');
+            // 종료 사유는 고객에게 보여주지 않는다(아티스트 기록용).
+            $body = '아티스트가 상담을 종료했어요';
             $this->insertMessage($locked, $viewer, null, 'system', $body, ['case_id' => (int) $case->id, 'event' => 'closed']);
         }, 3);
         return $this->summary($viewer, (int) $room->id);
@@ -718,7 +725,7 @@ class Consultations
             ->where('payload->request_id', (int) $request->id)->first(['payload']) : null;
         $images = $requestMessage && $requestMessage->payload ? (json_decode($requestMessage->payload, true)['images'] ?? []) : [];
         return array_merge($row, [
-            'case_id' => (int) $k->id, 'status' => $k->status, 'case' => $this->caseBrief($k), 'current' => $current,
+            'case_id' => (int) $k->id, 'status' => $k->status, 'case' => $this->caseBrief($k, (int) $k->artist_id === $viewer), 'current' => $current,
             'case_updated_at' => $this->time($k->updated_at),
             // 지난 건에는 안 읽은 수를 붙이지 않는다(대화방 하나를 함께 쓰므로 현재 건에만).
             'unread' => $current ? $row['unread'] : 0,
@@ -733,12 +740,12 @@ class Consultations
     }
 
 
-    private function sendBlock(int $viewer, int $other, ?string $otherStatus): ?string
+    private function sendBlock(int $viewer, int $other, ?string $otherStatus, ?string $roomStatus = null): ?string
     {
         if (!$this->enabled()) return 'disabled';
         if ($otherStatus === 'withdrawn') return 'withdrawn';
         if ($otherStatus !== 'active') return 'unavailable';
-        if (!app(Blocks::class)->between($viewer, $other)) return null;
+        if (!app(Blocks::class)->between($viewer, $other)) return $roomStatus === 'closed' ? 'closed' : null;
         $mine = $this->db()->table('starttoo_user_blocks')->where('user_id', $viewer)->where('blocked_user_id', $other)->exists();
         return $mine ? 'blocked_by_me' : 'blocked';
     }
