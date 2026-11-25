@@ -73,23 +73,36 @@ class Fittings
 
     // ── FIT-03B · 03C 가상 모델 ───────────────────
 
-    /** 조건에 맞는 모델 사진. 아직 없으면 생성을 시작하고 status=generating 을 돌려준다(앱이 다시 조회). */
+    /**
+     * 조건에 맞는 모델 사진. 운영자가 올린 사진(starttoo:fit-models-import)을 쓴다.
+     * 톤 · 체형까지 맞는 사진이 없으면 같은 부위 · 면의 사진을 보여 준다(match=near).
+     * STARTTOO_FIT_MODEL_AI=true 일 때만 없는 조건을 나노바나나로 만든다(status=generating).
+     */
     public function models(array $input): array
     {
         $q = $this->modelQuery($input);
-        $rows = $this->db()->table('starttoo_fit_models')->where($q)->where('is_active', true)->orderBy('sort')->get();
-        if ($rows->isEmpty()) {
+        $table = fn (array $where) => $this->db()->table('starttoo_fit_models')->where($where)->where('is_active', true)->orderBy('sort')->orderBy('id')->get();
+        $rows = $table($q);
+        $match = 'exact';
+        if ($rows->where('status', 'ready')->isEmpty() && !config('starttoo.fit_model_ai', false)) {
+            $rows = $table(['part' => $q['part'], 'face' => $q['face']]);
+            $match = 'near';
+        }
+        if ($rows->isEmpty() && config('starttoo.fit_model_ai', false)) {
             $this->assertEnabled();
             $this->queueModels($q);
-            $rows = $this->db()->table('starttoo_fit_models')->where($q)->where('is_active', true)->orderBy('sort')->get();
+            $rows = $table($q);
         }
         // 큐가 늦으면 조회 요청이 한 장씩 직접 만든다.
         $stale = $rows->first(fn ($r) => $r->status === 'pending' && Carbon::parse($r->updated_at)->lt(now()->subSeconds(40)));
-        if ($stale) $this->generateModel((int) $stale->id);
-        $rows = $this->db()->table('starttoo_fit_models')->where($q)->where('is_active', true)->orderBy('sort')->get();
+        if ($stale) {
+            $this->generateModel((int) $stale->id);
+            $rows = $table($q);
+        }
         $letters = range('A', 'Z');
         $ready = $rows->where('status', 'ready')->values();
         return [
+            'match' => $match,
             'status' => $rows->contains('status', 'pending') ? 'generating' : ($ready->isEmpty() ? 'empty' : 'ready'),
             'items' => $ready->map(fn ($r, $i) => [
                 'id' => (int) $r->id, 'name' => '모델 '.($letters[$i] ?? $i + 1), 'kind' => $r->kind, 'light' => $r->light,
@@ -112,10 +125,10 @@ class Fittings
     }
 
     /** 조건 하나의 모델 사진 4장을 생성 대기로 넣고 큐에 보낸다. */
-    public function queueModels(array $q): int
+    public function queueModels(array $q, int $variants = 4): int
     {
         $ids = [];
-        foreach (self::VARIANTS as $i => [$kind, $light]) {
+        foreach (array_slice(self::VARIANTS, 0, max(1, $variants)) as $i => [$kind, $light]) {
             try {
                 $ids[] = $this->db()->table('starttoo_fit_models')->insertGetId($q + [
                     'kind' => $kind, 'light' => $light, 'status' => 'pending', 'sort' => $i, 'is_active' => true,
@@ -165,6 +178,81 @@ class Fittings
         } finally {
             $lock->release();
         }
+    }
+
+    /**
+     * 운영자가 올린 가상 모델 사진 등록. 폴더 구조: {dir}/{부위}/{면}/파일.jpg
+     * 파일 이름에 _ 로 구분해 선택 값을 넣을 수 있다(없으면 기본값):
+     *   톤 1~5(1 밝은 · 3 중간 · 5 짙은, 기본 3) · 체형 슬림/보통/탄탄(기본 보통) · 포즈 정면/살짝비튼/근접(기본 정면) · 조명 자연광/스튜디오/실내(기본 자연광)
+     *   예) 전완/안쪽/모델1_2_슬림_근접.jpg
+     * 등록한 파일은 {dir}/_done 으로 옮긴다. 같은 파일(해시)은 다시 등록하지 않는다.
+     *
+     * @return array{added: int, skipped: int, unknown: array<int, string>}
+     */
+    public function importModels(string $dir): array
+    {
+        $norm = function (string $s): string {
+            if (class_exists(\Normalizer::class)) $s = (string) \Normalizer::normalize($s, \Normalizer::FORM_C);
+            return str_replace(['·', ' ', '-'], '', $s);
+        };
+        $parts = [];
+        foreach (self::PARTS as $label => $def) $parts[$norm($label)] = $label;
+        $builds = array_keys(self::BUILDS);
+        $kinds = ['정면' => '정면', '살짝비튼' => '살짝 비튼', '근접' => '근접'];
+        $lights = ['자연광', '스튜디오', '실내'];
+        $added = 0;
+        $skipped = 0;
+        $unknown = [];
+        $files = \Illuminate\Support\Facades\File::allFiles($dir);
+        foreach ($files as $file) {
+            $rel = str_replace('\\', '/', $file->getRelativePathname());
+            if (str_starts_with($rel, '_done/') || str_starts_with($file->getFilename(), '.')) continue;
+            if (!in_array(strtolower($file->getExtension()), ['jpg', 'jpeg', 'png', 'webp'], true)) continue;
+            $segments = explode('/', $rel);
+            if (count($segments) !== 3) { $unknown[] = $rel; continue; }
+            $part = $parts[$norm($segments[0])] ?? null;
+            $face = null;
+            if ($part) {
+                foreach (array_keys(self::PARTS[$part]['faces']) as $f) if ($norm($f) === $norm($segments[1])) $face = $f;
+            }
+            if (!$part || !$face) { $unknown[] = $rel; continue; }
+            $tone = 2;
+            $build = '보통';
+            $kind = '정면';
+            $light = '자연광';
+            foreach (preg_split('/_/', $norm(pathinfo($segments[2], PATHINFO_FILENAME))) as $token) {
+                if (preg_match('/^[1-5]$/', $token)) $tone = (int) $token - 1;
+                elseif (in_array($token, $builds, true)) $build = $token;
+                elseif (isset($kinds[$token])) $kind = $kinds[$token];
+                elseif (in_array($token, $lights, true)) $light = $token;
+            }
+            $bytes = (string) file_get_contents($file->getPathname());
+            $hash = hash('sha256', $bytes);
+            if ($this->db()->table('starttoo_fit_models')->where('source_hash', $hash)->exists()) {
+                $skipped++;
+            } else {
+                $path = app(ArtworkPhotos::class)->storeBytes($bytes);
+                $sort = (int) $this->db()->table('starttoo_fit_models')->where(compact('part', 'face'))->max('sort') + 1;
+                $this->db()->table('starttoo_fit_models')->insert([
+                    'part' => $part, 'face' => $face, 'tone' => $tone, 'build' => $build, 'kind' => $kind, 'light' => $light,
+                    'image_path' => $path, 'source_hash' => $hash, 'source_name' => $rel, 'status' => 'ready', 'sort' => $sort,
+                    'is_active' => true, 'created_at' => now(), 'updated_at' => now(),
+                ]);
+                $added++;
+            }
+            $done = rtrim($dir, '/').'/_done/'.dirname($rel);
+            \Illuminate\Support\Facades\File::ensureDirectoryExists($done);
+            \Illuminate\Support\Facades\File::move($file->getPathname(), $done.'/'.$file->getFilename());
+        }
+        return compact('added', 'skipped', 'unknown');
+    }
+
+    /** 운영: 모델 사진 끄기(목록에서 빼기). source_name 일부 또는 id */
+    public function deactivateModels(string $match): int
+    {
+        $q = $this->db()->table('starttoo_fit_models');
+        ctype_digit($match) ? $q->where('id', (int) $match) : $q->where('source_name', 'like', '%'.$match.'%');
+        return $q->update(['is_active' => false, 'updated_at' => now()]);
     }
 
     // ── FIT-05 도안 ──────────────────────────────

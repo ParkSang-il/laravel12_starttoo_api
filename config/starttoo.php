@@ -36,8 +36,10 @@ return [
     'identity_provider' => env('STARTTOO_IDENTITY_PROVIDER'),
     // 가상 타투 피팅(나노바나나 = Gemini 이미지 모델). 키는 서버 .env에만 둔다(앱에 넣지 않음).
     'fit_enabled' => (bool) env('STARTTOO_FIT_ENABLED', true),
-    'gemini_api_key' => env('STARTTOO_GEMINI_API_KEY'),
+    'gemini_api_key' => env('STARTTOO_GEMINI_API_KEY', env('STARTTOO_NANOBANANA_API_KEY')),
     'gemini_image_model' => env('STARTTOO_GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image'),
+    // 가상 모델 사진: 기본은 운영자가 올린 사진만(starttoo:fit-models-import). true면 없는 조건을 나노바나나로 생성.
+    'fit_model_ai' => (bool) env('STARTTOO_FIT_MODEL_AI', false),
     // 회원당 하루 AI 합성 횟수(실패는 세지 않음)
     'fit_daily_limit' => (int) env('STARTTOO_FIT_DAILY_LIMIT', 3),
 ];

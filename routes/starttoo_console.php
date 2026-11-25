@@ -301,9 +301,34 @@ Artisan::command('starttoo:bookings-sweep', function () {
 })->purpose('예약 자동 완료·만료');
 \Illuminate\Support\Facades\Schedule::command('starttoo:bookings-sweep')->hourly()->withoutOverlapping();
 
+// 가상 피팅: 운영자가 올린 모델 사진 등록. 폴더 {dir}/{부위}/{면}/파일.jpg (파일 이름 규칙은 Fittings::importModels)
+// 예) php artisan starttoo:fit-models-import fit-models   ·   끄기: --off=파일이름일부 또는 번호
+Artisan::command('starttoo:fit-models-import {dir=fit-models} {--off=}', function () {
+    $F = app(\App\Services\Starttoo\Fittings::class);
+    if ($off = $this->option('off')) {
+        $n = app(ProjectDatabase::class)->run('starttoo', fn () => $F->deactivateModels((string) $off));
+        $this->info("모델 사진 {$n}장을 목록에서 뺐어요.");
+        return 0;
+    }
+    $dir = str_starts_with($this->argument('dir'), '/') ? $this->argument('dir') : base_path($this->argument('dir'));
+    if (!is_dir($dir)) {
+        $this->error("폴더가 없어요: {$this->argument('dir')}");
+        return 1;
+    }
+    $r = app(ProjectDatabase::class)->run('starttoo', fn () => $F->importModels($dir));
+    $this->info("등록 {$r['added']}장 · 이미 있음 {$r['skipped']}장");
+    foreach ($r['unknown'] as $u) $this->warn("건너뜀(부위/면 폴더 확인): {$u}");
+    $counts = app(ProjectDatabase::class)->run('starttoo', fn () => app(ProjectDatabase::class)->database()
+        ->table('starttoo_fit_models')->where('status', 'ready')->where('is_active', true)
+        ->selectRaw('part, face, count(*) as n')->groupBy('part', 'face')->get());
+    foreach ($counts as $c) $this->line("  {$c->part} · {$c->face}: {$c->n}장");
+    return 0;
+})->purpose('가상 피팅 모델 사진 등록');
+
 // 가상 피팅: 가상 모델 사진 미리 생성(나노바나나, 조건당 4장). 조건을 비우면 전체 조합.
 // 예) php artisan starttoo:fit-models --part=전완 --tone=2 --build=보통   ·   --retry 실패한 사진 다시 생성   ·   --dry 개수만
-Artisan::command('starttoo:fit-models {--part=} {--face=} {--tone=} {--build=} {--retry} {--dry}', function () {
+// --one: 조건당 1장(정면 · 자연광)만. 기본 세트 예) --tone=0 --build=보통 --one → 26장
+Artisan::command('starttoo:fit-models {--part=} {--face=} {--tone=} {--build=} {--one} {--retry} {--dry}', function () {
     $F = \App\Services\Starttoo\Fittings::class;
     $r = app(ProjectDatabase::class)->run('starttoo', function () use ($F) {
         $db = app(ProjectDatabase::class)->database();
@@ -328,7 +353,8 @@ Artisan::command('starttoo:fit-models {--part=} {--face=} {--tone=} {--build=} {
                         $q = compact('part', 'face', 'tone', 'build');
                         if ($db->table('starttoo_fit_models')->where($q)->exists()) continue;
                         $combos++;
-                        $queued += $this->option('dry') ? count($F::VARIANTS) : app($F)->queueModels($q);
+                        $n = $this->option('one') ? 1 : count($F::VARIANTS);
+                        $queued += $this->option('dry') ? $n : app($F)->queueModels($q, $n);
                     }
                 }
             }
