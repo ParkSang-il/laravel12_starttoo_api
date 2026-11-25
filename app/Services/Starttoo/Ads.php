@@ -66,8 +66,11 @@ class Ads
             throw new \InvalidArgumentException('승인된 작가 회원 번호가 아니에요.');
         }
         $link = ($in['link'] ?? null) ? trim((string) $in['link']) : null;
-        if ($link !== null && (!str_starts_with($link, '/') || str_starts_with($link, '//') || mb_strlen($link) > 200)) {
-            throw new \InvalidArgumentException('link는 /로 시작하는 앱 안 주소여야 해요. 예) /community/post?id=3');
+        // 앱 안 주소(/로 시작) 또는 앱 밖 웹 주소(https://)
+        $inApp = $link !== null && str_starts_with($link, '/') && !str_starts_with($link, '//');
+        $web = $link !== null && str_starts_with($link, 'https://') && filter_var($link, FILTER_VALIDATE_URL);
+        if ($link !== null && ((!$inApp && !$web) || mb_strlen($link) > 200)) {
+            throw new \InvalidArgumentException('link는 앱 안 주소(/community/post?id=3)나 https:// 웹 주소여야 해요(200자까지).');
         }
         if (!$artist && $link === null) throw new \InvalidArgumentException('--artist 또는 --link 중 하나는 꼭 넣어주세요.');
         $path = null;
