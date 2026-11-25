@@ -254,3 +254,33 @@ Artisan::command('starttoo:realtime-selftest {user : 시험할 회원 번호} {-
     fclose($sock);
     return 1;
 })->purpose('STARTTOO 실시간 종단 시험(비밀값 미출력)');
+
+// 상담 건 점검: 대화방 수 · 건이 없는 대화방 · 상태별 건 수. --fix면 건이 없는 대화방을 현재 상태 그대로 한 건으로 만든다.
+Artisan::command('starttoo:cases-check {--fix}', function () {
+    app(ProjectDatabase::class)->run('starttoo', function () {
+        $db = app(ProjectDatabase::class)->database();
+        $hasTable = $db->getSchemaBuilder()->hasTable('starttoo_consultation_cases');
+        $this->line('cases 테이블='.($hasTable ? '있음' : '없음(마이그레이션 000037 필요)'));
+        if (!$hasTable) return;
+        $this->line('closed_from 칸='.($db->getSchemaBuilder()->hasColumn('starttoo_consultation_cases', 'closed_from') ? '있음' : '없음(000038 필요)'));
+        $rooms = $db->table('starttoo_consultations')->count();
+        $missing = $db->table('starttoo_consultations')->whereNull('current_case_id')->count();
+        $this->line("대화방=$rooms · 건 없는 대화방=$missing · 전체 건=".$db->table('starttoo_consultation_cases')->count());
+        foreach ($db->table('starttoo_consultation_cases')->selectRaw('status, count(*) as n')->groupBy('status')->get() as $row) {
+            $this->line("  {$row->status}={$row->n}");
+        }
+        if (!$missing || !$this->option('fix')) return;
+        foreach ($db->table('starttoo_consultations')->whereNull('current_case_id')->orderBy('id')->get() as $room) {
+            $db->transaction(function () use ($db, $room) {
+                $caseId = $db->table('starttoo_consultation_cases')->insertGetId([
+                    'consultation_id' => $room->id, 'customer_id' => $room->customer_id, 'artist_id' => $room->artist_id,
+                    'status' => $room->status, 'created_at' => $room->created_at, 'updated_at' => $room->last_message_at ?? $room->updated_at,
+                ]);
+                $db->table('starttoo_consultations')->where('id', $room->id)->update(['current_case_id' => $caseId]);
+                $db->table('starttoo_consultation_requests')->where('consultation_id', $room->id)->whereNull('case_id')->update(['case_id' => $caseId]);
+                $db->table('starttoo_quotes')->where('consultation_id', $room->id)->whereNull('case_id')->update(['case_id' => $caseId]);
+            });
+        }
+        $this->info("건 없는 대화방 {$missing}개에 건을 만들었어요.");
+    });
+})->purpose('상담 건 점검(개인정보 없이 숫자만)');
