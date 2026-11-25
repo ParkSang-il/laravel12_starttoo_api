@@ -590,27 +590,105 @@ class Fittings
             .'Do NOT move, shrink, enlarge or re-center the design: every part that is on skin must stay at exactly the same pixel position and scale as in image 1. '
             .'A tattoo exists only on bare skin, so any part of the overlay that falls outside the visible skin (on clothing, straps, hair, the background or past the body\'s edge) is simply cut off at the skin boundary — cropped, not shrunk or relocated. '
             .'Wrap the ink naturally around the curvature and muscles of the body, follow the skin\'s lighting, shadows, pores and fine texture, with ink sitting under the skin — no sticker edges, outlines, glow or halo. '
-            .'Do not change anything else: same person, skin tone, pose, background, clothing, framing and aspect ratio. No text, no watermark, no extra tattoos.';
+            .'This is a local photo edit, not a new image: the person\'s body shape, face, skin tone, muscles, hair, clothing, background, lighting and camera framing must remain pixel-identical; only add ink inside the overlay area. '
+            .'No text, no watermark, no extra tattoos.';
         $bytes = app(NanoBanana::class)->generate($prompt, [[$composite, $this->mime($composite)], [$stencilBytes, $this->mime($stencilBytes)]], $this->aspectOf($composite));
         // 전후 비교가 맞도록 결과를 입력 사진과 같은 크기로 맞춘다(AI는 정해진 비율로만 돌려줌)
         $bytes = $this->matchSize($bytes, $composite);
+        // 모델 · 사진 변조 방지: 도안을 올린 자리 밖은 원본 사진 픽셀로 되돌린다
+        $bytes = $this->protectOriginal($r->before_path, $composite, $bytes);
         if ($r->source === 'virtual') $bytes = $this->labelVirtual($bytes);
         return ['result_path' => app(ArtworkPhotos::class)->storeBytes($bytes)];
     }
 
-    /** 도안 추출(명암 · 컬러): 피부 · 조명을 지우고 평평한 도안으로 */
+    /**
+     * 원본(도안 없는 사진)과 배치 이미지가 다른 곳 = 도안 자리. 그 둘레를 넉넉히 잡아(번짐 · 곡면 여유)
+     * 그 밖은 원본 픽셀로 되돌린다. AI가 얼굴 · 몸 · 배경을 바꿔도 결과에 남지 않는다.
+     */
+    private function protectOriginal(?string $originalPath, string $composite, string $generated): string
+    {
+        try {
+            $original = $originalPath ? (string) Storage::disk('starttoo')->get($originalPath) : '';
+        } catch (Throwable $e) {
+            $original = '';
+        }
+        if ($original === '') return $generated;
+        $mask = $this->diffMask($original, $composite);
+        return $mask === null ? $generated : $this->keepOutsideMask($original, $generated, $mask);
+    }
+
+    /** 두 사진이 다른 곳(흰색)을 작게 계산해 넓히고 부드럽게 한 마스크 PNG */
+    private function diffMask(string $a, string $b): ?string
+    {
+        $ia = @imagecreatefromstring($a);
+        $ib = @imagecreatefromstring($b);
+        if (!$ia || !$ib) return null;
+        try {
+            $w = 320;
+            $h = (int) max(1, round(imagesy($ia) * $w / imagesx($ia)));
+            $sa = imagecreatetruecolor($w, $h);
+            $sb = imagecreatetruecolor($w, $h);
+            imagecopyresampled($sa, $ia, 0, 0, 0, 0, $w, $h, imagesx($ia), imagesy($ia));
+            imagecopyresampled($sb, $ib, 0, 0, 0, 0, $w, $h, imagesx($ib), imagesy($ib));
+            $m = imagecreatetruecolor($w, $h);
+            $white = imagecolorallocate($m, 255, 255, 255);
+            $any = false;
+            for ($y = 0; $y < $h; $y++) {
+                for ($x = 0; $x < $w; $x++) {
+                    $ca = imagecolorat($sa, $x, $y);
+                    $cb = imagecolorat($sb, $x, $y);
+                    $d = abs((($ca >> 16) & 0xFF) - (($cb >> 16) & 0xFF)) + abs((($ca >> 8) & 0xFF) - (($cb >> 8) & 0xFF)) + abs(($ca & 0xFF) - ($cb & 0xFF));
+                    if ($d > 24) {
+                        imagesetpixel($m, $x, $y, $white);
+                        $any = true;
+                    }
+                }
+            }
+            if (!$any) return null;
+            // 넓히기(흐리게 → 조금이라도 밝으면 흰색) 두 번 + 경계 부드럽게
+            for ($k = 0; $k < 2; $k++) {
+                for ($i = 0; $i < 6; $i++) imagefilter($m, IMG_FILTER_GAUSSIAN_BLUR);
+                for ($y = 0; $y < $h; $y++) {
+                    for ($x = 0; $x < $w; $x++) {
+                        if ((imagecolorat($m, $x, $y) & 0xFF) > 8) imagesetpixel($m, $x, $y, $white);
+                    }
+                }
+            }
+            for ($i = 0; $i < 3; $i++) imagefilter($m, IMG_FILTER_GAUSSIAN_BLUR);
+            imagedestroy($sa);
+            imagedestroy($sb);
+            ob_start();
+            imagepng($m);
+            imagedestroy($m);
+            return (string) ob_get_clean();
+        } finally {
+            imagedestroy($ia);
+            imagedestroy($ib);
+        }
+    }
+
+    /**
+     * 도안 추출(라인 · 명암 · 컬러): 사진의 타투를 참고해 평면 도안으로 새로 그린다.
+     * 피부 곡면 · 원근 때문에 휘거나 눌린 선은 원래 의도한 모양(곧은 선 · 둥근 원 · 대칭)으로 되돌린다.
+     */
     private function runExtract(object $r): array
     {
         $photo = $this->read($r->input_path);
         $o = json_decode((string) $r->options, true) ?: [];
-        $color = ($o['extract_type'] ?? 'shade') === 'color';
+        $type = $o['extract_type'] ?? 'shade';
         $weight = ['가늘게' => 'thin, delicate', '굵게' => 'bold, thick'][$o['line'] ?? '보통'] ?? 'clean, even';
-        $prompt = 'This is a cropped photo of an existing tattoo on skin. Recreate the exact same tattoo design as a flat, clean tattoo flash artwork on a pure white background. '
-            .'Remove all skin, skin texture, hair, pores, lighting, reflections, shadows and body curvature — output it as if drawn flat on paper, seen straight on. '
-            .'Keep the composition, shapes, proportions and details identical to the tattoo; do not add, remove or redesign any element. '
-            .'Use '.$weight.' line work. '
-            .($color ? 'Keep the original ink colors, clean and saturated, with the same shading. ' : 'Output in black ink only: crisp black outlines with grayscale shading, stippling and dotwork preserved. ')
-            .'No text, no watermark, no border, no extra decoration.';
+        $style = match ($type) {
+            'line' => 'Output clean black LINE ART only: crisp, continuous black outlines of uniform '.$weight.' weight, no shading, no gray fill, no stippling — like a tattoo stencil. ',
+            'color' => 'Keep the original ink colors, clean and saturated, with the same shading, and '.$weight.' outlines. ',
+            default => 'Output in black ink only: crisp '.$weight.' black outlines with the original grayscale shading, stippling and dotwork. ',
+        };
+        $prompt = 'This is a photo of an existing tattoo on a curved body part (arm, leg or torso), possibly taken at an angle. '
+            .'Use it only as a REFERENCE and redraw the same tattoo design from scratch as a perfectly FLAT, front-facing tattoo flash drawing on a pure white sheet of paper. '
+            .'Undo all distortion caused by the body curvature and the camera angle: lines that should be straight must be straight, circles must be round, symmetric parts must be symmetric, and proportions must look as the artist originally drew them — not wrapped around a limb. '
+            .'Remove all skin, skin texture, hair, pores, lighting, reflections, shadows and blur. '
+            .'Keep the same subject, composition and details; do not add, remove or redesign elements, and fill in parts hidden by the curve consistently with the visible design. '
+            .$style
+            .'Center the design with a small white margin. No text, no watermark, no border, no extra decoration.';
         $bytes = app(NanoBanana::class)->generate($prompt, [[$photo, $this->mime($photo)]]);
         $png = ($o['background'] ?? '투명') === '투명' ? $this->whiteToAlpha($bytes) : $this->toPng($bytes);
         return ['result_path' => $this->storePng($png)];
@@ -656,7 +734,9 @@ class Fittings
         $images = [[$composite, $this->mime($composite)]];
         if ($stencilBytes !== '') $images[] = [$stencilBytes, $this->mime($stencilBytes)];
         $bytes = app(NanoBanana::class)->generate($prompt, $images, $this->aspectOf($composite));
-        return ['result_path' => app(ArtworkPhotos::class)->storeBytes($this->matchSize($bytes, $composite))];
+        // 새 도안 자리 밖은 원본 사진으로 되돌린다(변조 방지)
+        $bytes = $this->protectOriginal($r->before_path, $composite, $this->matchSize($bytes, $composite));
+        return ['result_path' => app(ArtworkPhotos::class)->storeBytes($bytes)];
     }
 
     /** 입력 사진과 가장 가까운 Gemini 지원 비율 */
