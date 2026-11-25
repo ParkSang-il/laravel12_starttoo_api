@@ -547,7 +547,11 @@ class Bookings
         $freeDays = (int) ($b->free_days ?? self::FREE_DAYS);
         $maxChanges = (int) ($b->max_changes ?? self::MAX_CHANGES);
         $parts = collect(app(Artworks::class)->options()['body_parts'])->pluck('label', 'id');
+        // Phase 5 인증 리뷰: 시술 완료 예약의 고객만 쓸 수 있고 예약당 한 건
+        $reviewId = $b->status === 'completed' ? app(Reviews::class)->idForBooking((int) $b->id) : null;
         return [
+            'review_id' => $reviewId,
+            'can_review' => !$asArtist && $b->status === 'completed' && $reviewId === null,
             'id' => (int) $b->id, 'role' => $asArtist ? 'artist' : 'customer', 'status' => $b->status,
             'starts_at' => $at->toIso8601String(), 'change_starts_at' => $b->change_starts_at ? Carbon::parse($b->change_starts_at)->toIso8601String() : null,
             'change_count' => (int) $b->change_count, 'free_days' => $freeDays, 'max_changes' => $maxChanges,

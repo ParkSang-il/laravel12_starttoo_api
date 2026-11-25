@@ -42,6 +42,8 @@ class Shops
             'business_hours' => $shop->business_hours, 'guide' => $shop->guide,
             'counts' => ['works' => (clone $base)->where('a.kind', 'work')->count(),
                 'designs' => (clone $base)->where('a.kind', 'design')->count()],
+            // Phase 5 인증 리뷰 평점 요약(average · total · distribution)
+            'reviews' => app(Reviews::class)->summary($owner, $viewer),
             'social' => app(Follows::class)->state($owner, $viewer),
             'own' => $viewer === $owner,
             'pinned_news' => $this->newsRows($owner)->where('pinned', true)->orderByDesc('id')->limit(1)->get()
