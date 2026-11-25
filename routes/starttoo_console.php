@@ -327,8 +327,9 @@ Artisan::command('starttoo:fit-models-import {dir=fit-models} {--off=}', functio
 
 // 가상 피팅: 가상 모델 사진 미리 생성(나노바나나, 조건당 4장). 조건을 비우면 전체 조합.
 // 예) php artisan starttoo:fit-models --part=전완 --tone=2 --build=보통   ·   --retry 실패한 사진 다시 생성   ·   --dry 개수만
-// --one: 조건당 1장(정면 · 자연광)만. 기본 세트 예) --tone=0 --build=보통 --one → 26장
-Artisan::command('starttoo:fit-models {--part=} {--face=} {--tone=} {--build=} {--one} {--retry} {--dry}', function () {
+// --one: 조건당 1장(정면 · 자연광)만. 기본 세트 예) --gender=female --tone=0 --build=보통 --one → 26장
+// --gender=female|male (기본 female)
+Artisan::command('starttoo:fit-models {--gender=female} {--part=} {--face=} {--tone=} {--build=} {--one} {--retry} {--dry}', function () {
     $F = \App\Services\Starttoo\Fittings::class;
     $r = app(ProjectDatabase::class)->run('starttoo', function () use ($F) {
         $db = app(ProjectDatabase::class)->database();
@@ -350,7 +351,8 @@ Artisan::command('starttoo:fit-models {--part=} {--face=} {--tone=} {--build=} {
                     if ($this->option('tone') !== null && (int) $this->option('tone') !== $tone) continue;
                     foreach (array_keys($F::BUILDS) as $build) {
                         if ($this->option('build') && $this->option('build') !== $build) continue;
-                        $q = compact('part', 'face', 'tone', 'build');
+                        $gender = in_array($this->option('gender'), ['female', 'male'], true) ? $this->option('gender') : 'female';
+                        $q = compact('part', 'face', 'gender', 'tone', 'build');
                         if ($db->table('starttoo_fit_models')->where($q)->exists()) continue;
                         $combos++;
                         $n = $this->option('one') ? 1 : count($F::VARIANTS);

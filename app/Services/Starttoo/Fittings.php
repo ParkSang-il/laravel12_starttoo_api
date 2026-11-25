@@ -36,6 +36,21 @@ class Fittings
     ];
     public const TONES = ['very light fair', 'light medium', 'medium olive', 'medium brown', 'deep dark brown'];
     public const BUILDS = ['슬림' => 'slim', '보통' => 'average', '탄탄' => 'athletic toned'];
+    /**
+     * 부위별 옷차림(안전 필터 PROHIBITED_CONTENT 방지). 상체 · 하체는 운동복을 입혀 부위만 드러낸다.
+     * [여성, 남성]
+     */
+    private const WEAR = [
+        '어깨' => ['wearing a black athletic tank top', 'wearing a black athletic tank top'],
+        '쇄골·가슴' => ['wearing a black high-neck sports bra that fully covers the chest, only the collarbone and upper chest above it visible', 'wearing a black crew-neck t-shirt pulled down slightly at the collar, only the collarbone visible'],
+        '등' => ['wearing a black sports bra and black athletic leggings, photographed from behind', 'wearing black athletic shorts, photographed from behind, upper back bare'],
+        '옆구리' => ['wearing a black sports bra and black athletic leggings, arm raised to show the side ribs', 'wearing black athletic shorts and a black tank top lifted at the side to show the ribs'],
+        '허벅지' => ['wearing black athletic bike shorts', 'wearing black athletic shorts'],
+        '상완' => ['wearing a black sleeveless athletic top', 'wearing a black sleeveless athletic top'],
+        '목' => ['wearing a black crew-neck t-shirt, hair tied up', 'wearing a black crew-neck t-shirt'],
+    ];
+    /** 가상 모델 성별 → 프롬프트 */
+    public const GENDERS = ['female' => 'young adult woman', 'male' => 'young adult man'];
     /** 조건 하나당 만드는 모델 사진(포즈 · 조명) */
     public const VARIANTS = [['정면', '자연광'], ['정면', '스튜디오'], ['살짝 비튼', '실내'], ['근접', '자연광']];
     private const KIND_EN = ['정면' => 'straight-on view', '살짝 비튼' => 'slightly rotated angle', '근접' => 'close-up crop'];
@@ -85,7 +100,9 @@ class Fittings
         $rows = $table($q);
         $match = 'exact';
         if ($rows->where('status', 'ready')->isEmpty() && !config('starttoo.fit_model_ai', false)) {
-            $rows = $table(['part' => $q['part'], 'face' => $q['face']]);
+            // 같은 성별 · 부위 · 면 → 없으면 성별 상관없이 같은 부위 · 면
+            $rows = $table(['part' => $q['part'], 'face' => $q['face'], 'gender' => $q['gender']]);
+            if ($rows->where('status', 'ready')->isEmpty()) $rows = $table(['part' => $q['part'], 'face' => $q['face']]);
             $match = 'near';
         }
         if ($rows->isEmpty() && config('starttoo.fit_model_ai', false)) {
@@ -117,11 +134,13 @@ class Fittings
         $face = (string) ($input['face'] ?? '');
         $build = (string) ($input['build'] ?? '');
         $tone = filter_var($input['tone'] ?? null, FILTER_VALIDATE_INT);
+        // 이전 앱은 성별을 보내지 않는다 → 여성
+        $gender = isset(self::GENDERS[$input['gender'] ?? '']) ? $input['gender'] : 'female';
         if (!isset(self::PARTS[$part]) || !isset(self::PARTS[$part]['faces'][$face]) || !isset(self::BUILDS[$build])
             || $tone === false || $tone < 0 || $tone >= count(self::TONES)) {
             $this->fail(422, 'INVALID_FIT', '가상 모델 조건을 다시 골라주세요.');
         }
-        return ['part' => $part, 'face' => $face, 'tone' => $tone, 'build' => $build];
+        return ['part' => $part, 'face' => $face, 'gender' => $gender, 'tone' => $tone, 'build' => $build];
     }
 
     /** 조건 하나의 모델 사진 4장을 생성 대기로 넣고 큐에 보낸다. */
@@ -164,12 +183,17 @@ class Fittings
             $this->db()->table('starttoo_fit_models')->where('id', $id)->update(['updated_at' => now()]);
             $part = self::PARTS[$m->part] ?? null;
             if (!$part) return;
+            $female = ($m->gender ?? 'male') === 'female';
+            $wear = self::WEAR[$m->part][$female ? 0 : 1] ?? 'wearing simple black clothing that does not cover the area';
             $prompt = sprintf(
-                'A photorealistic photograph of a person\'s %s (%s), %s skin tone, %s body build, %s, %s. '
-                .'Bare clean skin with absolutely no tattoos, marks or jewelry. The %s fills most of the frame and is clearly visible for placing a tattoo. '
-                .'No face visible, plain dark neutral background, simple dark clothing only where needed, natural skin texture and pores. '
+                'A tasteful, non-sexual fitness catalog style photograph for a tattoo placement preview app. '
+                .'A %s\'s %s (%s), clearly %s body, %s skin tone, %s body build, %s, %s. '
+                .'The model is '.$wear.'. '
+                .'The skin on that area is clean with absolutely no tattoos, marks or jewelry. The %s fills most of the frame and is clearly visible for placing a tattoo. '
+                .'No face visible, plain dark neutral background, natural skin texture and pores. '
                 .'No text, no watermark, no logo. Vertical 3:4 portrait framing.',
-                $part['en'], $part['faces'][$m->face] ?? $m->face, self::TONES[(int) $m->tone] ?? 'medium',
+                self::GENDERS[$m->gender ?? 'male'] ?? 'person', $part['en'], $part['faces'][$m->face] ?? $m->face,
+                $female ? 'feminine, smooth, slender' : 'masculine', self::TONES[(int) $m->tone] ?? 'medium',
                 self::BUILDS[$m->build] ?? 'average', self::KIND_EN[$m->kind] ?? 'straight-on view',
                 self::LIGHT_EN[$m->light] ?? 'soft natural daylight', $part['en'],
             );
@@ -189,7 +213,7 @@ class Fittings
     /**
      * 운영자가 올린 가상 모델 사진 등록. 폴더 구조: {dir}/{부위}/{면}/파일.jpg
      * 파일 이름에 _ 로 구분해 선택 값을 넣을 수 있다(없으면 기본값):
-     *   톤 1~5(1 밝은 · 3 중간 · 5 짙은, 기본 3) · 체형 슬림/보통/탄탄(기본 보통) · 포즈 정면/살짝비튼/근접(기본 정면) · 조명 자연광/스튜디오/실내(기본 자연광)
+     *   성별 여/남(기본 여) · 톤 1~5(1 밝은 · 3 중간 · 5 짙은, 기본 3) · 체형 슬림/보통/탄탄(기본 보통) · 포즈 정면/살짝비튼/근접(기본 정면) · 조명 자연광/스튜디오/실내(기본 자연광)
      *   예) 전완/안쪽/모델1_2_슬림_근접.jpg
      * 등록한 파일은 {dir}/_done 으로 옮긴다. 같은 파일(해시)은 다시 등록하지 않는다.
      *
@@ -223,11 +247,14 @@ class Fittings
             }
             if (!$part || !$face) { $unknown[] = $rel; continue; }
             $tone = 2;
+            $gender = 'female';
             $build = '보통';
             $kind = '정면';
             $light = '자연광';
             foreach (preg_split('/_/', $norm(pathinfo($segments[2], PATHINFO_FILENAME))) as $token) {
                 if (preg_match('/^[1-5]$/', $token)) $tone = (int) $token - 1;
+                elseif (in_array($token, ['여', '여자', '여성'], true)) $gender = 'female';
+                elseif (in_array($token, ['남', '남자', '남성'], true)) $gender = 'male';
                 elseif (in_array($token, $builds, true)) $build = $token;
                 elseif (isset($kinds[$token])) $kind = $kinds[$token];
                 elseif (in_array($token, $lights, true)) $light = $token;
@@ -240,7 +267,7 @@ class Fittings
                 $path = app(ArtworkPhotos::class)->storeBytes($bytes);
                 $sort = (int) $this->db()->table('starttoo_fit_models')->where(compact('part', 'face'))->max('sort') + 1;
                 $this->db()->table('starttoo_fit_models')->insert([
-                    'part' => $part, 'face' => $face, 'tone' => $tone, 'build' => $build, 'kind' => $kind, 'light' => $light,
+                    'part' => $part, 'face' => $face, 'gender' => $gender, 'tone' => $tone, 'build' => $build, 'kind' => $kind, 'light' => $light,
                     'image_path' => $path, 'source_hash' => $hash, 'source_name' => $rel, 'status' => 'ready', 'sort' => $sort,
                     'is_active' => true, 'created_at' => now(), 'updated_at' => now(),
                 ]);
