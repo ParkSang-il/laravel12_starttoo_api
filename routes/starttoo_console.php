@@ -300,3 +300,41 @@ Artisan::command('starttoo:bookings-sweep', function () {
     return 0;
 })->purpose('예약 자동 완료·만료');
 \Illuminate\Support\Facades\Schedule::command('starttoo:bookings-sweep')->hourly()->withoutOverlapping();
+
+// 가상 피팅: 가상 모델 사진 미리 생성(나노바나나, 조건당 4장). 조건을 비우면 전체 조합.
+// 예) php artisan starttoo:fit-models --part=전완 --tone=2 --build=보통   ·   --retry 실패한 사진 다시 생성   ·   --dry 개수만
+Artisan::command('starttoo:fit-models {--part=} {--face=} {--tone=} {--build=} {--retry} {--dry}', function () {
+    $F = \App\Services\Starttoo\Fittings::class;
+    $r = app(ProjectDatabase::class)->run('starttoo', function () use ($F) {
+        $db = app(ProjectDatabase::class)->database();
+        if ($this->option('retry')) {
+            $ids = $db->table('starttoo_fit_models')->where('status', 'failed')->pluck('id');
+            if (!$this->option('dry')) {
+                $db->table('starttoo_fit_models')->whereIn('id', $ids)->update(['status' => 'pending', 'updated_at' => now()]);
+                foreach ($ids as $id) \App\Jobs\GenerateStarttooFitModel::dispatch((int) $id);
+            }
+            return ['combos' => 0, 'queued' => count($ids)];
+        }
+        $combos = 0;
+        $queued = 0;
+        foreach ($F::PARTS as $part => $def) {
+            if ($this->option('part') && $this->option('part') !== $part) continue;
+            foreach (array_keys($def['faces']) as $face) {
+                if ($this->option('face') && $this->option('face') !== $face) continue;
+                foreach (array_keys($F::TONES) as $tone) {
+                    if ($this->option('tone') !== null && (int) $this->option('tone') !== $tone) continue;
+                    foreach (array_keys($F::BUILDS) as $build) {
+                        if ($this->option('build') && $this->option('build') !== $build) continue;
+                        $q = compact('part', 'face', 'tone', 'build');
+                        if ($db->table('starttoo_fit_models')->where($q)->exists()) continue;
+                        $combos++;
+                        $queued += $this->option('dry') ? count($F::VARIANTS) : app($F)->queueModels($q);
+                    }
+                }
+            }
+        }
+        return compact('combos', 'queued');
+    });
+    $this->info(($this->option('dry') ? '[미리보기] ' : '')."조건 {$r['combos']}개 · 사진 {$r['queued']}장 생성 대기");
+    return 0;
+})->purpose('가상 피팅 모델 사진 생성');

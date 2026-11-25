@@ -83,12 +83,14 @@ class Consultations
             'memo' => ['nullable', 'string', 'max:1000'],
             'media_ids' => ['sometimes', 'array', 'max:5'],
             'media_ids.*' => ['uuid', 'distinct'],
+            // 가상 피팅 결과 첨부(FIT-07 「상담에 첨부」). 참고 이미지 1장으로 센다.
+            'fit_result_id' => ['nullable', 'uuid'],
             'append' => ['sometimes', 'boolean'],
         ]);
         if ($v->fails()) $this->fail(422, 'INVALID_CONSULTATION', '상담 요청 내용을 확인해주세요.');
         $in = $v->validated();
         $artist = (int) $in['artist_id'];
-        if (empty($in['artwork_id']) && empty($in['media_ids'])) {
+        if (empty($in['artwork_id']) && empty($in['media_ids']) && empty($in['fit_result_id'])) {
             $this->fail(422, 'INVALID_CONSULTATION', '참고 작품이나 참고 이미지를 1장 이상 넣어주세요.');
         }
         // 같은 전송 키로 이미 만든 요청이면 그대로 돌려준다(응답 유실 후 재시도).
@@ -111,7 +113,7 @@ class Consultations
             foreach (['budget' => '예산을', 'preferred_time' => '희망 시기를', 'memo' => '요청 내용을'] as $field => $label) {
                 if (trim((string) ($in[$field] ?? '')) === '') $this->fail(422, 'INVALID_CONSULTATION', "도안 상담은 {$label} 꼭 적어주세요.");
             }
-            if (empty($in['media_ids'])) $this->fail(422, 'INVALID_CONSULTATION', '도안 상담은 참고 이미지를 1장 이상 넣어주세요.');
+            if (empty($in['media_ids']) && empty($in['fit_result_id'])) $this->fail(422, 'INVALID_CONSULTATION', '도안 상담은 참고 이미지를 1장 이상 넣어주세요.');
         }
         $id = $this->db()->transaction(function () use ($viewer, $artist, $in) {
             $now = now();
@@ -134,6 +136,7 @@ class Consultations
                 $caseId = (int) $case->id;
             }
             $paths = app(ArtworkUploads::class)->claim($viewer, array_values($in['media_ids'] ?? []));
+            if (!empty($in['fit_result_id'])) array_unshift($paths, app(Fittings::class)->claimForConsult($viewer, $in['fit_result_id']));
             $requestId = $this->db()->table('starttoo_consultation_requests')->insertGetId([
                 'consultation_id' => $room->id, 'case_id' => $caseId, 'artwork_id' => $in['artwork_id'] ?? null, 'body_part' => $in['body_part'] ?? null,
                 'size' => $in['size'] ?? null, 'budget' => ($in['budget'] ?? '') ?: null, 'preferred_time' => ($in['preferred_time'] ?? '') ?: null,
