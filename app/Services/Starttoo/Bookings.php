@@ -12,7 +12,9 @@ use Illuminate\Validation\Rule;
  * Phase 4 예약(4-01~4-06).
  * - 고객이 상담 건의 유효한 최신 견적으로 날짜·시간을 골라 요청 → 작가 확정(= 예약 확정, 예약금 결제는 Phase 6)
  * - 확정된 예약만 그 시간을 잡는다. 같은 시간 요청은 여러 개 받을 수 있고, 하나를 확정하면 나머지는 자동 거절.
- * - 고객: 일정 변경 요청(1회) · 취소(시술 3일 전까지 무료 안내) / 작가: 확정 · 거절 · 변경 수락·거절 · 시술 완료
+ * - 고객: 일정 변경 요청 · 취소 / 작가: 확정 · 거절 · 변경 수락·거절 · 시술 완료
+ * - 규정(작가 설정, 요청 시점 값을 예약에 저장): 시술 N일 전까지 무료 변경·취소, 일정 변경 M회.
+ *   N일 이내에는 일정 변경 불가(채팅으로 상의), 취소는 가능하지만 작가 환불 규정 안내.
  * - 시술일이 지나면 다음날 자동 완료(스케줄러). 완료되면 상담 건도 완료로 닫힌다.
  * - 상태가 바뀔 때마다 대화방에 안내 메시지(상대에게 푸시)를 남긴다.
  */
@@ -21,7 +23,8 @@ class Bookings
     public const DEFAULT_TIMES = ['11:00', '13:00', '15:00', '17:00'];
     public const DEFAULT_CLOSED = [1]; // 월요일
     public const MAX_DAYS = 90;
-    public const FREE_CANCEL_DAYS = 3;
+    /** 작가가 설정하지 않았을 때의 규정 */
+    public const FREE_DAYS = 3;
     public const MAX_CHANGES = 1;
     public const ACTIVE = ['pending', 'confirmed', 'change_requested'];
     /** 시간을 잡는 상태 */
@@ -45,6 +48,8 @@ class Bookings
         return [
             'closed_weekdays' => $row ? json_decode($row->closed_weekdays, true) : self::DEFAULT_CLOSED,
             'start_times' => $row ? json_decode($row->start_times, true) : self::DEFAULT_TIMES,
+            'free_days' => $row ? (int) ($row->free_days ?? self::FREE_DAYS) : self::FREE_DAYS,
+            'max_changes' => $row ? (int) ($row->max_changes ?? self::MAX_CHANGES) : self::MAX_CHANGES,
         ];
     }
 
@@ -64,6 +69,8 @@ class Bookings
             'closed_weekdays.*' => ['integer', 'between:1,7', 'distinct'],
             'start_times' => ['required', 'array', 'min:1', 'max:12'],
             'start_times.*' => ['string', 'regex:/^([01]\d|2[0-3]):(00|30)$/', 'distinct'],
+            'free_days' => ['required', 'integer', 'between:0,14'],
+            'max_changes' => ['required', 'integer', 'between:0,3'],
         ]);
         if ($v->fails()) $this->fail(422, 'INVALID_BOOKING_SETTINGS', '휴무 요일과 시작 시간을 확인해주세요.');
         $days = array_values(array_unique(array_map('intval', $input['closed_weekdays'])));
@@ -71,7 +78,8 @@ class Bookings
         $times = array_values(array_unique($input['start_times']));
         sort($times);
         $this->db()->table('starttoo_booking_settings')->updateOrInsert(['user_id' => $viewer], [
-            'closed_weekdays' => json_encode($days), 'start_times' => json_encode($times), 'updated_at' => now(),
+            'closed_weekdays' => json_encode($days), 'start_times' => json_encode($times),
+            'free_days' => (int) $input['free_days'], 'max_changes' => (int) $input['max_changes'], 'updated_at' => now(),
         ]);
         return $this->mySettings($viewer);
     }
@@ -161,7 +169,9 @@ class Bookings
                     'message' => '이 상담에는 진행 중인 예약이 있어요.', 'booking_id' => (int) $active->id], 409));
             }
             $this->assertSlot((int) $room->artist_id, $at);
+            $policy = $this->settings((int) $room->artist_id);
             $id = $this->db()->table('starttoo_bookings')->insertGetId([
+                'free_days' => $policy['free_days'], 'max_changes' => $policy['max_changes'],
                 'consultation_id' => $room->id, 'case_id' => $room->current_case_id, 'quote_id' => $quote->id,
                 'customer_id' => $viewer, 'artist_id' => $room->artist_id, 'client_id' => $input['client_id'], 'starts_at' => $at,
                 'status' => 'pending', 'subject' => $quote->subject, 'total' => $quote->total, 'deposit' => $quote->deposit,
@@ -173,13 +183,20 @@ class Bookings
         return $this->format($this->find($id), $viewer);
     }
 
-    /** 4-04 일정 변경 요청(확정된 예약, 1회). 작가가 수락하면 바뀐다. */
+    /** 4-04 일정 변경 요청(확정된 예약, 작가 규정의 횟수 · 무료 변경 기간 안에서). 작가가 수락하면 바뀐다. */
     public function change(int $viewer, int $id, array $input): array
     {
         $at = $this->parseSlot($input);
         return $this->mutate($viewer, $id, 'customer', function ($b) use ($viewer, $at) {
             if ($b->status !== 'confirmed') $this->fail(409, 'BOOKING_STATE', '확정된 예약만 일정을 바꿀 수 있어요.');
-            if ((int) $b->change_count >= self::MAX_CHANGES) $this->fail(409, 'BOOKING_CHANGE_LIMIT', '일정 변경은 1회까지 할 수 있어요. 채팅으로 작가와 상의해주세요.');
+            if ((int) $b->change_count >= (int) $b->max_changes) {
+                $this->fail(409, 'BOOKING_CHANGE_LIMIT', (int) $b->max_changes === 0
+                    ? '이 작가는 일정 변경을 받지 않아요. 채팅으로 상의해주세요.'
+                    : "일정 변경은 {$b->max_changes}회까지 할 수 있어요. 채팅으로 작가와 상의해주세요.");
+            }
+            if ($this->daysLeft($b) < (int) $b->free_days) {
+                $this->fail(409, 'BOOKING_CHANGE_DEADLINE', "시술 {$b->free_days}일 전부터는 일정을 바꿀 수 없어요. 채팅으로 작가와 상의해주세요.");
+            }
             if ($at->equalTo(Carbon::parse($b->starts_at))) $this->fail(422, 'INVALID_BOOKING', '지금 예약과 다른 시간을 골라주세요.');
             $this->assertSlot((int) $b->artist_id, $at, (int) $b->id);
             $this->update($b, ['status' => 'change_requested', 'change_starts_at' => $at]);
@@ -395,12 +412,12 @@ class Bookings
         ];
     }
 
-    /** MY 「다가오는 예약」: 가장 가까운 진행 중 예약 */
-    public function next(int $viewer): ?array
+    /** MY 「다가오는 예약」: 오늘 이후 진행 중 예약을 가까운 순으로 최대 3건 */
+    public function upcoming(int $viewer, int $limit = 3): array
     {
-        $b = $this->db()->table('starttoo_bookings')->where('customer_id', $viewer)->whereIn('status', self::ACTIVE)
-            ->where('starts_at', '>=', today())->orderBy('starts_at')->first();
-        return $b ? $this->format($b, $viewer) : null;
+        return $this->db()->table('starttoo_bookings')->where('customer_id', $viewer)->whereIn('status', self::ACTIVE)
+            ->where('starts_at', '>=', today())->orderBy('starts_at')->limit($limit)->get()
+            ->map(fn ($b) => $this->format($b, $viewer))->all();
     }
 
     // ── 내부 ─────────────────────────────────────
@@ -419,6 +436,12 @@ class Bookings
             $fn($b);
         }, 3);
         return $this->format($this->find($id), $viewer);
+    }
+
+    /** 오늘부터 시술일까지 남은 날 수 */
+    private function daysLeft(object $b): int
+    {
+        return (int) today()->diffInDays(Carbon::parse($b->starts_at)->startOfDay(), false);
     }
 
     private function assertHoldFree(object $b, Carbon $at): void
@@ -473,15 +496,18 @@ class Bookings
         $at = Carbon::parse($b->starts_at);
         $withdrawn = ($other->status ?? null) === 'withdrawn';
         $active = in_array($b->status, self::ACTIVE, true);
-        $daysLeft = (int) today()->diffInDays($at->copy()->startOfDay(), false);
+        $daysLeft = $this->daysLeft($b);
+        $freeDays = (int) ($b->free_days ?? self::FREE_DAYS);
+        $maxChanges = (int) ($b->max_changes ?? self::MAX_CHANGES);
         $parts = collect(app(Artworks::class)->options()['body_parts'])->pluck('label', 'id');
         return [
             'id' => (int) $b->id, 'role' => $asArtist ? 'artist' : 'customer', 'status' => $b->status,
             'starts_at' => $at->toIso8601String(), 'change_starts_at' => $b->change_starts_at ? Carbon::parse($b->change_starts_at)->toIso8601String() : null,
-            'change_count' => (int) $b->change_count, 'can_change' => !$asArtist && $b->status === 'confirmed' && (int) $b->change_count < self::MAX_CHANGES,
+            'change_count' => (int) $b->change_count, 'free_days' => $freeDays, 'max_changes' => $maxChanges,
+            'can_change' => !$asArtist && $b->status === 'confirmed' && (int) $b->change_count < $maxChanges && $daysLeft >= $freeDays,
             'can_cancel' => !$asArtist && $active,
-            // 시술 3일 전까지 무료 취소(예약금 결제는 Phase 6)
-            'free_cancel' => $daysLeft >= self::FREE_CANCEL_DAYS,
+            // 작가 규정: 시술 N일 전까지 무료 변경·취소(예약금 결제는 Phase 6)
+            'free_cancel' => $daysLeft >= $freeDays,
             'can_complete' => $asArtist && in_array($b->status, self::HOLDING, true) && $at->isPast(),
             'subject' => $b->subject, 'total' => (int) $b->total, 'deposit' => (int) $b->deposit, 'duration' => $b->duration,
             'body_part_label' => $request && $request->body_part ? ($parts[$request->body_part] ?? null) : null, 'size' => $request->size ?? null,

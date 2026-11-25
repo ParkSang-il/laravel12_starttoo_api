@@ -18,7 +18,11 @@ class StarttooBookingController extends Controller
 
     public function request(Request $r, Bookings $b, AuthSessions $s, Artworks $a) { return $this->json($b->request($this->viewer($r, $s, $a), $r->all())); }
     public function list(Request $r, Bookings $b, AuthSessions $s, Artworks $a) { return $this->json($b->list($this->viewer($r, $s, $a), $r->query())); }
-    public function next(Request $r, Bookings $b, AuthSessions $s, Artworks $a) { return $this->json(['booking' => $b->next($this->viewer($r, $s, $a))]); }
+    public function next(Request $r, Bookings $b, AuthSessions $s, Artworks $a)
+    {
+        $items = $b->upcoming($this->viewer($r, $s, $a));
+        return $this->json(['items' => $items, 'booking' => $items[0] ?? null]);
+    }
     public function room(Request $r, int $consultation, Bookings $b, AuthSessions $s, Artworks $a) { return $this->json(['booking' => $b->forRoom($this->viewer($r, $s, $a), $consultation)]); }
     public function show(Request $r, int $booking, Bookings $b, AuthSessions $s, Artworks $a) { return $this->json($b->detail($this->viewer($r, $s, $a), $booking)); }
     public function change(Request $r, int $booking, Bookings $b, AuthSessions $s, Artworks $a) { return $this->json($b->change($this->viewer($r, $s, $a), $booking, $r->all())); }
