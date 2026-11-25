@@ -27,19 +27,25 @@ class NanoBanana
         $prompt = 'Give the segmentation masks for '.$what.'. '
             .'Output a JSON list of segmentation masks where each entry contains the 2D bounding box in the key "box_2d", '
             .'the segmentation mask in key "mask", and the text label in the key "label". Use descriptive labels.';
-        $response = Http::connectTimeout(5)->timeout(60)->acceptJson()
+        $send = fn (array $config) => Http::connectTimeout(5)->timeout(60)->acceptJson()
             ->withHeaders(['x-goog-api-key' => $key])
             ->post(sprintf(self::ENDPOINT, rawurlencode($model)), [
                 'contents' => [['role' => 'user', 'parts' => [
                     ['inline_data' => ['mime_type' => $mime, 'data' => base64_encode($bytes)]],
                     ['text' => $prompt],
                 ]]],
-                // 분할은 생각(thinking)을 끄는 편이 정확하다(Gemini 문서 권장)
-                'generationConfig' => ['temperature' => 0.2, 'thinkingConfig' => ['thinkingBudget' => 0], 'responseMimeType' => 'application/json'],
+                'generationConfig' => $config,
             ]);
+        // 분할은 생각(thinking)을 끄는 편이 정확하다(2.5 계열). 최신 모델은 이 옵션을 받지 않을 수 있어
+        // 400 이면 옵션을 빼고 한 번 더 보낸다.
+        $base = ['temperature' => 0.2, 'responseMimeType' => 'application/json'];
+        $response = $send($base + ['thinkingConfig' => ['thinkingBudget' => 0]]);
+        if ($response->status() === 400) $response = $send($base);
         if (!$response->successful()) {
+            // 상태 코드 + Google 오류 이유(짧게). 키 · 이미지는 남기지 않는다.
             $reason = (string) $response->json('error.status', '');
-            throw new RuntimeException('FIT_SEG_HTTP_'.$response->status().($reason !== '' ? " {$reason}" : ''));
+            $message = mb_substr((string) $response->json('error.message', ''), 0, 160);
+            throw new RuntimeException('FIT_SEG_HTTP_'.$response->status().($reason !== '' ? " {$reason}" : '').($message !== '' ? " | {$message}" : '')." | model={$model}");
         }
         $text = '';
         foreach ((array) $response->json('candidates.0.content.parts', []) as $part) $text .= (string) ($part['text'] ?? '');
