@@ -28,7 +28,7 @@ class Community
 
     /**
      * 5-04 · 5-05 목록. category(없으면 전체) · sort: latest 최신순 · popular 인기순 · comments 댓글순
-     * hot=1이면 첫 장에 「이번 주 인기글」 1건을 같이 준다.
+     * hot=1이면 첫 장에 「실시간 인기글」 1건을 같이 준다.
      */
     public function feed(?int $viewer, array $input): array
     {
@@ -50,18 +50,13 @@ class Community
             'has_more' => $rows->count() > self::PAGE, 'total' => $total,
         ];
         if ($page === 1 && filter_var($input['hot'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
-            // 이번 주(월요일 0시 ~ 지금)에 올라온 글 중 좋아요 + 댓글이 가장 많은 글
-            $hot = $this->listQuery($viewer)->where('p.created_at', '>=', now()->startOfWeek(Carbon::MONDAY))
-                ->whereRaw('(p.like_count + p.comment_count) > 0')
-                ->orderByRaw('(p.like_count + p.comment_count * 2) desc')->orderByDesc('p.id')->select('p.*')->first();
-            $out['hot'] = $hot ? $this->format($hot, $viewer) : null;
             // 실시간 인기글: 최근 24시간 동안 받은 좋아요 + 댓글×2가 가장 많은 글(언제 쓴 글이든)
             $since = now()->subDay()->toDateTimeString();
             $now = $this->listQuery($viewer)->select('p.*')
                 ->selectRaw('((select count(*) from starttoo_community_likes l where l.post_id = p.id and l.created_at >= ?)'
                     .' + 2 * (select count(*) from starttoo_community_comments c where c.post_id = p.id and c.moderation_hidden = 0 and c.created_at >= ?)) as recent_score', [$since, $since])
                 ->having('recent_score', '>', 0)->orderByDesc('recent_score')->orderByDesc('p.id')->first();
-            $out['hot_now'] = $now ? $this->format($now, $viewer) : null;
+            $out['hot'] = $now ? $this->format($now, $viewer) : null;
         }
         return $out;
     }
