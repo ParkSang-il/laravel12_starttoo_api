@@ -585,6 +585,10 @@ class Fittings
                 $options[$key] = $v;
             }
         }
+        // 가상 피팅: 배치 화면에서 고른 농도(0.2~1). AI에 「잉크 진하기」로 알려준다.
+        if ($type === 'blend' && isset($input['opacity']) && is_numeric($input['opacity'])) {
+            $options['opacity'] = round(max(0.2, min(1.0, (float) $input['opacity'])), 2);
+        }
         // 커버업 진단(기기 계산): 숫자 · 짧은 문자만
         $meta = [];
         foreach (['size_ratio', 'dark_ratio', 'covered_ratio'] as $k) {
@@ -800,6 +804,15 @@ class Fittings
         $composite = $this->read($r->input_path);
         $stencilBytes = $r->stencil_path ? $this->read($r->stencil_path) : $this->artworkImage($r->artwork_id);
         if ($stencilBytes === '') throw new \RuntimeException('FIT_INPUT_MISSING');
+        // 농도(배치 화면 슬라이더) → 잉크 진하기 지시. 값이 없으면(이전 앱) 스티커 진하기를 따르라고만 한다.
+        $opacity = (json_decode((string) ($r->options ?? ''), true) ?: [])['opacity'] ?? null;
+        $ink = match (true) {
+            $opacity === null => 'Match the darkness of the sticker in image 1.',
+            $opacity >= 0.85 => 'INK DARKNESS: about '.round($opacity * 100).'% — solid, fully saturated ink, like a fresh bold tattoo that has healed well.',
+            $opacity >= 0.6 => 'INK DARKNESS: about '.round($opacity * 100).'% — medium strength: clearly visible but slightly softened, like a tattoo healed for a year.',
+            $opacity >= 0.4 => 'INK DARKNESS: about '.round($opacity * 100).'% — light and soft: noticeably faded, the skin tone shows through the ink.',
+            default => 'INK DARKNESS: about '.round($opacity * 100).'% — very light and faint, like an old, heavily faded tattoo; do not make it dark or bold.',
+        };
         // 역할 → 입력 → 규칙(번호) → 다시 한 번 핵심. 가장 중요한 「피부에만 · 위치 그대로 · 나머지 그대로」를 처음과 끝에 둔다.
         $prompt = implode("\n", [
             'You are a professional photo retoucher adding a realistic tattoo to an existing photo. This is a small LOCAL EDIT of image 1, not a new image.',
@@ -817,6 +830,7 @@ class Fittings
             '3. SAME DESIGN. Reproduce image 2 faithfully: same lines, details, shading and colors. Do not redesign, simplify, add or remove elements. Ignore the white/paper background of the design — only the ink goes on the skin.',
             '3b. NO BACKGROUND RESIDUE. The sticker may leave a faint rectangle, a slightly darker/lighter box, a hazy tint, smudges or semi-transparent paper color around the artwork. Remove all of that completely: the skin around and between the ink lines must look like the original untouched skin, with no visible box, patch, veil or edge of the sticker. Only the actual drawn ink (lines, shading, color) remains.',
             '4. REALISTIC INK. Bend the ink around the curve of the arm/leg/body, follow the skin\'s lighting, shadows, pores and texture. The ink sits under the skin: no sticker edges, outlines, white halo, glow or shine.',
+            '4b. '.$ink.' Keep this strength for the whole design; do not darken, boost contrast or re-ink it beyond this.',
             '5. NOTHING ELSE CHANGES. The person, face, body shape, muscles, skin tone, hair, clothing, background, lighting, camera angle, framing and image size stay exactly as in image 1.',
             '5b. DO NOT DRAW ANY BODY. Never add, redraw or invent arms, hands, legs or any body part, and never copy the body or skin from image 2 into the photo. The only body in the result is the one already in image 1.',
             '6. No text, no watermark, no logo, no extra tattoos.',
