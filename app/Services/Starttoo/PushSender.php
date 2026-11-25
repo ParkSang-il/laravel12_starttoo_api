@@ -120,6 +120,8 @@ class PushSender
                     'review_new' => '상점에 새 리뷰가 등록됐어요.',
                     'review_reply' => '회원님의 리뷰에 작가 답변이 달렸어요.',
                     'comm_comment' => '회원님의 커뮤니티 글에 새 댓글이 있어요.',
+                    'comm_like' => '회원님의 커뮤니티 글에 새 좋아요가 있어요.',
+                    'comm_reply' => '회원님의 댓글에 새 답글이 있어요.',
                     default => '새 알림이 있어요.',
                 };
                 // 이력에는 본문 원문 대신 안내 문구만 남긴다.
@@ -377,9 +379,15 @@ class PushSender
             $reply = $this->multiline((string) $db->table('starttoo_reviews')->where('id', $n->target_id)->value('reply'));
             return ['💬 작가 답변', $reply !== '' ? "{$name}: ".Str::limit($reply, 80, '…') : "{$name}님이 회원님의 리뷰에 답변을 남겼어요."];
         }
-        if ($n->kind === 'comm_comment') {
+        if ($n->kind === 'comm_comment' || $n->kind === 'comm_reply') {
             $text = $n->comment_id ? $this->multiline((string) $db->table('starttoo_community_comments')->where('id', $n->comment_id)->value('content')) : '';
-            return ['💬 새 댓글', $text !== '' ? "{$name}: ".Str::limit($text, 80, '…') : "{$name}님이 회원님의 글에 댓글을 남겼어요."];
+            $reply = $n->kind === 'comm_reply';
+            return [$reply ? '↩️ 새 답글' : '💬 새 댓글', $text !== '' ? "{$name}: ".Str::limit($text, 80, '…')
+                : ($reply ? "{$name}님이 회원님의 댓글에 답글을 남겼어요." : "{$name}님이 회원님의 글에 댓글을 남겼어요.")];
+        }
+        if ($n->kind === 'comm_like') {
+            $title = Str::limit($this->multiline((string) $db->table('starttoo_community_posts')->where('id', $n->target_id)->value('title')), 40, '…');
+            return ['❤️ 새 좋아요', $title !== '' ? "{$name}님이 「{$title}」 글을 좋아해요." : "{$name}님이 회원님의 글을 좋아해요."];
         }
         return match ($n->kind) {
             'like' => ['❤️ 새 좋아요', "{$name}님이 회원님의 {$target}을 좋아해요."],

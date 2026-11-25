@@ -39,14 +39,16 @@ class Notifications
     public const NOTICE_KINDS = ['artist_review', 'fit_result'];
 
     /** 이전 버전 앱이 모르는 알림 종류(notices=1을 보낸 앱에만 목록에 준다). */
-    public const NEW_KINDS = ['artist_review', 'shop_news', 'fit_result', 'review_new', 'review_reply', 'comm_comment'];
+    public const NEW_KINDS = ['artist_review', 'shop_news', 'fit_result', 'review_new', 'review_reply', 'comm_comment', 'comm_like', 'comm_reply'];
 
     /**
      * Phase 5 알림(소셜 알림 설정을 따른다). 목록에는 notices=3 을 보낸 앱에만 준다.
      * review_new: 내 상점에 새 리뷰(대상 = 리뷰) · review_reply: 내 리뷰에 작가 답변(대상 = 리뷰)
      * comm_comment: 내 커뮤니티 글에 새 댓글(대상 = 글, comment_id = 댓글). kind 칸이 16자라 줄여 쓴다.
+     * comm_like: 내 커뮤니티 글에 새 좋아요(대상 = 글)
+     * comm_reply: 내 커뮤니티 댓글에 새 답글(대상 = 글, comment_id = 답글)
      */
-    public const PHASE5_KINDS = ['review_new', 'review_reply', 'comm_comment'];
+    public const PHASE5_KINDS = ['review_new', 'review_reply', 'comm_comment', 'comm_like', 'comm_reply'];
 
     /**
      * 안내 알림. 소셜 알림 설정과 관계없이 보낸다(계정·심사 안내).
@@ -115,6 +117,29 @@ class Notifications
                             ->whereColumn('ncc.id', 'n.comment_id')->whereRaw('ncc.post_id = CAST(n.target_id AS UNSIGNED)')
                             ->whereColumn('ncc.user_id', 'n.actor_id')->where('ncc.moderation_hidden', false)
                             ->where('ncp.user_id', $viewer)->where('ncp.moderation_hidden', false);
+                    });
+            });
+            // 커뮤니티: 내 댓글에 달린 답글. 지운 · 숨긴 답글 · 댓글 · 글은 안 보인다.
+            $targets->orWhere(function ($community) use ($viewer) {
+                $community->where('n.kind', 'comm_reply')->where('n.target_type', 'community')
+                    ->whereExists(function ($c) use ($viewer) {
+                        $c->selectRaw('1')->from('starttoo_community_comments as nrc')
+                            ->join('starttoo_community_comments as nrp', 'nrp.id', '=', 'nrc.parent_id')
+                            ->join('starttoo_community_posts as nrpost', 'nrpost.id', '=', 'nrc.post_id')
+                            ->whereColumn('nrc.id', 'n.comment_id')->whereRaw('nrc.post_id = CAST(n.target_id AS UNSIGNED)')
+                            ->whereColumn('nrc.user_id', 'n.actor_id')->where('nrc.moderation_hidden', false)
+                            ->where('nrp.user_id', $viewer)->where('nrp.moderation_hidden', false)
+                            ->where('nrpost.moderation_hidden', false);
+                    });
+            });
+            // 커뮤니티: 내 글에 눌린 좋아요. 취소한 좋아요 · 숨긴 글은 안 보인다.
+            $targets->orWhere(function ($community) use ($viewer) {
+                $community->where('n.kind', 'comm_like')->where('n.target_type', 'community')
+                    ->whereExists(function ($l) use ($viewer) {
+                        $l->selectRaw('1')->from('starttoo_community_likes as ncl2')
+                            ->join('starttoo_community_posts as nlp', 'nlp.id', '=', 'ncl2.post_id')
+                            ->whereRaw('ncl2.post_id = CAST(n.target_id AS UNSIGNED)')->whereColumn('ncl2.user_id', 'n.actor_id')
+                            ->where('nlp.user_id', $viewer)->where('nlp.moderation_hidden', false);
                     });
             });
             foreach (['artwork' => 'a', 'post' => 'p'] as $type => $alias) {

@@ -151,6 +151,14 @@ class Community
             ]);
         }, 3);
         $p = $this->db()->table('starttoo_community_posts')->where('id', $id)->first();
+        // 글쓴이에게 「새 좋아요」 알림. 좋아요를 취소하면 알림도 거둔다(실패해도 좋아요는 그대로).
+        try {
+            $active
+                ? app(Notifications::class)->emit((int) $p->user_id, $viewer, 'comm_like', 'community', (string) $id)
+                : app(Notifications::class)->withdraw($viewer, 'comm_like', 'community', (string) $id);
+        } catch (\Throwable $e) {
+            report($e);
+        }
         return ['like_count' => (int) $p->like_count, 'liked' => $active];
     }
 
@@ -164,20 +172,38 @@ class Community
             $this->fail(422, 'INVALID_COMMUNITY', '댓글은 1~1000자로 적어주세요.');
         }
         $db = $this->db();
+        // 답글: parent_id = 답할 댓글. 답글에 답하면 맨 위 댓글 아래에 붙는다(한 단계만).
+        $parent = null;
+        if (($input['parent_id'] ?? null) !== null && $input['parent_id'] !== '') {
+            $parent = $db->table('starttoo_community_comments')->where('id', (int) $input['parent_id'])
+                ->where('post_id', $id)->where('moderation_hidden', false)->first();
+            if ($parent && $parent->parent_id !== null) {
+                $parent = $db->table('starttoo_community_comments')->where('id', $parent->parent_id)->where('moderation_hidden', false)->first();
+            }
+            if (!$parent || app(Blocks::class)->between($viewer, (int) $parent->user_id)) {
+                $this->fail(404, 'COMMENT_NOT_FOUND', '답글을 달 댓글을 찾을 수 없어요.');
+            }
+        }
         if (!$db->table('starttoo_community_comments')->where('user_id', $viewer)->where('request_key', $key)->exists()) {
             try {
-                $commentId = $db->transaction(function () use ($db, $viewer, $id, $content, $key) {
+                $commentId = $db->transaction(function () use ($db, $viewer, $id, $content, $key, $parent) {
                     $db->table('starttoo_community_posts')->where('id', $id)->lockForUpdate()->first();
                     $commentId = $db->table('starttoo_community_comments')->insertGetId([
-                        'post_id' => $id, 'user_id' => $viewer, 'request_key' => $key, 'content' => $content,
+                        'post_id' => $id, 'user_id' => $viewer, 'parent_id' => $parent?->id, 'request_key' => $key, 'content' => $content,
                         'created_at' => now(), 'updated_at' => now(),
                     ]);
                     $this->recount($id);
                     return $commentId;
                 }, 3);
-                // 글쓴이에게 「새 댓글」 알림(내 글에 내가 쓴 댓글은 emit이 건너뛴다. 실패해도 댓글은 그대로)
+                // 알림(내가 나에게 쓴 것은 emit이 건너뛴다. 실패해도 댓글은 그대로)
+                // - 답글이면 댓글 쓴 회원에게 「새 답글」
+                // - 글쓴이에게 「새 댓글」(글쓴이가 방금 답글 알림을 받았으면 한 번만)
                 try {
-                    app(Notifications::class)->emit((int) $post->user_id, $viewer, 'comm_comment', 'community', (string) $id, (int) $commentId);
+                    $notifications = app(Notifications::class);
+                    if ($parent) $notifications->emit((int) $parent->user_id, $viewer, 'comm_reply', 'community', (string) $id, (int) $commentId);
+                    if (!$parent || (int) $parent->user_id !== (int) $post->user_id) {
+                        $notifications->emit((int) $post->user_id, $viewer, 'comm_comment', 'community', (string) $id, (int) $commentId);
+                    }
                 } catch (\Throwable $e) {
                     report($e);
                 }
@@ -324,10 +350,15 @@ class Community
             ->where('u.status', 'active')->where('u.moderation_hidden', false);
         app(Blocks::class)->filter($q, 'c.user_id', $viewer);
         $urls = app(MediaUrls::class);
-        return $q->orderByDesc('c.id')->limit(300)
-            ->get(['c.id', 'c.user_id', 'c.content', 'c.created_at', 'u.nickname', 'u.avatar_path', 'u.artist_status'])
-            ->reverse()->values()->map(fn ($c) => [
+        $rows = $q->orderByDesc('c.id')->limit(300)
+            ->get(['c.id', 'c.user_id', 'c.parent_id', 'c.content', 'c.created_at', 'u.nickname', 'u.avatar_path', 'u.artist_status'])
+            ->reverse()->values();
+        // 답글은 맨 위 댓글이 보일 때만 준다(댓글이 숨김 · 차단이면 그 답글도 뺀다)
+        $roots = $rows->whereNull('parent_id')->pluck('id')->map(fn ($v) => (int) $v)->all();
+        return $rows->filter(fn ($c) => $c->parent_id === null || in_array((int) $c->parent_id, $roots, true))
+            ->values()->map(fn ($c) => [
                 'id' => (int) $c->id, 'content' => $c->content,
+                'parent_id' => $c->parent_id === null ? null : (int) $c->parent_id,
                 'author' => ['id' => (int) $c->user_id, 'nickname' => $c->nickname,
                     'avatar_url' => $urls->url($c->avatar_path, 300), 'is_artist' => $c->artist_status === 'approved'],
                 'mine' => $viewer !== null && (int) $c->user_id === $viewer,
