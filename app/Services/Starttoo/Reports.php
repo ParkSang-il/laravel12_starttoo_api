@@ -14,20 +14,32 @@ class Reports
         $viewer = (int) $artworks->ready($token, $sessions)['account']['id'];
         if (is_string($input['details'] ?? null)) $input['details'] = trim($input['details']);
         $validator = Validator::make($input, [
-            'target_type' => ['required', Rule::in(['user', 'artwork', 'post', 'comment', 'post_comment'])], 'target_id' => ['required', 'string', 'max:36'],
+            'target_type' => ['required', Rule::in(['user', 'artwork', 'post', 'comment', 'post_comment', 'message', 'consultation'])], 'target_id' => ['required', 'string', 'max:36'],
             'reason' => ['required', Rule::in(['spam', 'harassment', 'sexual', 'violence', 'illegal', 'rights', 'fraud', 'privacy', 'other'])],
             'details' => ['required_if:reason,other', 'nullable', 'string', 'max:1000'], 'request_key' => ['required', 'uuid'],
         ]);
         if ($validator->fails()) $this->fail(422, 'INVALID_REPORT', '신고 대상·사유와 내용을 확인해주세요.');
         $input = $validator->validated();
         $type = $input['target_type'];
-        if ((in_array($type, ['user', 'comment', 'post_comment'], true) && (!ctype_digit($input['target_id']) || (int) $input['target_id'] < 1))
+        $numeric = ['user', 'comment', 'post_comment', 'message', 'consultation'];
+        if ((in_array($type, $numeric, true) && (!ctype_digit($input['target_id']) || (int) $input['target_id'] < 1))
             || (in_array($type, ['artwork', 'post'], true) && Validator::make(['id' => $input['target_id']], ['id' => ['uuid']])->fails())) {
             $this->fail(422, 'INVALID_REPORT', '신고 대상을 확인해주세요.');
         }
-        if (in_array($type, ['user', 'comment', 'post_comment'], true)) $input['target_id'] = (string) (int) $input['target_id'];
+        if (in_array($type, $numeric, true)) $input['target_id'] = (string) (int) $input['target_id'];
         $db = app(ProjectDatabase::class)->database();
+        // 상담 메시지·대화: 참여자만 신고할 수 있고, 대상은 메시지를 보낸 회원 · 대화 상대.
+        $room = null;
+        if ($type === 'message') {
+            $message = $db->table('starttoo_messages')->where('id', $input['target_id'])->first();
+            if (!$message || $message->sender_id === null) $this->fail(404, 'MESSAGE_NOT_FOUND', '메시지를 찾을 수 없어요.');
+            $room = app(Consultations::class)->room($viewer, (int) $message->consultation_id);
+        } elseif ($type === 'consultation') {
+            $room = app(Consultations::class)->room($viewer, (int) $input['target_id']);
+        }
         $subject = match ($type) {
+            'message' => $message->sender_id,
+            'consultation' => (int) $room->customer_id === $viewer ? (int) $room->artist_id : (int) $room->customer_id,
             'user' => (int) $input['target_id'],
             'comment' => $db->table('starttoo_artwork_comments')->where('id', $input['target_id'])->value('user_id'),
             'post_comment' => $db->table('starttoo_post_comments')->where('id', $input['target_id'])->value('user_id'),
@@ -38,12 +50,23 @@ class Reports
         $subject = (int) $subject;
         if ($subject === $viewer) $this->fail(422, 'CANNOT_REPORT_SELF', '본인이나 본인의 작품은 신고할 수 없어요.');
         $hash = hash('sha256', json_encode(['report', $type, $input['target_id'], $input['reason'], $input['details'] ?? ''], JSON_THROW_ON_ERROR));
-        return $db->transaction(function () use ($db, $token, $sessions, $artworks, $viewer, $subject, $input, $type, $hash) {
+        return $db->transaction(function () use ($db, $token, $sessions, $artworks, $viewer, $subject, $input, $type, $hash, $room) {
             $db->table('starttoo_users')->whereIn('id', [$viewer, $subject])->orderBy('id')->lockForUpdate()->get();
             $artworks->ready($token, $sessions);
             $requests = app(Blocks::class);
             if ($result = $requests->retry($viewer, $input['request_key'], $hash)) return $result;
-            if ($type === 'user') {
+            if ($type === 'message') {
+                $m = $db->table('starttoo_messages')->where('id', $input['target_id'])->first();
+                $snapshot = ['id' => (int) $m->id, 'consultation_id' => (int) $m->consultation_id, 'kind' => $m->kind,
+                    'body' => $m->body, 'payload' => $m->payload, 'created_at' => (string) $m->created_at, 'author_id' => $subject];
+            } elseif ($type === 'consultation') {
+                // 검토용: 접수 시점의 최근 메시지 30건(텍스트·종류만)
+                $recent = $db->table('starttoo_messages')->where('consultation_id', $room->id)->orderByDesc('id')->limit(30)
+                    ->get(['id', 'sender_id', 'kind', 'body', 'created_at'])->reverse()->values();
+                $snapshot = ['id' => (int) $room->id, 'customer_id' => (int) $room->customer_id, 'artist_id' => (int) $room->artist_id,
+                    'messages' => $recent->map(fn ($r) => ['id' => (int) $r->id, 'sender_id' => $r->sender_id === null ? null : (int) $r->sender_id,
+                        'kind' => $r->kind, 'body' => $r->body, 'created_at' => (string) $r->created_at])->all(), 'author_id' => $subject];
+            } elseif ($type === 'user') {
                 $user = app(PublicProfiles::class)->user($subject, $viewer);
                 $snapshot = ['id' => $subject, 'nickname' => $user->nickname, 'bio' => $user->bio ?? ''];
             } elseif (in_array($type, ['comment', 'post_comment'], true)) {
@@ -104,14 +127,17 @@ class Reports
             if (!$record) throw new \InvalidArgumentException('신고를 찾을 수 없습니다.');
             // 앱 변경 작업과 회원 -> 작품 -> 신고 순서로 잠금을 맞춘다.
             $db->table('starttoo_users')->where('id', $record->subject_user_id)->lockForUpdate()->first();
-            $table = match ($record->target_type) { 'user' => 'starttoo_users', 'post' => 'starttoo_posts', 'comment' => 'starttoo_artwork_comments', 'post_comment' => 'starttoo_post_comments', default => 'starttoo_artworks' };
+            $table = match ($record->target_type) { 'user' => 'starttoo_users', 'post' => 'starttoo_posts', 'comment' => 'starttoo_artwork_comments',
+                'post_comment' => 'starttoo_post_comments', 'message' => 'starttoo_messages', 'consultation' => 'starttoo_consultations', default => 'starttoo_artworks' };
+            // 대화 전체 신고는 가릴 대상이 없다: 처리(resolved)·기각만 기록하고, 조치는 메시지·회원 단위로 한다.
+            $conversation = $record->target_type === 'consultation';
             $target = $db->table($table)->where('id', $record->target_id)->lockForUpdate()->first();
             $report = $db->table('starttoo_reports')->where('id', $id)->lockForUpdate()->first();
             if (!$target) throw new \InvalidArgumentException('대상을 찾을 수 없습니다.');
             if ($action === 'dismiss' && $report->status !== 'pending') throw new \InvalidArgumentException('처리 대기 신고만 기각할 수 있습니다.');
-            $before = (bool) $target->moderation_hidden;
-            $hidden = $action === 'dismiss' ? $before : $action === 'hide';
-            if ($action !== 'dismiss') {
+            $before = (bool) ($target->moderation_hidden ?? false);
+            $hidden = $action === 'dismiss' || $conversation ? $before : $action === 'hide';
+            if ($action !== 'dismiss' && !$conversation) {
                 $values = ['moderation_hidden' => $hidden, 'updated_at' => now()];
                 if (in_array($record->target_type, ['artwork', 'post'], true)) $values['version'] = $target->version + 1;
                 $db->table($table)->where('id', $record->target_id)->update($values);

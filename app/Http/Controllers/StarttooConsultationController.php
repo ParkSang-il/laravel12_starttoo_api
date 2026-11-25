@@ -25,6 +25,16 @@ class StarttooConsultationController extends Controller
         return $this->json($c->list($this->viewer($request, $sessions, $artworks), $request->query()));
     }
 
+    public function cases(Request $request, Consultations $c, AuthSessions $sessions, Artworks $artworks)
+    {
+        return $this->json($c->cases($this->viewer($request, $sessions, $artworks), $request->query()));
+    }
+
+    public function close(Request $request, int $consultation, Consultations $c, AuthSessions $sessions, Artworks $artworks)
+    {
+        return $this->json($c->close($this->viewer($request, $sessions, $artworks), $consultation, $request->all()));
+    }
+
     public function unread(Request $request, Consultations $c, AuthSessions $sessions, Artworks $artworks)
     {
         return $this->json(['unread_total' => $c->unreadTotal($this->viewer($request, $sessions, $artworks))]);

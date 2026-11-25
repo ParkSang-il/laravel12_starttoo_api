@@ -4,6 +4,7 @@ namespace App\Services\Starttoo;
 
 use App\Services\ProjectDatabase;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
@@ -17,6 +18,17 @@ use Illuminate\Validation\Rule;
 class Consultations
 {
     public const SIZES = ['S', 'M', 'L'];
+    /** 아티스트가 종료할 수 있는(진행 중) 상태 */
+    public const OPEN = ['requested', 'consulting', 'quoted'];
+    /** 새 요청서를 막는(아직 끝나지 않은) 상태. 예약 이후는 Phase 4에서 완료·취소로 닫힌다. */
+    public const ACTIVE = ['requested', 'consulting', 'quoted', 'booked'];
+    public const CLOSE_REASONS = [
+        'schedule' => '일정이 맞지 않아요',
+        'budget' => '예산이 맞지 않아요',
+        'other_artist' => '다른 아티스트와 진행해요',
+        'inquiry_done' => '문의만 하고 마쳤어요',
+        'other' => '기타',
+    ];
     private const PAGE = 30;
     private const UNREAD_CAP = 99;
 
@@ -33,9 +45,10 @@ class Consultations
     public function availability(int $viewer, int $artist): array
     {
         $reason = $this->blockReason($viewer, $artist);
-        $existing = $this->db()->table('starttoo_consultations')->where('customer_id', $viewer)->where('artist_id', $artist)->value('id');
+        $room = $this->db()->table('starttoo_consultations')->where('customer_id', $viewer)->where('artist_id', $artist)->first();
+        // consultation_id: 대화방(있으면 채팅 이어가기) · active_case: 진행 중인 건이 있어 새 요청서는 그 건에 덧붙는다
         return ['enabled' => $this->enabled(), 'can_request' => $reason === null, 'reason' => $reason,
-            'consultation_id' => $existing ? (int) $existing : null];
+            'consultation_id' => $room ? (int) $room->id : null, 'active_case' => $room && $this->activeCase($room) !== null];
     }
 
     /** 새 요청을 받을 수 없는 이유 코드. 없으면 null. */
@@ -86,10 +99,10 @@ class Consultations
             if ($done) return ['consultation' => $this->summary($viewer, (int) $room->id), 'message' => $this->format($done, $viewer)];
         }
         if ($reason = $this->blockReason($viewer, $artist)) $this->fail(403, $reason, $this->reasonMessage($reason));
-        if ($room && empty($in['append'])) {
-            throw new HttpResponseException(response()->json(['code' => 'CONSULTATION_EXISTS',
-                'message' => '이미 이 아티스트와 상담 중인 대화가 있어요. 이어서 보낼까요?', 'consultation_id' => (int) $room->id], 409));
-        }
+        $this->limit('start', $viewer);
+        // 진행 중인 상담 건이 있으면 새 건을 만들지 않고, 그 건에 요청서를 덧붙일지 묻는다.
+        // 종료·완료된 건만 있으면 같은 대화방에 새 건을 연다.
+        if ($room && empty($in['append']) && $this->activeCase($room)) $this->caseExists($room);
         if (!empty($in['artwork_id']) && !$this->visibleArtwork($viewer, $in['artwork_id'])) {
             $this->fail(422, 'INVALID_CONSULTATION', '참고 작품을 확인할 수 없어요. 다시 선택해주세요.');
         }
@@ -99,19 +112,28 @@ class Consultations
                 'customer_id' => $viewer, 'artist_id' => $artist, 'status' => 'requested', 'created_at' => $now, 'updated_at' => $now,
             ]);
             $room = $this->db()->table('starttoo_consultations')->where('customer_id', $viewer)->where('artist_id', $artist)->lockForUpdate()->first();
-            // 동시에 두 번 눌러도 append가 아니면 요청서는 한 번만 들어간다.
-            if (empty($in['append']) && $this->db()->table('starttoo_messages')->where('consultation_id', $room->id)->where('kind', 'request')->exists()) {
-                throw new HttpResponseException(response()->json(['code' => 'CONSULTATION_EXISTS',
-                    'message' => '이미 이 아티스트와 상담 중인 대화가 있어요. 이어서 보낼까요?', 'consultation_id' => (int) $room->id], 409));
+            // 동시에 두 번 눌러도 append가 아니면 진행 중인 건은 하나만 생긴다.
+            $case = $this->activeCase($room, true);
+            if ($case && empty($in['append'])) $this->caseExists($room);
+            if (!$case) {
+                $caseId = $this->db()->table('starttoo_consultation_cases')->insertGetId([
+                    'consultation_id' => $room->id, 'customer_id' => $room->customer_id, 'artist_id' => $room->artist_id,
+                    'status' => 'requested', 'created_at' => $now, 'updated_at' => $now,
+                ]);
+                $this->db()->table('starttoo_consultations')->where('id', $room->id)->update(['current_case_id' => $caseId, 'status' => 'requested']);
+                $room->current_case_id = $caseId;
+                $room->status = 'requested';
+            } else {
+                $caseId = (int) $case->id;
             }
             $paths = app(ArtworkUploads::class)->claim($viewer, array_values($in['media_ids'] ?? []));
             $requestId = $this->db()->table('starttoo_consultation_requests')->insertGetId([
-                'consultation_id' => $room->id, 'artwork_id' => $in['artwork_id'] ?? null, 'body_part' => $in['body_part'] ?? null,
+                'consultation_id' => $room->id, 'case_id' => $caseId, 'artwork_id' => $in['artwork_id'] ?? null, 'body_part' => $in['body_part'] ?? null,
                 'size' => $in['size'] ?? null, 'budget' => ($in['budget'] ?? '') ?: null, 'preferred_time' => ($in['preferred_time'] ?? '') ?: null,
                 'memo' => ($in['memo'] ?? '') ?: null, 'created_at' => $now,
             ]);
             $messageId = $this->insertMessage($room, $viewer, $in['client_id'], 'request', null,
-                ['request_id' => $requestId, 'images' => array_values($paths)]);
+                ['request_id' => $requestId, 'case_id' => $caseId, 'images' => array_values($paths)]);
             return [$room->id, $messageId];
         }, 3);
         [$roomId, $messageId] = $id;
@@ -141,6 +163,7 @@ class Consultations
             ->where('client_id', $in['client_id'])->first();
         if ($done) return $this->format($done, $viewer);
         $this->assertCanSend($viewer, $room);
+        $this->limit('message', $viewer);
         $body = trim((string) ($in['body'] ?? ''));
         if ($in['kind'] === 'text' && $body === '') $this->fail(422, 'INVALID_MESSAGE', '메시지를 입력해주세요.');
         if ($in['kind'] === 'image' && empty($in['media_ids'])) $this->fail(422, 'INVALID_MESSAGE', '보낼 사진을 선택해주세요.');
@@ -159,10 +182,8 @@ class Consultations
             };
             if (!empty($in['quote_id'])) $payload = [...($payload ?? []), 'quote_id' => (int) $in['quote_id']];
             $messageId = $this->insertMessage($locked, $viewer, $in['client_id'], $in['kind'], $body ?: null, $payload);
-            // 작가가 처음 답하면 「상담 중」
-            if ((int) $locked->artist_id === $viewer && $locked->status === 'requested') {
-                $this->db()->table('starttoo_consultations')->where('id', $locked->id)->update(['status' => 'consulting']);
-            }
+            // 작가가 처음 답하면 현재 건이 「상담 중」
+            if ((int) $locked->artist_id === $viewer && $locked->status === 'requested') $this->setCaseStatus($locked, 'consulting');
             return $messageId;
         }, 3);
         return $this->format($this->db()->table('starttoo_messages')->where('id', $messageId)->first(), $viewer);
@@ -225,7 +246,6 @@ class Consultations
     {
         if (Validator::make($input, ['role' => ['nullable', Rule::in(['all', 'customer', 'artist'])],
             'status' => ['nullable', Rule::in(['all', 'requested', 'consulting', 'quoted', 'booked', 'unread', 'ongoing', 'ended'])],
-            'with_counts' => ['sometimes', 'boolean'],
             'cursor' => ['nullable', 'string', 'max:200']])->fails()) $this->fail(422, 'INVALID_MESSAGE_QUERY', '목록 조건을 확인해주세요.');
         $role = $input['role'] ?? 'all';
         $q = $this->baseList($viewer, $role);
@@ -239,34 +259,9 @@ class Consultations
         $rows = $q->orderByDesc('c.last_message_at')->orderByDesc('c.id')->limit(21)->get(['c.*']);
         $page = $rows->take(20);
         $last = $page->last();
-        $out = ['items' => $page->map(fn ($r) => $this->summaryRow($viewer, $r, true))->values()->all(),
+        return ['items' => $page->map(fn ($r) => $this->summaryRow($viewer, $r))->values()->all(),
             'next_cursor' => $rows->count() > 20 ? base64_encode($last->last_message_at.'|'.$last->id) : null,
             'unread_total' => $this->unreadTotal($viewer)];
-        // 3-06·3-07 필터 칩 숫자(첫 페이지에서만)
-        if (filter_var($input['with_counts'] ?? false, FILTER_VALIDATE_BOOLEAN) && empty($input['cursor'])) {
-            $out['counts'] = $this->counts($viewer, $role);
-        }
-        return $out;
-    }
-
-    /** 필터별 상담 수. 종료(ended)는 상대가 탈퇴·정지돼 이어갈 수 없는 대화. 나머지 상태에는 종료를 넣지 않는다. */
-    public function counts(int $viewer, string $role): array
-    {
-        $out = [];
-        foreach (['all', 'requested', 'consulting', 'quoted', 'booked', 'ongoing', 'ended'] as $status) {
-            $q = $this->baseList($viewer, $role);
-            $this->applyStatus($q, $viewer, $status);
-            $out[$status] = $q->count();
-        }
-        return $out;
-    }
-
-    /** 스튜디오 대시보드 「새 상담」: 아직 답하지 않은 요청 수. */
-    public function newRequestCount(int $artist): int
-    {
-        $q = $this->baseList($artist, 'artist');
-        $this->applyStatus($q, $artist, 'requested');
-        return $q->count();
     }
 
     /** 내가 참여한 방(role) 중 차단 관계가 아닌 방. */
@@ -355,6 +350,10 @@ class Consultations
         // 보낸 사람은 자기 메시지까지 읽은 것으로 본다.
         if ($sender !== null) $update[(int) $room->customer_id === $sender ? 'customer_last_read_id' : 'artist_last_read_id'] = $id;
         $this->db()->table('starttoo_consultations')->where('id', $room->id)->update($update);
+        // 진행 중인 건은 대화가 오갈 때마다 관리 목록 위로 올라간다.
+        if (!empty($room->current_case_id)) {
+            $this->db()->table('starttoo_consultation_cases')->where('id', $room->current_case_id)->whereIn('status', self::ACTIVE)->update(['updated_at' => $now]);
+        }
         $this->notify($room, $id, $sender);
         return $id;
     }
@@ -410,28 +409,32 @@ class Consultations
             ->where('client_id', $in['client_id'])->first();
         if ($done) return $this->format($done, $viewer);
         $this->assertCanSend($viewer, $room);
+        $this->limit('quote', $viewer);
         $items = array_map(fn ($i) => ['label' => trim($i['label']), 'amount' => (int) $i['amount']], $in['items']);
         $total = array_sum(array_column($items, 'amount'));
         if ($total > 100000000) $this->fail(422, 'INVALID_QUOTE', '견적 총액이 너무 커요.');
         if ((int) $in['deposit'] > $total) $this->fail(422, 'INVALID_QUOTE_DEPOSIT', '예약금은 총액보다 클 수 없어요.');
         $messageId = $this->db()->transaction(function () use ($viewer, $room, $in, $items, $total) {
             $locked = $this->db()->table('starttoo_consultations')->where('id', $room->id)->lockForUpdate()->first();
+            // 견적은 진행 중인 상담 건에만 보낼 수 있다.
+            $case = $this->activeCase($locked, true);
+            if (!$case || !in_array($case->status, self::OPEN, true)) {
+                $this->fail(409, 'NO_OPEN_CONSULTATION', '진행 중인 상담이 없어요. 고객이 새 요청서를 보내면 견적을 보낼 수 있어요.');
+            }
             $now = now();
             $version = (int) $this->db()->table('starttoo_quotes')->where('consultation_id', $locked->id)->max('version') + 1;
             // 이전 버전은 대체 처리(이력은 남긴다)
             $this->db()->table('starttoo_quotes')->where('consultation_id', $locked->id)->whereNull('superseded_at')->update(['superseded_at' => $now]);
             $quoteId = $this->db()->table('starttoo_quotes')->insertGetId([
-                'consultation_id' => $locked->id, 'version' => $version, 'subject' => trim($in['subject']),
+                'consultation_id' => $locked->id, 'case_id' => $case->id, 'version' => $version, 'subject' => trim($in['subject']),
                 'items' => json_encode($items, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), 'total' => $total,
                 'deposit' => (int) $in['deposit'], 'duration' => ($in['duration'] ?? '') ?: null,
                 'includes' => ($in['includes'] ?? '') ?: null, 'memo' => ($in['memo'] ?? '') ?: null,
                 // 마지막 날 자정까지 유효
                 'valid_until' => $now->copy()->addDays((int) $in['valid_days'])->endOfDay(), 'created_at' => $now,
             ]);
-            $messageId = $this->insertMessage($locked, $viewer, $in['client_id'], 'quote', null, ['quote_id' => $quoteId]);
-            if ($locked->status !== 'booked') {
-                $this->db()->table('starttoo_consultations')->where('id', $locked->id)->update(['status' => 'quoted']);
-            }
+            $messageId = $this->insertMessage($locked, $viewer, $in['client_id'], 'quote', null, ['quote_id' => $quoteId, 'case_id' => (int) $case->id]);
+            $this->setCaseStatus($locked, 'quoted');
             return $messageId;
         }, 3);
         return $this->format($this->db()->table('starttoo_messages')->where('id', $messageId)->first(), $viewer);
@@ -462,6 +465,8 @@ class Consultations
     private function quoteState(object $q): string
     {
         if ($q->superseded_at) return 'superseded';
+        // 종료된 상담 건의 견적으로는 예약할 수 없다.
+        if (!empty($q->case_id) && $this->db()->table('starttoo_consultation_cases')->where('id', $q->case_id)->value('status') === 'closed') return 'closed';
         return now()->greaterThan($q->valid_until) ? 'expired' : 'active';
     }
 
@@ -525,7 +530,7 @@ class Consultations
         return $this->summaryRow($viewer, $this->db()->table('starttoo_consultations')->where('id', $id)->first());
     }
 
-    private function summaryRow(int $viewer, object $r, bool $manage = false): array
+    private function summaryRow(int $viewer, object $r): array
     {
         $asCustomer = (int) $r->customer_id === $viewer;
         $otherId = $asCustomer ? (int) $r->artist_id : (int) $r->customer_id;
@@ -535,7 +540,11 @@ class Consultations
         $unread = $this->db()->table('starttoo_messages')->where('consultation_id', $r->id)->where('id', '>', $myRead)
             ->where(fn ($w) => $w->whereNull('sender_id')->orWhere('sender_id', '<>', $viewer))->limit(self::UNREAD_CAP + 1)->count();
         $last = $r->last_message_id ? $this->db()->table('starttoo_messages')->where('id', $r->last_message_id)->first() : null;
-        $request = $this->db()->table('starttoo_consultation_requests')->where('consultation_id', $r->id)->orderByDesc('id')->first();
+        // 채팅방 상단: 현재 상담 건의 요청서
+        $request = $r->current_case_id
+            ? $this->db()->table('starttoo_consultation_requests')->where('case_id', $r->current_case_id)->orderByDesc('id')->first()
+            : $this->db()->table('starttoo_consultation_requests')->where('consultation_id', $r->id)->orderByDesc('id')->first();
+        $case = $r->current_case_id ? $this->db()->table('starttoo_consultation_cases')->where('id', $r->current_case_id)->first() : null;
         $withdrawn = ($other->status ?? null) === 'withdrawn';
         return [
             'id' => (int) $r->id, 'role' => $asCustomer ? 'customer' : 'artist', 'status' => $r->status,
@@ -548,31 +557,206 @@ class Consultations
                 'preview' => $this->preview($last), 'created_at' => $this->time($last->created_at)] : null,
             'last_message_at' => $this->time($r->last_message_at),
             'request' => $request ? $this->requestView($request, $viewer) : null,
-            'can_send' => $this->enabled() && !$withdrawn && ($other->status ?? null) === 'active' && !app(Blocks::class)->between($viewer, $otherId),
+            'can_send' => ($sendBlock = $this->sendBlock($viewer, $otherId, $other->status ?? null)) === null,
+            // 보낼 수 없는 이유: disabled · withdrawn · unavailable · blocked_by_me · blocked (상대가 차단했는지는 따로 알리지 않는다)
+            'send_block' => $sendBlock,
             'ended' => ($other->status ?? null) !== 'active',
-        ] + ($manage ? $this->manageExtras($r, $asCustomer) : []);
+            'case' => $case ? $this->caseBrief($case) : null,
+            'last_sender' => $r->last_message_id ? $this->lastSenderRole($r) : null,
+        ];
+    }
+
+    private function caseBrief(object $k): array
+    {
+        return ['id' => (int) $k->id, 'status' => $k->status, 'open' => in_array($k->status, self::OPEN, true),
+            'close_reason' => $k->close_reason, 'close_reason_label' => $k->close_reason ? (self::CLOSE_REASONS[$k->close_reason] ?? null) : null,
+            'closed_at' => $this->time($k->closed_at), 'created_at' => $this->time($k->created_at)];
+    }
+
+    // ── 상담 건 ──────────────────────────────────
+
+    /** 현재 건이 아직 끝나지 않았으면(ACTIVE) 그 건. */
+    private function activeCase(object $room, bool $lock = false): ?object
+    {
+        if (empty($room->current_case_id)) return null;
+        $q = $this->db()->table('starttoo_consultation_cases')->where('id', $room->current_case_id)->whereIn('status', self::ACTIVE);
+        return ($lock ? $q->lockForUpdate() : $q)->first();
+    }
+
+    private function caseExists(object $room): never
+    {
+        throw new HttpResponseException(response()->json(['code' => 'CONSULTATION_EXISTS',
+            'message' => '이 아티스트와 진행 중인 상담이 있어요. 요청서를 이어서 보낼까요?', 'consultation_id' => (int) $room->id], 409));
+    }
+
+    /** 현재 건과 대화방 상태를 함께 바꾼다(대화방 status = 현재 건 상태). */
+    private function setCaseStatus(object $room, string $status): void
+    {
+        if (!empty($room->current_case_id)) {
+            $this->db()->table('starttoo_consultation_cases')->where('id', $room->current_case_id)->update(['status' => $status, 'updated_at' => now()]);
+        }
+        $this->db()->table('starttoo_consultations')->where('id', $room->id)->update(['status' => $status]);
     }
 
     /**
-     * 3-06·3-07 카드용: 최신 견적 요약(상대가 확인했는지), 최근 요청서의 참고 이미지 수·썸네일.
+     * 아티스트가 진행 중인 상담 건을 종료한다(사유 선택). 대화는 계속할 수 있고,
+     * 고객이 새 요청서를 보내면 같은 대화방에 새 건이 열린다. 이 건의 견적은 「종료」가 된다.
      */
-    private function manageExtras(object $r, bool $asCustomer): array
+    public function close(int $viewer, int $id, array $input): array
     {
-        $quote = $this->db()->table('starttoo_quotes')->where('consultation_id', $r->id)->orderByDesc('version')->first();
-        $quoteMessage = $quote ? (int) $this->db()->table('starttoo_messages')->where('consultation_id', $r->id)->where('kind', 'quote')
-            ->orderByDesc('id')->value('id') : 0;
-        $requestMessage = $this->db()->table('starttoo_messages')->where('consultation_id', $r->id)->where('kind', 'request')
-            ->orderByDesc('id')->first(['payload']);
+        if (Validator::make($input, ['reason' => ['nullable', Rule::in(array_keys(self::CLOSE_REASONS))]])->fails()) {
+            $this->fail(422, 'INVALID_CLOSE', '종료 사유를 확인해주세요.');
+        }
+        $room = $this->room($viewer, $id);
+        if ((int) $room->artist_id !== $viewer) $this->fail(403, 'CLOSE_ARTIST_ONLY', '상담을 받은 아티스트만 종료할 수 있어요.');
+        $reason = $input['reason'] ?? null;
+        $this->db()->transaction(function () use ($viewer, $room, $reason) {
+            $locked = $this->db()->table('starttoo_consultations')->where('id', $room->id)->lockForUpdate()->first();
+            $case = $this->activeCase($locked, true);
+            if (!$case || !in_array($case->status, self::OPEN, true)) {
+                $this->fail(409, 'NO_OPEN_CONSULTATION', '진행 중인 상담이 없어요.');
+            }
+            $now = now();
+            $this->db()->table('starttoo_consultation_cases')->where('id', $case->id)
+                ->update(['status' => 'closed', 'close_reason' => $reason, 'closed_at' => $now, 'updated_at' => $now]);
+            $this->db()->table('starttoo_consultations')->where('id', $locked->id)->update(['status' => 'closed']);
+            $locked->status = 'closed';
+            $body = '아티스트가 상담을 종료했어요'.($reason && $reason !== 'other' ? ' · '.self::CLOSE_REASONS[$reason] : '');
+            $this->insertMessage($locked, $viewer, null, 'system', $body, ['case_id' => (int) $case->id, 'event' => 'closed']);
+        }, 3);
+        return $this->summary($viewer, (int) $room->id);
+    }
+
+    /**
+     * 3-06 회원 · 3-07 스튜디오 상담 관리: 상담 건마다 한 줄(같은 상대와 여러 건이면 여러 줄).
+     * status: 3-06 ongoing(진행 중) · converted(예약 전환: 예약·완료) · ended(종료: 종료 건 또는 상대 탈퇴·정지) · all
+     *         3-07 requested · consulting · quoted · all
+     */
+    public function cases(int $viewer, array $input): array
+    {
+        if (Validator::make($input, ['role' => ['required', Rule::in(['customer', 'artist'])],
+            'status' => ['nullable', Rule::in(['all', 'requested', 'consulting', 'quoted', 'booked', 'ongoing', 'converted', 'ended'])],
+            'with_counts' => ['sometimes', 'boolean'], 'cursor' => ['nullable', 'string', 'max:200']])->fails()) {
+            $this->fail(422, 'INVALID_MESSAGE_QUERY', '목록 조건을 확인해주세요.');
+        }
+        $role = $input['role'];
+        $q = $this->baseCases($viewer, $role);
+        $this->applyCaseStatus($q, $viewer, $input['status'] ?? 'all');
+        if (!empty($input['cursor'])) {
+            [$at, $cid] = array_pad(explode('|', base64_decode($input['cursor'], true) ?: ''), 2, null);
+            if (!$at || !ctype_digit((string) $cid)) $this->fail(422, 'INVALID_MESSAGE_QUERY', '목록을 다시 불러와주세요.');
+            $q->where(fn ($w) => $w->where('k.updated_at', '<', $at)->orWhere(fn ($s) => $s->where('k.updated_at', $at)->where('k.id', '<', (int) $cid)));
+        }
+        $rows = $q->orderByDesc('k.updated_at')->orderByDesc('k.id')->limit(21)->get(['k.*']);
+        $page = $rows->take(20);
+        $last = $page->last();
+        $out = ['items' => $page->map(fn ($k) => $this->caseRow($viewer, $k))->values()->all(),
+            'next_cursor' => $rows->count() > 20 ? base64_encode($last->updated_at.'|'.$last->id) : null];
+        if (filter_var($input['with_counts'] ?? false, FILTER_VALIDATE_BOOLEAN) && empty($input['cursor'])) {
+            $out['counts'] = $this->caseCounts($viewer, $role);
+        }
+        return $out;
+    }
+
+    public function caseCounts(int $viewer, string $role): array
+    {
+        $out = [];
+        foreach (['all', 'requested', 'consulting', 'quoted', 'booked', 'ongoing', 'converted', 'ended'] as $status) {
+            $q = $this->baseCases($viewer, $role);
+            $this->applyCaseStatus($q, $viewer, $status);
+            $out[$status] = $q->count();
+        }
+        return $out;
+    }
+
+    /** 스튜디오 대시보드 「새 상담」: 아직 답하지 않은 상담 건 수. */
+    public function newRequestCount(int $artist): int
+    {
+        $q = $this->baseCases($artist, 'artist');
+        $this->applyCaseStatus($q, $artist, 'requested');
+        return $q->count();
+    }
+
+    private function baseCases(int $viewer, string $role)
+    {
+        $q = $this->db()->table('starttoo_consultation_cases as k')->where($role === 'artist' ? 'k.artist_id' : 'k.customer_id', $viewer);
+        $other = $role === 'artist' ? 'k.customer_id' : 'k.artist_id';
+        // 차단한·차단당한 상대와의 건은 숨긴다.
+        return $q->whereNotExists(fn ($b) => $b->selectRaw('1')->from('starttoo_user_blocks as sb')
+            ->where(fn ($w) => $w->where(fn ($x) => $x->where('sb.user_id', $viewer)->whereColumn('sb.blocked_user_id', $other))
+                ->orWhere(fn ($x) => $x->where('sb.blocked_user_id', $viewer)->whereColumn('sb.user_id', $other))));
+    }
+
+    private function applyCaseStatus($q, int $viewer, string $status): void
+    {
+        if ($status === 'all') return;
+        $otherActive = fn ($b) => $b->selectRaw('1')->from('starttoo_users as ou')->where('ou.status', 'active')
+            ->whereRaw('ou.id = CASE WHEN k.customer_id = ? THEN k.artist_id ELSE k.customer_id END', [$viewer]);
+        if ($status === 'ended') {
+            $q->where(fn ($w) => $w->where('k.status', 'closed')->orWhereNotExists($otherActive));
+            return;
+        }
+        $q->whereExists($otherActive);
+        match ($status) {
+            'ongoing' => $q->whereIn('k.status', self::OPEN),
+            'converted' => $q->whereIn('k.status', ['booked', 'completed']),
+            default => $q->where('k.status', $status),
+        };
+    }
+
+    /** 관리 목록 한 줄: 대화방 요약(상대·안 읽음·보낼 수 있는지) + 이 건의 요청서·견적·종료 정보. */
+    private function caseRow(int $viewer, object $k): array
+    {
+        $room = $this->db()->table('starttoo_consultations')->where('id', $k->consultation_id)->first();
+        $row = $this->summaryRow($viewer, $room);
+        $current = (int) $room->current_case_id === (int) $k->id;
+        $request = $this->db()->table('starttoo_consultation_requests')->where('case_id', $k->id)->orderBy('id')->first();
+        $quote = $this->db()->table('starttoo_quotes')->where('case_id', $k->id)->orderByDesc('version')->first();
+        $quoteMessage = $quote ? (int) $this->db()->table('starttoo_messages')->where('consultation_id', $room->id)->where('kind', 'quote')
+            ->where('payload->quote_id', (int) $quote->id)->value('id') : 0;
+        $requestMessage = $request ? $this->db()->table('starttoo_messages')->where('consultation_id', $room->id)->where('kind', 'request')
+            ->where('payload->request_id', (int) $request->id)->first(['payload']) : null;
         $images = $requestMessage && $requestMessage->payload ? (json_decode($requestMessage->payload, true)['images'] ?? []) : [];
-        return [
+        return array_merge($row, [
+            'case_id' => (int) $k->id, 'status' => $k->status, 'case' => $this->caseBrief($k), 'current' => $current,
+            'case_updated_at' => $this->time($k->updated_at),
+            // 지난 건에는 안 읽은 수를 붙이지 않는다(대화방 하나를 함께 쓰므로 현재 건에만).
+            'unread' => $current ? $row['unread'] : 0,
+            'request' => $request ? $this->requestView($request, $viewer) : null,
             'latest_quote' => $quote ? ['id' => (int) $quote->id, 'version' => (int) $quote->version, 'subject' => $quote->subject,
                 'total' => (int) $quote->total, 'state' => $this->quoteState($quote), 'valid_until' => $this->time($quote->valid_until),
                 // 견적은 작가가 보내므로 고객이 그 메시지까지 읽었는지
-                'seen' => $quoteMessage > 0 && (int) $r->customer_last_read_id >= $quoteMessage] : null,
+                'seen' => $quoteMessage > 0 && (int) $room->customer_last_read_id >= $quoteMessage] : null,
             'request_image_count' => count($images),
             'request_image_url' => $images ? app(MediaUrls::class)->url($images[0], 300) : null,
-            'last_sender' => $r->last_message_id ? $this->lastSenderRole($r) : null,
-        ];
+        ]);
+    }
+
+
+    private function sendBlock(int $viewer, int $other, ?string $otherStatus): ?string
+    {
+        if (!$this->enabled()) return 'disabled';
+        if ($otherStatus === 'withdrawn') return 'withdrawn';
+        if ($otherStatus !== 'active') return 'unavailable';
+        if (!app(Blocks::class)->between($viewer, $other)) return null;
+        $mine = $this->db()->table('starttoo_user_blocks')->where('user_id', $viewer)->where('blocked_user_id', $other)->exists();
+        return $mine ? 'blocked_by_me' : 'blocked';
+    }
+
+    /**
+     * 회원별 횟수 제한(IP 제한과 별도). 넘으면 429 TOO_MANY_REQUESTS.
+     * start: 하루 20건 · message: 1분 40건 · quote: 1시간 30건
+     */
+    private function limit(string $action, int $viewer): void
+    {
+        [$max, $decay, $message] = match ($action) {
+            'start' => [20, 86400, '오늘은 상담 요청을 더 보낼 수 없어요. 내일 다시 시도해주세요.'],
+            'quote' => [30, 3600, '견적을 너무 자주 보내고 있어요. 잠시 후 다시 시도해주세요.'],
+            default => [40, 60, '메시지를 너무 빠르게 보내고 있어요. 잠시 후 다시 보내주세요.'],
+        };
+        $key = 'starttoo:consult:'.$action.':'.$viewer;
+        if (RateLimiter::tooManyAttempts($key, $max)) $this->fail(429, 'TOO_MANY_REQUESTS', $message);
+        RateLimiter::hit($key, $decay);
     }
 
     /** 마지막 메시지를 보낸 쪽: customer · artist · system */
@@ -585,6 +769,7 @@ class Consultations
 
     private function preview(object $m): string
     {
+        if (!empty($m->moderation_hidden)) return '운영 정책에 따라 가려진 메시지예요';
         return match ($m->kind) {
             'text' => mb_substr((string) $m->body, 0, 80),
             'image' => '사진을 보냈어요',
@@ -630,6 +815,8 @@ class Consultations
         $mine = (int) ($m->sender_id ?? 0) === $viewer;
         $item = ['id' => (int) $m->id, 'client_id' => $mine ? $m->client_id : null, 'sender_id' => $m->sender_id === null ? null : (int) $m->sender_id,
             'mine' => $mine, 'kind' => $m->kind, 'body' => $m->body, 'created_at' => $this->time($m->created_at)];
+        // 운영자가 가린 메시지: 내용·첨부 없이 표시만 남긴다.
+        if (!empty($m->moderation_hidden)) return ['kind' => 'hidden', 'body' => null] + $item;
         if (!empty($payload['images'])) $item['images'] = array_map(fn ($p) => app(MediaUrls::class)->url($p, 1080), $payload['images']);
         if (!empty($payload['artwork_id'])) $item['artwork'] = $this->artworkCard($payload['artwork_id'], $viewer);
         if (!empty($payload['quote_id'])) {

@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1/projects/starttoo/consultations')->middleware([StarttooDatabase::class])->group(function () {
     Route::get('/', [StarttooConsultationController::class, 'list']);
     Route::post('/', [StarttooConsultationController::class, 'start'])->middleware('throttle:10,1');
+    Route::get('cases', [StarttooConsultationController::class, 'cases']);
     Route::get('unread', [StarttooConsultationController::class, 'unread']);
     Route::get('realtime', [StarttooConsultationController::class, 'realtime']);
     Route::post('realtime/auth', [StarttooConsultationController::class, 'realtimeAuth'])->middleware('throttle:60,1');
@@ -18,5 +19,6 @@ Route::prefix('v1/projects/starttoo/consultations')->middleware([StarttooDatabas
     Route::post('{consultation}/quotes', [StarttooConsultationController::class, 'quote'])->whereNumber('consultation')->middleware('throttle:20,1');
     Route::get('{consultation}/quotes/latest', [StarttooConsultationController::class, 'latestQuote'])->whereNumber('consultation');
     Route::get('{consultation}/quotes/{quote}', [StarttooConsultationController::class, 'quoteDetail'])->whereNumber('consultation')->whereNumber('quote');
+    Route::post('{consultation}/close', [StarttooConsultationController::class, 'close'])->whereNumber('consultation')->middleware('throttle:20,1');
     Route::post('{consultation}/read', [StarttooConsultationController::class, 'read'])->whereNumber('consultation')->middleware('throttle:120,1');
 });
