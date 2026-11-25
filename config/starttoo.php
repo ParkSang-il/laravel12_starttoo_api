@@ -34,6 +34,8 @@ return [
     'artist_license_required' => (bool) env('STARTTOO_ARTIST_LICENSE_REQUIRED', false),
     // 휴대폰 본인인증 제공자. dev는 개발 서버 전용(입력한 이름·번호를 그대로 인증 처리), 운영은 실명인증 업체 연동 후 지정.
     'identity_provider' => env('STARTTOO_IDENTITY_PROVIDER'),
+    // 테스트용: true면 작가가 시술 시각 전에도 「시술 완료」를 누를 수 있다. 운영에서는 false.
+    'booking_complete_anytime' => (bool) env('STARTTOO_BOOKING_COMPLETE_ANYTIME', false),
     // 가상 타투 피팅(나노바나나 = Gemini 이미지 모델). 키는 서버 .env에만 둔다(앱에 넣지 않음).
     'fit_enabled' => (bool) env('STARTTOO_FIT_ENABLED', true),
     'gemini_api_key' => env('STARTTOO_GEMINI_API_KEY', env('STARTTOO_NANOBANANA_API_KEY')),

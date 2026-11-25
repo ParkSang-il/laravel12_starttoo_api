@@ -315,7 +315,10 @@ class Bookings
     {
         return $this->mutate($viewer, $id, 'artist', function ($b) use ($viewer) {
             if (!in_array($b->status, self::HOLDING, true)) $this->fail(409, 'BOOKING_STATE', '확정된 예약만 완료할 수 있어요.');
-            if (Carbon::parse($b->starts_at)->isFuture()) $this->fail(409, 'BOOKING_STATE', '시술 시간이 지난 뒤에 완료할 수 있어요.');
+            // 테스트용 설정(STARTTOO_BOOKING_COMPLETE_ANYTIME=true)이면 시술 시각 전에도 완료할 수 있다.
+            if (!config('starttoo.booking_complete_anytime', false) && Carbon::parse($b->starts_at)->isFuture()) {
+                $this->fail(409, 'BOOKING_STATE', '시술 시간이 지난 뒤에 완료할 수 있어요.');
+            }
             $this->finish($b, $viewer);
         });
     }
@@ -564,7 +567,8 @@ class Bookings
             'can_cancel' => !$asArtist && $active,
             // 작가 규정: 시술 N일 전까지 무료 변경·취소(예약금 결제는 Phase 6)
             'free_cancel' => $daysLeft >= $freeDays,
-            'can_complete' => $asArtist && in_array($b->status, self::HOLDING, true) && $at->isPast(),
+            'can_complete' => $asArtist && in_array($b->status, self::HOLDING, true)
+                && ($at->isPast() || config('starttoo.booking_complete_anytime', false)),
             'subject' => $b->subject, 'total' => (int) $b->total, 'deposit' => (int) $b->deposit, 'duration' => $b->duration,
             'body_part_label' => $request && $request->body_part ? ($parts[$request->body_part] ?? null) : null, 'size' => $request->size ?? null,
             'image_url' => app(MediaUrls::class)->url($image, 300),
