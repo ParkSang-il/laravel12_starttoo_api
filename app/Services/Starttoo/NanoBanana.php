@@ -42,8 +42,10 @@ class NanoBanana
                 'generationConfig' => $config,
             ]);
         if (!$response->successful()) {
-            // 상태 코드만 남긴다(본문에 요청 일부가 담길 수 있음).
-            throw new RuntimeException('FIT_AI_HTTP_'.$response->status());
+            // 상태 코드 + Google 오류 이유(짧게)만 남긴다. 키 · 이미지는 남기지 않는다.
+            $reason = (string) $response->json('error.status', '');
+            $message = mb_substr((string) $response->json('error.message', ''), 0, 160);
+            throw new RuntimeException('FIT_AI_HTTP_'.$response->status().($reason !== '' ? " {$reason}" : '').($message !== '' ? " | {$message}" : ''));
         }
         foreach ((array) $response->json('candidates.0.content.parts', []) as $part) {
             $data = $part['inlineData']['data'] ?? $part['inline_data']['data'] ?? null;

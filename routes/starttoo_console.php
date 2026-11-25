@@ -336,7 +336,7 @@ Artisan::command('starttoo:fit-models {--part=} {--face=} {--tone=} {--build=} {
             $ids = $db->table('starttoo_fit_models')->where('status', 'failed')->pluck('id');
             if (!$this->option('dry')) {
                 $db->table('starttoo_fit_models')->whereIn('id', $ids)->update(['status' => 'pending', 'updated_at' => now()]);
-                foreach ($ids as $id) \App\Jobs\GenerateStarttooFitModel::dispatch((int) $id);
+                foreach ($ids as $id) app($F)->dispatchModel((int) $id);
             }
             return ['combos' => 0, 'queued' => count($ids)];
         }

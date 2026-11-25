@@ -138,14 +138,20 @@ class Fittings
                 // 동시에 같은 조건을 요청했으면 먼저 넣은 쪽을 쓴다.
             }
         }
-        foreach ($ids as $id) {
-            try {
-                \App\Jobs\GenerateStarttooFitModel::dispatch((int) $id);
-            } catch (Throwable $e) {
-                report($e);
-            }
-        }
+        foreach ($ids as $id) $this->dispatchModel((int) $id);
         return count($ids);
+    }
+
+    /** 한 번에 여러 장을 넣을 때 분당 한도(429)에 걸리지 않게 7초 간격으로 큐에 넣는다. */
+    private static int $spread = 0;
+
+    public function dispatchModel(int $id): void
+    {
+        try {
+            \App\Jobs\GenerateStarttooFitModel::dispatch($id)->delay(now()->addSeconds(7 * self::$spread++));
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 
     public function generateModel(int $id): void
