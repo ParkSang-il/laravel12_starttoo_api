@@ -106,6 +106,13 @@ class Consultations
         if (!empty($in['artwork_id']) && !$this->visibleArtwork($viewer, $in['artwork_id'])) {
             $this->fail(422, 'INVALID_CONSULTATION', '참고 작품을 확인할 수 없어요. 다시 선택해주세요.');
         }
+        // 도안 상담: 예산 · 희망 시기 · 요청 내용 · 참고 이미지까지 모두 필수
+        if (!empty($in['artwork_id']) && $this->db()->table('starttoo_artworks')->where('id', $in['artwork_id'])->value('kind') === 'design') {
+            foreach (['budget' => '예산을', 'preferred_time' => '희망 시기를', 'memo' => '요청 내용을'] as $field => $label) {
+                if (trim((string) ($in[$field] ?? '')) === '') $this->fail(422, 'INVALID_CONSULTATION', "도안 상담은 {$label} 꼭 적어주세요.");
+            }
+            if (empty($in['media_ids'])) $this->fail(422, 'INVALID_CONSULTATION', '도안 상담은 참고 이미지를 1장 이상 넣어주세요.');
+        }
         $id = $this->db()->transaction(function () use ($viewer, $artist, $in) {
             $now = now();
             $this->db()->table('starttoo_consultations')->insertOrIgnore([
@@ -336,8 +343,9 @@ class Consultations
         if (app(Blocks::class)->between($viewer, $other)) $this->fail(403, 'CONVERSATION_BLOCKED', '차단한 회원과는 메시지를 주고받을 수 없어요.');
         $status = $this->db()->table('starttoo_users')->where('id', $other)->value('status');
         if ($status !== 'active') $this->fail(403, 'CONVERSATION_UNAVAILABLE', '대화 상대가 메시지를 받을 수 없는 상태예요.');
-        // 종료된 상담: 고객이 새 요청서를 보내 새 건이 열릴 때까지 양쪽 모두 보낼 수 없다.
+        // 종료·완료된 상담: 고객이 새 요청서를 보내 새 건이 열릴 때까지 양쪽 모두 보낼 수 없다.
         if ($room->status === 'closed') $this->fail(403, 'CONSULTATION_CLOSED', '종료된 상담이에요. 새 상담 요청서를 보내면 다시 대화할 수 있어요.');
+        if ($room->status === 'completed') $this->fail(403, 'CONSULTATION_COMPLETED', '완료된 상담이에요. 새 상담 요청서를 보내면 다시 대화할 수 있어요.');
     }
 
     private function insertMessage(object $room, ?int $sender, ?string $clientId, string $kind, ?string $body, ?array $payload): int
@@ -745,7 +753,7 @@ class Consultations
         if (!$this->enabled()) return 'disabled';
         if ($otherStatus === 'withdrawn') return 'withdrawn';
         if ($otherStatus !== 'active') return 'unavailable';
-        if (!app(Blocks::class)->between($viewer, $other)) return $roomStatus === 'closed' ? 'closed' : null;
+        if (!app(Blocks::class)->between($viewer, $other)) return match ($roomStatus) { 'closed' => 'closed', 'completed' => 'completed', default => null };
         $mine = $this->db()->table('starttoo_user_blocks')->where('user_id', $viewer)->where('blocked_user_id', $other)->exists();
         return $mine ? 'blocked_by_me' : 'blocked';
     }
