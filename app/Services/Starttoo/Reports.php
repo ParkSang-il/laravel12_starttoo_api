@@ -138,6 +138,39 @@ class Reports
         }, 3);
     }
 
+    /**
+     * 내가 신고한 내역(최신 순). 상태: pending 검토 중 · resolved 처리 완료 · dismissed 조치 없이 종료.
+     * 대상 미리보기는 접수할 때 남긴 내용에서 가져온다(대상이 지워져도 보인다). 운영자 메모는 주지 않는다.
+     */
+    public function mine(string $token, array $input, AuthSessions $sessions, Artworks $artworks): array
+    {
+        $viewer = (int) $artworks->ready($token, $sessions)['account']['id'];
+        $page = max(1, min(100000, (int) ($input['page'] ?? 1)));
+        $db = app(ProjectDatabase::class)->database();
+        $rows = $db->table('starttoo_reports as r')->leftJoin('starttoo_users as u', 'u.id', '=', 'r.subject_user_id')
+            ->where('r.reporter_id', $viewer)->orderByDesc('r.id')->offset(($page - 1) * 20)->limit(21)
+            ->get(['r.id', 'r.target_type', 'r.reason', 'r.status', 'r.snapshot', 'r.created_at', 'r.updated_at', 'u.nickname', 'u.status as user_status']);
+        return [
+            'total' => $db->table('starttoo_reports')->where('reporter_id', $viewer)->count(),
+            'page' => $page, 'has_more' => $rows->count() > 20,
+            'items' => $rows->take(20)->map(function ($r) {
+                $snapshot = json_decode((string) $r->snapshot, true) ?: [];
+                $preview = '';
+                foreach (['title', 'content', 'body', 'nickname'] as $key) {
+                    if (is_string($snapshot[$key] ?? null) && trim($snapshot[$key]) !== '') { $preview = trim($snapshot[$key]); break; }
+                }
+                return [
+                    'id' => (int) $r->id, 'target_type' => $r->target_type, 'reason' => $r->reason, 'status' => $r->status,
+                    'subject_name' => $r->user_status === 'active' ? ($r->nickname ?? '회원') : '이용할 수 없는 회원',
+                    'preview' => mb_substr(preg_replace('/\s+/u', ' ', $preview) ?? '', 0, 80),
+                    'created_at' => \Illuminate\Support\Carbon::parse($r->created_at)->toIso8601String(),
+                    // 처리 · 종료된 시각(검토 중이면 null)
+                    'closed_at' => $r->status === 'pending' ? null : \Illuminate\Support\Carbon::parse($r->updated_at)->toIso8601String(),
+                ];
+            })->values()->all(),
+        ];
+    }
+
     /** 공개 HTTP 엔드포인트 없이 서버 운영 명령에서만 호출한다. */
     public function moderate(int $id, string $action, string $operator, string $reason): array
     {

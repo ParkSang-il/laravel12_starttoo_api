@@ -14,6 +14,11 @@ class StarttooSafetyController extends Controller
     {
         return response()->json(['data' => $reports->submit($request->bearerToken() ?? '', $request->all(), $sessions, $artworks)])->header('Cache-Control', 'no-store');
     }
+    /** 내가 신고한 내역 */
+    public function reports(Request $request, Reports $reports, AuthSessions $sessions, Artworks $artworks)
+    {
+        return response()->json(['data' => $reports->mine($request->bearerToken() ?? '', $request->query(), $sessions, $artworks)])->header('Cache-Control', 'no-store');
+    }
     public function block(Request $request, string $user, Blocks $blocks, AuthSessions $sessions, Artworks $artworks)
     {
         return response()->json(['data' => $blocks->set((int) $user, $request->bearerToken() ?? '', $request->all(), $sessions, $artworks)])->header('Cache-Control', 'no-store');
