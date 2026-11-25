@@ -587,11 +587,13 @@ class Fittings
             .'Edit image 1 so that the tattoo looks like a real, fully healed tattoo inked into this skin. '
             .'Keep exactly the same position, size, rotation and mirroring as the overlay in image 1, and keep the design\'s lines, shapes, shading and colors faithful to image 2 (do not redesign, simplify or add elements). '
             .'Ignore any white or paper background of the design: only the ink goes on the skin. '
-            .'IMPORTANT: a tattoo exists only on bare skin. Any part of the overlay that falls outside the visible skin — on clothing, straps, hair, the background or past the body\'s edge — must be completely removed, as if the design were cut off exactly at the skin boundary. '
-            .'Never draw ink on fabric or background, and never extend the design beyond the silhouette of the body. '
+            .'Do NOT move, shrink, enlarge or re-center the design: every part that is on skin must stay at exactly the same pixel position and scale as in image 1. '
+            .'A tattoo exists only on bare skin, so any part of the overlay that falls outside the visible skin (on clothing, straps, hair, the background or past the body\'s edge) is simply cut off at the skin boundary — cropped, not shrunk or relocated. '
             .'Wrap the ink naturally around the curvature and muscles of the body, follow the skin\'s lighting, shadows, pores and fine texture, with ink sitting under the skin — no sticker edges, outlines, glow or halo. '
             .'Do not change anything else: same person, skin tone, pose, background, clothing, framing and aspect ratio. No text, no watermark, no extra tattoos.';
-        $bytes = app(NanoBanana::class)->generate($prompt, [[$composite, $this->mime($composite)], [$stencilBytes, $this->mime($stencilBytes)]]);
+        $bytes = app(NanoBanana::class)->generate($prompt, [[$composite, $this->mime($composite)], [$stencilBytes, $this->mime($stencilBytes)]], $this->aspectOf($composite));
+        // 전후 비교가 맞도록 결과를 입력 사진과 같은 크기로 맞춘다(AI는 정해진 비율로만 돌려줌)
+        $bytes = $this->matchSize($bytes, $composite);
         if ($r->source === 'virtual') $bytes = $this->labelVirtual($bytes);
         return ['result_path' => app(ArtworkPhotos::class)->storeBytes($bytes)];
     }
@@ -633,8 +635,8 @@ class Fittings
             .'The filler must flow around and connect the existing tattoos without overlapping or changing them. '
             .'Render it as a real healed tattoo in the skin, following the body curvature and lighting. '
             .'Do not change anything outside the white area: existing tattoos, skin, background, framing and aspect ratio stay identical. No text, no watermark.';
-        $bytes = app(NanoBanana::class)->generate($prompt, [[$photo, $this->mime($photo)], [$mask, 'image/png']]);
-        return app(ArtworkPhotos::class)->storeBytes($this->keepOutsideMask($photo, $bytes, $mask));
+        $bytes = app(NanoBanana::class)->generate($prompt, [[$photo, $this->mime($photo)], [$mask, 'image/png']], $this->aspectOf($photo));
+        return app(ArtworkPhotos::class)->storeBytes($this->keepOutsideMask($photo, $this->matchSize($bytes, $photo), $mask));
     }
 
     /** 커버업: 기존 타투 위에 새 도안을 덮은 모습. 기존 선은 새 도안의 진한 부분 아래로 묻히게. */
@@ -653,8 +655,65 @@ class Fittings
             .'Do not change anything else: same skin, background, framing and aspect ratio. No text, no watermark.';
         $images = [[$composite, $this->mime($composite)]];
         if ($stencilBytes !== '') $images[] = [$stencilBytes, $this->mime($stencilBytes)];
-        $bytes = app(NanoBanana::class)->generate($prompt, $images);
-        return ['result_path' => app(ArtworkPhotos::class)->storeBytes($bytes)];
+        $bytes = app(NanoBanana::class)->generate($prompt, $images, $this->aspectOf($composite));
+        return ['result_path' => app(ArtworkPhotos::class)->storeBytes($this->matchSize($bytes, $composite))];
+    }
+
+    /** 입력 사진과 가장 가까운 Gemini 지원 비율 */
+    private function aspectOf(string $bytes): ?string
+    {
+        $info = @getimagesizefromstring($bytes);
+        if (!$info || !$info[1]) return null;
+        $r = $info[0] / $info[1];
+        $best = null;
+        $diff = INF;
+        foreach (['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'] as $a) {
+            [$w, $h] = explode(':', $a);
+            $d = abs(log($r / ($w / $h)));
+            if ($d < $diff) {
+                $diff = $d;
+                $best = $a;
+            }
+        }
+        return $best;
+    }
+
+    /**
+     * AI 결과를 입력 사진과 같은 크기로 맞춘다. 비율이 조금 다르면 가운데 기준으로 잘라 맞춰
+     * (AI는 입력을 비율에 맞춰 가운데 맞춤하므로) 전후 비교 · 마스크 위치가 어긋나지 않게 한다.
+     */
+    private function matchSize(string $generated, string $reference): string
+    {
+        $ref = @getimagesizefromstring($reference);
+        $gen = @imagecreatefromstring($generated);
+        if (!$ref || !$gen) return $generated;
+        try {
+            [$tw, $th] = $ref;
+            $gw = imagesx($gen);
+            $gh = imagesy($gen);
+            if ($gw === $tw && $gh === $th) return $generated;
+            // 결과에서 입력 비율만큼 가운데 영역을 잘라 입력 크기로 늘린다
+            $target = $tw / $th;
+            if ($gw / $gh > $target) {
+                $cw = (int) round($gh * $target);
+                $sx = (int) floor(($gw - $cw) / 2);
+                $sy = 0;
+                $ch = $gh;
+            } else {
+                $ch = (int) round($gw / $target);
+                $sy = (int) floor(($gh - $ch) / 2);
+                $sx = 0;
+                $cw = $gw;
+            }
+            $out = imagecreatetruecolor($tw, $th);
+            imagecopyresampled($out, $gen, 0, 0, $sx, $sy, $tw, $th, $cw, $ch);
+            ob_start();
+            imagepng($out);
+            imagedestroy($out);
+            return (string) ob_get_clean();
+        } finally {
+            imagedestroy($gen);
+        }
     }
 
     // ── 이미지 처리(GD) ──────────────────────────
