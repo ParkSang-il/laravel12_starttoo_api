@@ -14,14 +14,14 @@ class Reports
         $viewer = (int) $artworks->ready($token, $sessions)['account']['id'];
         if (is_string($input['details'] ?? null)) $input['details'] = trim($input['details']);
         $validator = Validator::make($input, [
-            'target_type' => ['required', Rule::in(['user', 'artwork', 'post', 'comment', 'post_comment', 'message', 'consultation', 'review'])], 'target_id' => ['required', 'string', 'max:36'],
+            'target_type' => ['required', Rule::in(['user', 'artwork', 'post', 'comment', 'post_comment', 'message', 'consultation', 'review', 'community', 'community_comment'])], 'target_id' => ['required', 'string', 'max:36'],
             'reason' => ['required', Rule::in(['spam', 'harassment', 'sexual', 'violence', 'illegal', 'rights', 'fraud', 'privacy', 'other'])],
             'details' => ['required_if:reason,other', 'nullable', 'string', 'max:1000'], 'request_key' => ['required', 'uuid'],
         ]);
         if ($validator->fails()) $this->fail(422, 'INVALID_REPORT', '신고 대상·사유와 내용을 확인해주세요.');
         $input = $validator->validated();
         $type = $input['target_type'];
-        $numeric = ['user', 'comment', 'post_comment', 'message', 'consultation', 'review'];
+        $numeric = ['user', 'comment', 'post_comment', 'message', 'consultation', 'review', 'community', 'community_comment'];
         if ((in_array($type, $numeric, true) && (!ctype_digit($input['target_id']) || (int) $input['target_id'] < 1))
             || (in_array($type, ['artwork', 'post'], true) && Validator::make(['id' => $input['target_id']], ['id' => ['uuid']])->fails())) {
             $this->fail(422, 'INVALID_REPORT', '신고 대상을 확인해주세요.');
@@ -43,6 +43,9 @@ class Reports
             'user' => (int) $input['target_id'],
             // 리뷰: 대상은 리뷰를 쓴 회원(작가도 자기 상점 리뷰를 신고할 수 있다)
             'review' => $db->table('starttoo_reviews')->where('id', $input['target_id'])->where('moderation_hidden', false)->value('customer_id'),
+            // 커뮤니티 글 · 댓글
+            'community' => $db->table('starttoo_community_posts')->where('id', $input['target_id'])->where('moderation_hidden', false)->value('user_id'),
+            'community_comment' => $db->table('starttoo_community_comments')->where('id', $input['target_id'])->where('moderation_hidden', false)->value('user_id'),
             'comment' => $db->table('starttoo_artwork_comments')->where('id', $input['target_id'])->value('user_id'),
             'post_comment' => $db->table('starttoo_post_comments')->where('id', $input['target_id'])->value('user_id'),
             'post' => $db->table('starttoo_posts')->where('id', $input['target_id'])->value('user_id'),
@@ -73,6 +76,15 @@ class Reports
                 if (!$review || $review->moderation_hidden) $this->fail(404, 'REVIEW_NOT_FOUND', '리뷰를 찾을 수 없어요.');
                 $snapshot = ['id' => (int) $review->id, 'artist_id' => (int) $review->artist_id, 'rating' => (int) $review->rating,
                     'content' => $review->content, 'reply' => $review->reply, 'author_id' => $subject];
+            } elseif ($type === 'community') {
+                $post = $db->table('starttoo_community_posts')->where('id', $input['target_id'])->lockForUpdate()->first();
+                if (!$post || $post->moderation_hidden) $this->fail(404, 'COMMUNITY_NOT_FOUND', '글을 찾을 수 없어요.');
+                $snapshot = ['id' => (int) $post->id, 'category' => $post->category, 'title' => $post->title,
+                    'content' => $post->content, 'author_id' => $subject];
+            } elseif ($type === 'community_comment') {
+                $comment = $db->table('starttoo_community_comments')->where('id', $input['target_id'])->lockForUpdate()->first();
+                if (!$comment || $comment->moderation_hidden) $this->fail(404, 'COMMENT_NOT_FOUND', '댓글을 찾을 수 없어요.');
+                $snapshot = ['id' => (int) $comment->id, 'post_id' => (int) $comment->post_id, 'content' => $comment->content, 'author_id' => $subject];
             } elseif ($type === 'user') {
                 $user = app(PublicProfiles::class)->user($subject, $viewer);
                 $snapshot = ['id' => $subject, 'nickname' => $user->nickname, 'bio' => $user->bio ?? ''];
@@ -136,7 +148,8 @@ class Reports
             $db->table('starttoo_users')->where('id', $record->subject_user_id)->lockForUpdate()->first();
             $table = match ($record->target_type) { 'user' => 'starttoo_users', 'post' => 'starttoo_posts', 'comment' => 'starttoo_artwork_comments',
                 'post_comment' => 'starttoo_post_comments', 'message' => 'starttoo_messages', 'consultation' => 'starttoo_consultations',
-                'review' => 'starttoo_reviews', default => 'starttoo_artworks' };
+                'review' => 'starttoo_reviews', 'community' => 'starttoo_community_posts',
+                'community_comment' => 'starttoo_community_comments', default => 'starttoo_artworks' };
             // 대화 전체 신고는 가릴 대상이 없다: 처리(resolved)·기각만 기록하고, 조치는 메시지·회원 단위로 한다.
             $conversation = $record->target_type === 'consultation';
             $target = $db->table($table)->where('id', $record->target_id)->lockForUpdate()->first();
