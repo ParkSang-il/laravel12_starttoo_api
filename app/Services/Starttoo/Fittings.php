@@ -306,7 +306,7 @@ class Fittings
     // ── 피부 영역 마스크 ──────────────────────────
 
     /** 배치 화면용: 내 사진의 피부 마스크(투명 PNG base64). 하루 AI 횟수에 세지 않는다. */
-    public function skinForPhoto(int $viewer, ?UploadedFile $photo): array
+    public function skinForPhoto(int $viewer, ?UploadedFile $photo, bool $retry = false): array
     {
         $this->assertEnabled();
         if (!$photo || Validator::make(['photo' => $photo], ['photo' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192']])->fails()) {
@@ -319,15 +319,37 @@ class Fittings
         $count = (int) Cache::get($key, 0);
         if ($limit > 0 && $count >= $limit) $this->fail(429, 'FIT_SKIN_LIMIT', '오늘 피부 영역 찾기를 모두 사용했어요. 도안이 옷에 걸치지 않게 놓아주세요.');
         Cache::put($key, $count + 1, now()->endOfDay());
-        $bw = $this->buildSkinMask((string) $photo->get());
+        $bytes = (string) $photo->get();
+        // 다시 찾기 = 앞의 결과가 틀렸다는 뜻 → 더 꼼꼼한 방식(세 판정 다수결)
+        $bw = $retry ? $this->buildSkinMaskStrict($bytes) : $this->buildSkinMask($bytes);
         return ['mask' => $bw ? base64_encode($this->alphaMask($bw)) : null];
     }
 
-    /** 배치 화면용: 가상 모델 사진의 피부 마스크(한 번 만들어 저장) */
-    public function skinForModel(int $id): array
+    /**
+     * 배치 화면용: 가상 모델 사진의 피부 마스크(한 번 만들어 저장).
+     * retry = 저장된 마스크가 틀렸다는 뜻 → 꼼꼼한 방식으로 다시 만들어 바꿔 저장한다(모두에게 적용).
+     */
+    public function skinForModel(int $viewer, int $id, bool $retry = false): array
     {
         $m = $this->db()->table('starttoo_fit_models')->where('id', $id)->where('status', 'ready')->first();
         if (!$m) $this->fail(404, 'FIT_NOT_FOUND', '가상 모델 사진을 찾을 수 없어요.');
+        if ($retry) {
+            $this->assertEnabled();
+            // 다시 찾기도 비용이 들어 내 사진과 같은 하루 횟수에서 센다
+            $limit = (int) config('starttoo.fit_skin_daily_limit', 10);
+            $key = 'starttoo:fit-skin:'.$viewer.':'.today()->toDateString();
+            $count = (int) Cache::get($key, 0);
+            if ($limit > 0 && $count >= $limit) $this->fail(429, 'FIT_SKIN_LIMIT', '오늘 피부 영역 찾기를 모두 사용했어요. 도안이 옷에 걸치지 않게 놓아주세요.');
+            Cache::put($key, $count + 1, now()->endOfDay());
+            @ini_set('memory_limit', '512M');
+            $bw = $this->buildSkinMaskStrict((string) Storage::disk('starttoo')->get($m->image_path));
+            if ($bw) {
+                $path = $this->storePng($bw);
+                $this->db()->table('starttoo_fit_models')->where('id', $m->id)->update(['skin_path' => $path]);
+                return ['mask' => base64_encode($this->alphaMask($bw))];
+            }
+            return ['mask' => null];
+        }
         $path = $this->modelSkinPath($m);
         return ['mask' => $path ? base64_encode($this->alphaMask((string) Storage::disk('starttoo')->get($path))) : null];
     }
@@ -341,6 +363,75 @@ class Fittings
         $path = $this->storePng($bw);
         $this->db()->table('starttoo_fit_models')->where('id', $m->id)->update(['skin_path' => $path]);
         return $path;
+    }
+
+    /**
+     * 다시 찾기용 꼼꼼한 피부 마스크. 세 가지 판정을 칸마다 다수결(2개 이상 피부면 피부)로 합친다.
+     *  ① Gemini 분할(텍스트 모델) ② 나노바나나 마스크 그림(이미지 모델) ③ 원본 색(피부색 범위)
+     * 한 판정이 틀려도(옷을 피부로 · 얼굴 빠짐) 나머지 둘이 바로잡는다.
+     * 사진도 더 크게(1024px) 보내 경계를 정확히 잡는다. 둘 다 실패하면 null(자르지 않음).
+     */
+    private function buildSkinMaskStrict(string $photo): ?string
+    {
+        $src = $this->fitImage($photo, 1024);
+        if (!$src) return null;
+        $w = imagesx($src);
+        $h = imagesy($src);
+        ob_start();
+        imagejpeg($src, null, 90);
+        $jpeg = (string) ob_get_clean();
+        // ① 분할 · ② 이미지 마스크(색 검증 없이 AI 판단 그대로 — 색 검증은 ③이 따로 한다)
+        $seg = $this->decodeMask($this->skinMaskBySegment($jpeg, $w, $h), $w, $h);
+        $img = $this->decodeMask($this->skinMaskByImage($jpeg, $w, $h, false, true), $w, $h);
+        if (!$seg && !$img) {
+            imagedestroy($src);
+            return null;
+        }
+        $out = imagecreatetruecolor($w, $h);
+        $white = imagecolorallocate($out, 255, 255, 255);
+        $count = 0;
+        for ($y = 0; $y < $h; $y++) {
+            for ($x = 0; $x < $w; $x++) {
+                $o = imagecolorat($src, $x, $y);
+                $r = ($o >> 16) & 0xFF;
+                $g = ($o >> 8) & 0xFF;
+                $b = $o & 0xFF;
+                // ③ 피부색(YCbCr 범위 · 밝기 하한): 피부 톤 전반을 넓게 받는다
+                $cb = 128 - 0.168736 * $r - 0.331264 * $g + 0.5 * $b;
+                $cr = 128 + 0.5 * $r - 0.418688 * $g - 0.081312 * $b;
+                $yy = 0.299 * $r + 0.587 * $g + 0.114 * $b;
+                $votes = ($cb >= 77 && $cb <= 135 && $cr >= 130 && $cr <= 180 && $yy >= 35) ? 1 : 0;
+                if ($seg && (imagecolorat($seg, $x, $y) & 0xFF) > 127) $votes++;
+                if ($img && (imagecolorat($img, $x, $y) & 0xFF) > 127) $votes++;
+                // 판정이 하나만 있으면 그 판정 + 피부색 둘 다 맞아야(= 2표) 피부
+                if ($votes >= 2) {
+                    imagesetpixel($out, $x, $y, $white);
+                    $count++;
+                }
+            }
+        }
+        imagedestroy($src);
+        if ($seg) imagedestroy($seg);
+        if ($img) imagedestroy($img);
+        $ratio = $count / max(1, $w * $h);
+        if ($ratio < 0.01 || $ratio > 0.97) {
+            imagedestroy($out);
+            report(new \RuntimeException('Fit skin mask (retry) failed: ratio '.round($ratio, 2)));
+            return null;
+        }
+        // 땀구멍 · 하이라이트 같은 작은 구멍을 메우고 경계를 부드럽게
+        imagefilter($out, IMG_FILTER_GAUSSIAN_BLUR);
+        imagefilter($out, IMG_FILTER_GAUSSIAN_BLUR);
+        ob_start();
+        imagepng($out);
+        imagedestroy($out);
+        return (string) ob_get_clean();
+    }
+
+    /** 흑백 마스크 PNG → 사진 크기 GD 이미지(없으면 null) */
+    private function decodeMask(?string $png, int $w, int $h): ?\GdImage
+    {
+        return $png ? $this->resizedTo($png, $w, $h) : null;
     }
 
     /**
@@ -358,6 +449,13 @@ class Fittings
         imagejpeg($src, null, 85);
         $jpeg = (string) ob_get_clean();
         imagedestroy($src);
+        // 텍스트 모델이 영역을 주지 않으면(새 모델은 마스크를 안 줌) 이미지 모델에게 마스크 그림을 받는다
+        return $this->skinMaskBySegment($jpeg, $w, $h) ?? $this->skinMaskByImage($jpeg, $w, $h);
+    }
+
+    /** Gemini 분할(텍스트 모델)로 피부 흑백 마스크. 영역이 없거나 실패하면 null. */
+    private function skinMaskBySegment(string $jpeg, int $w, int $h): ?string
+    {
         try {
             $items = app(NanoBanana::class)->segment($jpeg, 'image/jpeg',
                 'ALL visible bare human skin without exception (face, ears, neck, shoulders, arms, forearms, hands, fingers, chest, torso, back, legs, feet). '
@@ -366,8 +464,7 @@ class Fittings
             report(new \RuntimeException('Fit skin mask failed: '.Str::limit($e->getMessage(), 80)));
             $items = [];
         }
-        // 텍스트 모델이 영역을 주지 않으면(새 모델은 마스크를 안 줌) 이미지 모델에게 마스크 그림을 받는다
-        if (!$items) return $this->skinMaskByImage($jpeg, $w, $h);
+        if (!$items) return null;
         $out = imagecreatetruecolor($w, $h);
         $white = imagecolorallocate($out, 255, 255, 255);
         $any = false;
@@ -408,16 +505,19 @@ class Fittings
      * 이미지 모델(나노바나나)로 피부 마스크 그림을 받는다: 맨살 = 흰색, 나머지 = 검정.
      * 받은 그림을 사진 크기로 맞추고 밝기로 잘라 흑백 PNG 로 만든다. 실패하면 null.
      */
-    private function skinMaskByImage(string $jpeg, int $w, int $h): ?string
+    private function skinMaskByImage(string $jpeg, int $w, int $h, bool $colorCheck = true, bool $retry = false): ?string
     {
         try {
-            $prompt = implode("\n", [
+            $prompt = implode("\n", array_filter([
+                // 다시 찾기: 앞에서 틀렸다고 알려 더 꼼꼼히 칠하게 한다
+                $retry ? 'IMPORTANT: a previous mask of this photo was WRONG (clothing was marked as skin, or skin areas such as the face were missed). Be extremely careful and precise this time.' : null,
                 'Create a segmentation MASK of this photo. Output an image with exactly the same framing, size and aspect ratio.',
                 '- Paint every pixel of ALL visible BARE HUMAN SKIN pure white (#FFFFFF), with no exception: face (forehead, cheeks, nose, chin, lips area), ears, neck, shoulders, arms, hands, fingers, chest, torso, back, legs and feet. Every skin area in the photo must be included — do not leave out the face or any small skin area.',
                 '- Paint EVERYTHING ELSE pure black (#000000): clothing, sleeves, straps, fabric, underwear, hair, jewelry, objects and the background.',
                 '- WHITE or light-colored clothing (white shirts, collars, bras, light fabric) and white/bright backgrounds are NOT skin: they must become black too, even though they are already bright in the photo.',
                 '- Flat solid colors only: no gray, no shading, no texture, no outlines, no text. The silhouette of the skin must match the photo exactly — do not move, resize or simplify it.',
-            ]);
+                $retry ? '- Trace the exact edges where skin meets clothing (necklines, sleeve hems, waistbands, straps). Tattoos, freckles, moles and shadows on skin are still skin.' : null,
+            ]));
             $bytes = app(NanoBanana::class)->generate($prompt, [[$jpeg, 'image/jpeg']], $this->aspectOf($jpeg));
             $m = $this->resizedTo($this->matchSize($bytes, $jpeg), $w, $h);
             $src = $this->resizedTo($jpeg, $w, $h);
@@ -440,9 +540,10 @@ class Fittings
                     $b = $o & 0xFF;
                     $max = max($r, $g, $b);
                     $min = min($r, $g, $b);
-                    $skinLike = ($max - $min) >= 14      // 색기가 있다(무채색 아님)
+                    // (다시 찾기에서는 색 판정을 따로 하므로 여기선 AI 판단 그대로 둔다)
+                    $skinLike = !$colorCheck || (($max - $min) >= 14   // 색기가 있다(무채색 아님)
                         && $r >= $b + 8                  // 붉은기 > 푸른기
-                        && $max >= 45;                   // 너무 어둡지 않다
+                        && $max >= 45);                  // 너무 어둡지 않다
                     if ($skinLike) {
                         imagesetpixel($out, $x, $y, $white);
                         $kept++;
