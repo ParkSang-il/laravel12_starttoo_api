@@ -360,7 +360,7 @@ class Fittings
         imagedestroy($src);
         try {
             $items = app(NanoBanana::class)->segment($jpeg, 'image/jpeg',
-                'all visible bare human skin (exposed arms, forearms, shoulders, legs, torso, neck, hands). '
+                'ALL visible bare human skin without exception (face, ears, neck, shoulders, arms, forearms, hands, fingers, chest, torso, back, legs, feet). '
                 .'Do NOT include clothing, sleeves, straps, fabric, hair, jewelry or background');
         } catch (Throwable $e) {
             report(new \RuntimeException('Fit skin mask failed: '.Str::limit($e->getMessage(), 80)));
@@ -413,7 +413,7 @@ class Fittings
         try {
             $prompt = implode("\n", [
                 'Create a segmentation MASK of this photo. Output an image with exactly the same framing, size and aspect ratio.',
-                '- Paint every pixel of visible BARE HUMAN SKIN (arms, hands, shoulders, legs, torso, neck) pure white (#FFFFFF).',
+                '- Paint every pixel of ALL visible BARE HUMAN SKIN pure white (#FFFFFF), with no exception: face (forehead, cheeks, nose, chin, lips area), ears, neck, shoulders, arms, hands, fingers, chest, torso, back, legs and feet. Every skin area in the photo must be included — do not leave out the face or any small skin area.',
                 '- Paint EVERYTHING ELSE pure black (#000000): clothing, sleeves, straps, fabric, underwear, hair, jewelry, objects and the background.',
                 '- WHITE or light-colored clothing (white shirts, collars, bras, light fabric) and white/bright backgrounds are NOT skin: they must become black too, even though they are already bright in the photo.',
                 '- Flat solid colors only: no gray, no shading, no texture, no outlines, no text. The silhouette of the skin must match the photo exactly — do not move, resize or simplify it.',
