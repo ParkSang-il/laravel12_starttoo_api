@@ -40,6 +40,8 @@ return [
     'gemini_image_model' => env('STARTTOO_GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image'),
     // 가상 모델 사진: 기본은 운영자가 올린 사진만(starttoo:fit-models-import). true면 없는 조건을 나노바나나로 생성.
     'fit_model_ai' => (bool) env('STARTTOO_FIT_MODEL_AI', false),
-    // 회원당 하루 AI 합성 횟수(실패는 세지 않음)
+    // 회원당 하루 AI 횟수(가상 피팅 · 도안 추출 · 필러 · 커버업 공통, 실패는 세지 않음). 0 = 제한 없음
     'fit_daily_limit' => (int) env('STARTTOO_FIT_DAILY_LIMIT', 3),
+    // 타투 필러(3안 = 1회 차감)를 하루 몇 번 만들 수 있는지. 0 = 제한 없음
+    'fit_fill_daily_limit' => (int) env('STARTTOO_FIT_FILL_DAILY_LIMIT', 1),
 ];

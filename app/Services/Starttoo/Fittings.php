@@ -71,16 +71,20 @@ class Fittings
     public function remaining(int $viewer): int
     {
         // 피팅 · 추출 · 필러 · 커버업 공통 하루 횟수. 실패와 기기에서 만든 결과(cost_units 0)는 세지 않는다.
+        $limit = (int) config('starttoo.fit_daily_limit', 3);
+        if ($limit <= 0) return 999; // 제한 없음(.env 0)
         $used = (int) $this->db()->table('starttoo_fit_results')->where('user_id', $viewer)
             ->where('created_at', '>=', today())->where('status', '<>', 'failed')->sum('cost_units');
-        return max(0, (int) config('starttoo.fit_daily_limit', 3) - $used);
+        return max(0, $limit - $used);
     }
 
-    /** 필러는 3안(AI 3번)을 1회로 세는 대신 하루 1번만 */
+    /** 필러는 3안(AI 3번)을 1회로 세는 대신 하루 횟수를 따로 둔다(STARTTOO_FIT_FILL_DAILY_LIMIT, 0 = 제한 없음) */
     public function fillUsedToday(int $viewer): bool
     {
+        $limit = (int) config('starttoo.fit_fill_daily_limit', 1);
+        if ($limit <= 0) return false;
         return $this->db()->table('starttoo_fit_results')->where('user_id', $viewer)->where('type', 'fill')
-            ->where('created_at', '>=', today())->where('status', '<>', 'failed')->exists();
+            ->where('created_at', '>=', today())->where('status', '<>', 'failed')->count() >= $limit;
     }
 
     /** FIT-01 피팅 메인: 남은 횟수 · 최근 결과 */
@@ -88,7 +92,8 @@ class Fittings
     {
         return [
             'enabled' => (bool) config('starttoo.fit_enabled', true) && app(NanoBanana::class)->configured(),
-            'daily_limit' => (int) config('starttoo.fit_daily_limit', 3),
+            'daily_limit' => (int) config('starttoo.fit_daily_limit', 3), // 0 = 제한 없음
+            'fill_daily_limit' => (int) config('starttoo.fit_fill_daily_limit', 1),
             'remaining' => $this->remaining($viewer),
             'fill_used' => $this->fillUsedToday($viewer),
             'recent' => $this->db()->table('starttoo_fit_results')->where('user_id', $viewer)->where('status', '<>', 'failed')
@@ -426,7 +431,7 @@ class Fittings
         }
         if (!$local) {
             if ($type === 'fill' && $this->fillUsedToday($viewer)) {
-                $this->fail(429, 'FIT_FILL_LIMIT', '타투 필러는 하루 1번 만들 수 있어요. 내일 다시 이용해주세요.');
+                $this->fail(429, 'FIT_FILL_LIMIT', '타투 필러는 하루 '.(int) config('starttoo.fit_fill_daily_limit', 1).'번 만들 수 있어요. 내일 다시 이용해주세요.');
             }
             if ($this->remaining($viewer) <= 0) {
                 $this->fail(429, 'FIT_DAILY_LIMIT', '오늘 AI 횟수를 모두 사용했어요. 내일 다시 이용해주세요.');
