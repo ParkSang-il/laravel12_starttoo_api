@@ -531,11 +531,14 @@ class Fittings
 
     private function stencil(object $a): array
     {
-        $path = $this->db()->table('starttoo_artwork_images')->where('artwork_id', $a->id)->orderBy('position')->value('path');
+        $paths = $this->db()->table('starttoo_artwork_images')->where('artwork_id', $a->id)->orderBy('position')->limit(10)->pluck('path')->all();
+        $urls = app(MediaUrls::class);
         return [
             'artwork_id' => $a->id, 'title' => $a->title, 'kind' => $a->kind, 'color' => $a->color,
             'artist' => ['id' => (int) $a->user_id, 'nickname' => $a->author_nickname ?? ''],
-            'image_url' => app(MediaUrls::class)->url($path, 1200),
+            'image_url' => $urls->url($paths[0] ?? null, 1200),
+            // 도안 사진이 여러 장이면 앱에서 입힐 사진을 고른다
+            'images' => array_values(array_filter(array_map(fn ($p) => $urls->url($p, 1200), $paths))),
         ];
     }
 
