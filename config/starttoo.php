@@ -38,6 +38,8 @@ return [
     'fit_enabled' => (bool) env('STARTTOO_FIT_ENABLED', true),
     'gemini_api_key' => env('STARTTOO_GEMINI_API_KEY', env('STARTTOO_NANOBANANA_API_KEY')),
     'gemini_image_model' => env('STARTTOO_GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image'),
+    // 피부 영역 분할(마스크)용 텍스트 모델 — 하루 AI 횟수에 세지 않는다
+    'gemini_text_model' => env('STARTTOO_GEMINI_TEXT_MODEL', 'gemini-2.5-flash'),
     // 가상 모델 사진: 기본은 운영자가 올린 사진만(starttoo:fit-models-import). true면 없는 조건을 나노바나나로 생성.
     'fit_model_ai' => (bool) env('STARTTOO_FIT_MODEL_AI', false),
     // 회원당 하루 AI 횟수(가상 피팅 · 도안 추출 · 필러 · 커버업 공통, 실패는 세지 않음). 0 = 제한 없음

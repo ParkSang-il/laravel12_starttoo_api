@@ -18,6 +18,15 @@ class StarttooFitController extends Controller
         return $this->json($f->models($r->query()));
     }
 
+    public function modelSkin(Request $r, int $model, Fittings $f, AuthSessions $s, Artworks $a)
+    {
+        $this->viewer($r, $s, $a);
+        return $this->json($f->skinForModel($model));
+    }
+
+    /** multipart: photo(내 사진) → 피부 마스크 */
+    public function skin(Request $r, Fittings $f, AuthSessions $s, Artworks $a) { return $this->json($f->skinForPhoto($this->viewer($r, $s, $a), $r->file('photo'))); }
+
     public function stencils(Request $r, Fittings $f, AuthSessions $s, Artworks $a) { return $this->json($f->stencils($this->viewer($r, $s, $a), $r->query())); }
     public function list(Request $r, Fittings $f, AuthSessions $s, Artworks $a) { return $this->json($f->list($this->viewer($r, $s, $a), $r->query())); }
     public function show(Request $r, string $result, Fittings $f, AuthSessions $s, Artworks $a) { return $this->json($f->show($this->viewer($r, $s, $a), $result)); }
@@ -35,7 +44,7 @@ class StarttooFitController extends Controller
         }
         if (!is_array($input)) return response()->json(['code' => 'INVALID_FIT', 'message' => '피팅 요청을 확인해주세요.'], 422);
         $files = [];
-        foreach (['composite', 'photo', 'stencil', 'mask', 'result'] as $k) $files[$k] = $r->file($k);
+        foreach (['composite', 'photo', 'stencil', 'mask', 'result', 'skin'] as $k) $files[$k] = $r->file($k);
         return $this->json($f->create($viewer, $input, $files));
     }
 

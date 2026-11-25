@@ -8,6 +8,9 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1/projects/starttoo/fit')->middleware([StarttooDatabase::class])->group(function () {
     Route::get('/', [C::class, 'home']);
     Route::get('models', [C::class, 'models'])->middleware('throttle:60,1');
+    // 피부 영역 마스크(배치 화면에서 도안이 옷 · 배경으로 나가지 않게 자른다)
+    Route::get('models/{model}/skin', [C::class, 'modelSkin'])->whereNumber('model')->middleware('throttle:60,1');
+    Route::post('skin', [C::class, 'skin'])->middleware('throttle:20,1');
     Route::get('stencils', [C::class, 'stencils']);
     Route::get('results', [C::class, 'list']);
     Route::post('results', [C::class, 'create'])->middleware('throttle:10,1');

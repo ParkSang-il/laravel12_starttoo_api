@@ -13,6 +13,53 @@ class NanoBanana
 {
     private const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent';
 
+    /**
+     * 영역 분할(Gemini 텍스트 모델). [$what] 영역들의 [박스(0~1000: y0,x0,y1,x1), 마스크 PNG 바이트] 목록.
+     * 마스크는 박스 크기 기준 확률(0~255) 흑백 이미지다.
+     *
+     * @return array<int, array{0: array{0:int,1:int,2:int,3:int}, 1: string}>
+     */
+    public function segment(string $bytes, string $mime, string $what): array
+    {
+        $key = trim((string) config('starttoo.gemini_api_key', ''));
+        if ($key === '') throw new RuntimeException('FIT_AI_NOT_CONFIGURED');
+        $model = (string) config('starttoo.gemini_text_model', 'gemini-2.5-flash');
+        $prompt = 'Give the segmentation masks for '.$what.'. '
+            .'Output a JSON list of segmentation masks where each entry contains the 2D bounding box in the key "box_2d", '
+            .'the segmentation mask in key "mask", and the text label in the key "label". Use descriptive labels.';
+        $response = Http::connectTimeout(5)->timeout(60)->acceptJson()
+            ->withHeaders(['x-goog-api-key' => $key])
+            ->post(sprintf(self::ENDPOINT, rawurlencode($model)), [
+                'contents' => [['role' => 'user', 'parts' => [
+                    ['inline_data' => ['mime_type' => $mime, 'data' => base64_encode($bytes)]],
+                    ['text' => $prompt],
+                ]]],
+                // 분할은 생각(thinking)을 끄는 편이 정확하다(Gemini 문서 권장)
+                'generationConfig' => ['temperature' => 0.2, 'thinkingConfig' => ['thinkingBudget' => 0], 'responseMimeType' => 'application/json'],
+            ]);
+        if (!$response->successful()) {
+            $reason = (string) $response->json('error.status', '');
+            throw new RuntimeException('FIT_SEG_HTTP_'.$response->status().($reason !== '' ? " {$reason}" : ''));
+        }
+        $text = '';
+        foreach ((array) $response->json('candidates.0.content.parts', []) as $part) $text .= (string) ($part['text'] ?? '');
+        // ```json … ``` 로 감싸 오는 경우
+        $text = trim(preg_replace('/^```(?:json)?|```$/m', '', $text) ?? '');
+        $items = json_decode($text, true);
+        if (!is_array($items)) return [];
+        $out = [];
+        foreach ($items as $item) {
+            $box = $item['box_2d'] ?? null;
+            $mask = (string) ($item['mask'] ?? '');
+            if (!is_array($box) || count($box) !== 4 || $mask === '') continue;
+            $mask = preg_replace('#^data:image/[a-z]+;base64,#', '', $mask);
+            $png = base64_decode((string) $mask, true);
+            if ($png === false || $png === '') continue;
+            $out[] = [array_map('intval', $box), $png];
+        }
+        return $out;
+    }
+
     public function configured(): bool
     {
         return trim((string) config('starttoo.gemini_api_key', '')) !== '';

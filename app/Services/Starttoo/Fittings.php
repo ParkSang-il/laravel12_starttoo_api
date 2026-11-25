@@ -303,6 +303,126 @@ class Fittings
         return $q->update(['is_active' => false, 'updated_at' => now()]);
     }
 
+    // ── 피부 영역 마스크 ──────────────────────────
+
+    /** 배치 화면용: 내 사진의 피부 마스크(투명 PNG base64). 하루 AI 횟수에 세지 않는다. */
+    public function skinForPhoto(int $viewer, ?UploadedFile $photo): array
+    {
+        $this->assertEnabled();
+        if (!$photo || Validator::make(['photo' => $photo], ['photo' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192']])->fails()) {
+            $this->fail(422, 'INVALID_FIT', '사진을 다시 선택해주세요.');
+        }
+        // 회원당 분당 · 하루 호출 수 제한(남용 방지)
+        $key = 'starttoo:fit-skin:'.$viewer.':'.today()->toDateString();
+        $count = (int) Cache::get($key, 0);
+        if ($count >= 60) $this->fail(429, 'FIT_SKIN_LIMIT', '오늘 피부 영역 찾기를 너무 많이 했어요. 내일 다시 시도해주세요.');
+        Cache::put($key, $count + 1, now()->endOfDay());
+        $bw = $this->buildSkinMask((string) $photo->get());
+        return ['mask' => $bw ? base64_encode($this->alphaMask($bw)) : null];
+    }
+
+    /** 배치 화면용: 가상 모델 사진의 피부 마스크(한 번 만들어 저장) */
+    public function skinForModel(int $id): array
+    {
+        $m = $this->db()->table('starttoo_fit_models')->where('id', $id)->where('status', 'ready')->first();
+        if (!$m) $this->fail(404, 'FIT_NOT_FOUND', '가상 모델 사진을 찾을 수 없어요.');
+        $path = $this->modelSkinPath($m);
+        return ['mask' => $path ? base64_encode($this->alphaMask((string) Storage::disk('starttoo')->get($path))) : null];
+    }
+
+    private function modelSkinPath(object $m): ?string
+    {
+        if ($m->skin_path) return $m->skin_path;
+        $this->assertEnabled();
+        $bw = $this->buildSkinMask((string) Storage::disk('starttoo')->get($m->image_path));
+        if (!$bw) return null;
+        $path = $this->storePng($bw);
+        $this->db()->table('starttoo_fit_models')->where('id', $m->id)->update(['skin_path' => $path]);
+        return $path;
+    }
+
+    /**
+     * 사진 → 피부 영역 흑백 PNG(흰색 = 맨살). Gemini 분할이 준 영역들을 박스 위치에 합친다.
+     * 실패하거나 피부가 없으면 null(자르지 않음).
+     */
+    private function buildSkinMask(string $photo): ?string
+    {
+        $src = $this->fitImage($photo, 1024);
+        if (!$src) return null;
+        $w = imagesx($src);
+        $h = imagesy($src);
+        ob_start();
+        imagejpeg($src, null, 90);
+        $jpeg = (string) ob_get_clean();
+        imagedestroy($src);
+        try {
+            $items = app(NanoBanana::class)->segment($jpeg, 'image/jpeg',
+                'all visible bare human skin (exposed arms, forearms, shoulders, legs, torso, neck, hands). '
+                .'Do NOT include clothing, sleeves, straps, fabric, hair, jewelry or background');
+        } catch (Throwable $e) {
+            report(new \RuntimeException('Fit skin mask failed: '.Str::limit($e->getMessage(), 80)));
+            return null;
+        }
+        if (!$items) return null;
+        $out = imagecreatetruecolor($w, $h);
+        $white = imagecolorallocate($out, 255, 255, 255);
+        $any = false;
+        foreach ($items as [$box, $png]) {
+            [$y0, $x0, $y1, $x1] = $box;
+            $bx0 = (int) floor($x0 / 1000 * $w);
+            $by0 = (int) floor($y0 / 1000 * $h);
+            $bw = (int) ceil(($x1 - $x0) / 1000 * $w);
+            $bh = (int) ceil(($y1 - $y0) / 1000 * $h);
+            if ($bw < 2 || $bh < 2) continue;
+            $m = $this->resizedTo($png, $bw, $bh);
+            if (!$m) continue;
+            for ($y = 0; $y < $bh; $y++) {
+                for ($x = 0; $x < $bw; $x++) {
+                    if ((imagecolorat($m, $x, $y) & 0xFF) > 127) {
+                        $px = $bx0 + $x;
+                        $py = $by0 + $y;
+                        if ($px >= 0 && $py >= 0 && $px < $w && $py < $h) {
+                            imagesetpixel($out, $px, $py, $white);
+                            $any = true;
+                        }
+                    }
+                }
+            }
+            imagedestroy($m);
+        }
+        if (!$any) {
+            imagedestroy($out);
+            return null;
+        }
+        ob_start();
+        imagepng($out);
+        imagedestroy($out);
+        return (string) ob_get_clean();
+    }
+
+    /** 흑백 마스크 → 흰색은 불투명 흰색, 검정은 투명(앱이 dstIn 으로 자를 때 씀) */
+    private function alphaMask(string $bw): string
+    {
+        $img = @imagecreatefromstring($bw);
+        if (!$img) return $bw;
+        $w = imagesx($img);
+        $h = imagesy($img);
+        $out = imagecreatetruecolor($w, $h);
+        imagealphablending($out, false);
+        imagesavealpha($out, true);
+        for ($y = 0; $y < $h; $y++) {
+            for ($x = 0; $x < $w; $x++) {
+                $v = imagecolorat($img, $x, $y) & 0xFF;
+                imagesetpixel($out, $x, $y, imagecolorallocatealpha($out, $v, $v, $v, 127 - (int) round($v / 255 * 127)));
+            }
+        }
+        imagedestroy($img);
+        ob_start();
+        imagepng($out);
+        imagedestroy($out);
+        return (string) ob_get_clean();
+    }
+
     // ── FIT-05 도안 ──────────────────────────────
 
     /**
@@ -404,7 +524,7 @@ class Fittings
             'coverup' => ['photo', 'composite', 'mask'],
         };
         $rules = [];
-        foreach (['composite', 'photo', 'stencil', 'mask', 'result'] as $k) $rules[$k] = [in_array($k, $need, true) ? 'required' : 'nullable', ...$image];
+        foreach (['composite', 'photo', 'stencil', 'mask', 'result', 'skin'] as $k) $rules[$k] = [in_array($k, $need, true) ? 'required' : 'nullable', ...$image];
         if (Validator::make($files, $rules)->fails()) $this->fail(422, 'INVALID_FIT', '사진은 8MB 이하의 JPG·PNG·WebP로 선택해주세요.');
 
         $db = $this->db();
@@ -447,6 +567,8 @@ class Fittings
             if (!empty($files['stencil'])) $saved['stencil'] = $this->storeTemp($files['stencil']);
             // 마스크는 결과 화면(비침 보기)에서도 쓰므로 보관한다(PNG 그대로)
             if (!empty($files['mask'])) $saved['mask'] = $this->storeKeep($files['mask']);
+            // 배치 화면에서 받은 피부 마스크(결과도 이 영역 밖은 원본으로 되돌린다)
+            if (!empty($files['skin'])) $saved['skin'] = $this->storeKeep($files['skin']);
             if (!empty($files['photo'])) $saved['before'] = $photos->storeBytes((string) $files['photo']->get());
             if ($local) $saved['result'] = $this->storeKeep($files['result']);
         } catch (Throwable $e) {
@@ -459,6 +581,7 @@ class Fittings
                 'id' => $id, 'user_id' => $viewer, 'request_key' => $input['request_key'], 'type' => $type, 'artwork_id' => $artworkId,
                 'model_id' => $modelId, 'source' => $source, 'part' => $input['part'] ?? null, 'face' => $input['face'] ?? null,
                 'input_path' => $saved['input'] ?? null, 'stencil_path' => $saved['stencil'] ?? null, 'mask_path' => $saved['mask'] ?? null,
+                'skin_path' => $saved['skin'] ?? null,
                 'before_path' => $saved['before'] ?? $beforePath, 'result_path' => $saved['result'] ?? null,
                 'options' => $options ? json_encode($options, JSON_UNESCAPED_UNICODE) : null,
                 'meta' => $meta ? json_encode($meta) : null, 'cost_units' => $local ? 0 : 1,
@@ -624,8 +747,37 @@ class Fittings
         $bytes = $this->matchSize($bytes, $composite);
         // 모델 · 사진 변조 방지: 도안을 올린 자리 밖은 원본 사진 픽셀로 되돌린다
         $bytes = $this->protectOriginal($r->before_path, $composite, $bytes);
+        // 피부 밖(옷 · 끈 · 머리카락 · 배경)에 그려진 잉크는 원본으로 되돌린다
+        $bytes = $this->clipToSkin($r, $bytes);
         if ($r->source === 'virtual') $bytes = $this->labelVirtual($bytes);
         return ['result_path' => app(ArtworkPhotos::class)->storeBytes($bytes)];
+    }
+
+    /**
+     * 피부 마스크 밖은 원본 픽셀로. 마스크: 배치 화면에서 받은 것 → 가상 모델 저장본 → 없으면 지금 만든다.
+     * 마스크를 못 만들면 자르지 않는다(결과는 그대로).
+     */
+    private function clipToSkin(object $r, string $generated): string
+    {
+        try {
+            $original = $r->before_path ? (string) Storage::disk('starttoo')->get($r->before_path) : '';
+            if ($original === '') return $generated;
+            $skinPath = $r->skin_path;
+            if (!$skinPath && $r->model_id) {
+                $m = $this->db()->table('starttoo_fit_models')->where('id', $r->model_id)->first();
+                if ($m) $skinPath = $this->modelSkinPath($m);
+            }
+            $skin = $skinPath ? (string) Storage::disk('starttoo')->get($skinPath) : $this->buildSkinMask($original);
+            if (!$skin) return $generated;
+            if (!$skinPath && $r->source === 'photo') {
+                $path = $this->storePng($skin);
+                $this->db()->table('starttoo_fit_results')->where('id', $r->id)->update(['skin_path' => $path]);
+            }
+            return $this->keepOutsideMask($original, $generated, $skin);
+        } catch (Throwable $e) {
+            report($e);
+            return $generated;
+        }
     }
 
     /**
@@ -1010,7 +1162,8 @@ class Fittings
     {
         $r = $this->own($viewer, $id);
         $this->db()->table('starttoo_fit_results')->where('id', $id)->delete();
-        $paths = array_filter([$r->input_path, $r->stencil_path, $r->mask_path]);
+        // 피부 마스크: 내 사진 것만 지운다(가상 모델 마스크는 공용이라 fit_models 에 있고 여기엔 없음)
+        $paths = array_filter([$r->input_path, $r->stencil_path, $r->mask_path, $r->skin_path ?? null]);
         // 상담에 첨부한 결과 파일은 상담 기록과 함께 남긴다. 가상 모델 사진(before)은 공용이라 지우지 않는다.
         if (!$r->attached_at) {
             $paths[] = $r->result_path;
