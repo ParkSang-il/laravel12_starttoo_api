@@ -415,7 +415,9 @@ class Bookings
     /** MY 「다가오는 예약」: 오늘 이후 진행 중 예약을 가까운 순으로 최대 3건 */
     public function upcoming(int $viewer, int $limit = 3): array
     {
-        return $this->db()->table('starttoo_bookings')->where('customer_id', $viewer)->whereIn('status', self::ACTIVE)
+        // 고객으로 예약한 것 + 작가로 받은 시술 예약을 함께, 시술일 가까운 순
+        return $this->db()->table('starttoo_bookings')
+            ->where(fn ($q) => $q->where('customer_id', $viewer)->orWhere('artist_id', $viewer))->whereIn('status', self::ACTIVE)
             ->where('starts_at', '>=', today())->orderBy('starts_at')->limit($limit)->get()
             ->map(fn ($b) => $this->format($b, $viewer))->all();
     }
