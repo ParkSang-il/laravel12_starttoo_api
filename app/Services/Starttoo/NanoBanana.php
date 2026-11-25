@@ -23,11 +23,12 @@ class NanoBanana
     {
         $key = trim((string) config('starttoo.gemini_api_key', ''));
         if ($key === '') throw new RuntimeException('FIT_AI_NOT_CONFIGURED');
-        $model = (string) config('starttoo.gemini_text_model', 'gemini-2.5-flash');
+        $model = $this->modelName((string) config('starttoo.gemini_text_model', 'gemini-flash-latest'));
         $prompt = 'Give the segmentation masks for '.$what.'. '
+            .'Return at most 3 masks: merge touching areas into one mask instead of listing many small pieces. '
             .'Output a JSON list of segmentation masks where each entry contains the 2D bounding box in the key "box_2d", '
-            .'the segmentation mask in key "mask", and the text label in the key "label". Use descriptive labels.';
-        $send = fn (array $config) => Http::connectTimeout(5)->timeout(60)->acceptJson()
+            .'the segmentation mask in key "mask", and the text label in the key "label". Keep labels short. Output only the JSON.';
+        $send = fn (array $config) => Http::connectTimeout(5)->timeout(100)->acceptJson()
             ->withHeaders(['x-goog-api-key' => $key])
             ->post(sprintf(self::ENDPOINT, rawurlencode($model)), [
                 'contents' => [['role' => 'user', 'parts' => [
@@ -36,11 +37,14 @@ class NanoBanana
                 ]]],
                 'generationConfig' => $config,
             ]);
-        // 분할은 생각(thinking)을 끄는 편이 정확하다(2.5 계열). 최신 모델은 이 옵션을 받지 않을 수 있어
-        // 400 이면 옵션을 빼고 한 번 더 보낸다.
+        // 분할은 생각(thinking)을 줄여야 빠르고 정확하다. 모델 세대마다 옵션 이름이 달라
+        // 400(옵션 거절)이면 다음 형식으로 다시 보낸다: 3.x(thinkingLevel) → 2.5(thinkingBudget) → 옵션 없음.
         $base = ['temperature' => 0.2, 'responseMimeType' => 'application/json'];
-        $response = $send($base + ['thinkingConfig' => ['thinkingBudget' => 0]]);
-        if ($response->status() === 400) $response = $send($base);
+        $response = null;
+        foreach ([['thinkingLevel' => 'minimal'], ['thinkingLevel' => 'low'], ['thinkingBudget' => 0], null] as $thinking) {
+            $response = $send($thinking === null ? $base : $base + ['thinkingConfig' => $thinking]);
+            if ($response->status() !== 400) break;
+        }
         if (!$response->successful()) {
             // 상태 코드 + Google 오류 이유(짧게). 키 · 이미지는 남기지 않는다.
             $reason = (string) $response->json('error.status', '');
@@ -66,6 +70,12 @@ class NanoBanana
         return $out;
     }
 
+    /** .env 에 「models/이름」으로 넣어도 되게 앞의 models/ 와 공백을 뗀다 */
+    private function modelName(string $name): string
+    {
+        return preg_replace('#^models/#', '', trim($name)) ?: $name;
+    }
+
     public function configured(): bool
     {
         return trim((string) config('starttoo.gemini_api_key', '')) !== '';
@@ -86,7 +96,7 @@ class NanoBanana
         }
         $config = ['responseModalities' => ['IMAGE']];
         if ($aspectRatio) $config['imageConfig'] = ['aspectRatio' => $aspectRatio];
-        $model = (string) config('starttoo.gemini_image_model', 'gemini-2.5-flash-image');
+        $model = $this->modelName((string) config('starttoo.gemini_image_model', 'gemini-2.5-flash-image'));
 
         $response = Http::connectTimeout(5)->timeout(70)->acceptJson()
             ->withHeaders(['x-goog-api-key' => $key])

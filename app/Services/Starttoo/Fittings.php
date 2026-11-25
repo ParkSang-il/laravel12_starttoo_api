@@ -347,12 +347,13 @@ class Fittings
      */
     private function buildSkinMask(string $photo): ?string
     {
-        $src = $this->fitImage($photo, 1024);
+        // 마스크는 대략적인 경계면 충분해 작게 보낸다(빠르고 저렴)
+        $src = $this->fitImage($photo, 640);
         if (!$src) return null;
         $w = imagesx($src);
         $h = imagesy($src);
         ob_start();
-        imagejpeg($src, null, 90);
+        imagejpeg($src, null, 85);
         $jpeg = (string) ob_get_clean();
         imagedestroy($src);
         try {
