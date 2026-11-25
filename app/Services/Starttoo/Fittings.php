@@ -415,25 +415,52 @@ class Fittings
                 'Create a segmentation MASK of this photo. Output an image with exactly the same framing, size and aspect ratio.',
                 '- Paint every pixel of visible BARE HUMAN SKIN (arms, hands, shoulders, legs, torso, neck) pure white (#FFFFFF).',
                 '- Paint EVERYTHING ELSE pure black (#000000): clothing, sleeves, straps, fabric, underwear, hair, jewelry, objects and the background.',
+                '- WHITE or light-colored clothing (white shirts, collars, bras, light fabric) and white/bright backgrounds are NOT skin: they must become black too, even though they are already bright in the photo.',
                 '- Flat solid colors only: no gray, no shading, no texture, no outlines, no text. The silhouette of the skin must match the photo exactly — do not move, resize or simplify it.',
             ]);
             $bytes = app(NanoBanana::class)->generate($prompt, [[$jpeg, 'image/jpeg']], $this->aspectOf($jpeg));
             $m = $this->resizedTo($this->matchSize($bytes, $jpeg), $w, $h);
-            if (!$m) return null;
+            $src = $this->resizedTo($jpeg, $w, $h);
+            if (!$m || !$src) return null;
             $out = imagecreatetruecolor($w, $h);
             $white = imagecolorallocate($out, 255, 255, 255);
-            $count = 0;
+            $count = 0;   // AI가 피부라고 칠한 칸
+            $kept = 0;    // 그중 원본 색도 피부일 수 있는 칸
             for ($y = 0; $y < $h; $y++) {
                 for ($x = 0; $x < $w; $x++) {
                     $c = imagecolorat($m, $x, $y);
                     $lum = ((($c >> 16) & 0xFF) * 299 + (($c >> 8) & 0xFF) * 587 + ($c & 0xFF) * 114) / 1000;
-                    if ($lum > 140) {
+                    if ($lum <= 140) continue;
+                    $count++;
+                    // 원본 사진의 그 자리 색이 피부일 수 있는지: 흰 옷 · 회색 · 검정 같은 무채색은 피부가 아니다.
+                    // (AI가 원래 흰 셔츠를 검정으로 안 바꾸고 흰색 그대로 두는 경우를 걸러낸다)
+                    $o = imagecolorat($src, $x, $y);
+                    $r = ($o >> 16) & 0xFF;
+                    $g = ($o >> 8) & 0xFF;
+                    $b = $o & 0xFF;
+                    $max = max($r, $g, $b);
+                    $min = min($r, $g, $b);
+                    $skinLike = ($max - $min) >= 14      // 색기가 있다(무채색 아님)
+                        && $r >= $b + 8                  // 붉은기 > 푸른기
+                        && $max >= 45;                   // 너무 어둡지 않다
+                    if ($skinLike) {
                         imagesetpixel($out, $x, $y, $white);
-                        $count++;
+                        $kept++;
                     }
                 }
             }
             imagedestroy($m);
+            imagedestroy($src);
+            // 색 검증으로 거의 다 빠지면(흑백 사진 · 특이한 조명) 검증을 믿지 않고 자르지 않는다
+            if ($count > 0 && $kept / $count < 0.25) {
+                imagedestroy($out);
+                report(new \RuntimeException('Fit skin mask failed: color check kept '.round($kept / $count, 2)));
+                return null;
+            }
+            // 하이라이트 같은 작은 구멍을 메우고 경계를 부드럽게
+            imagefilter($out, IMG_FILTER_GAUSSIAN_BLUR);
+            imagefilter($out, IMG_FILTER_GAUSSIAN_BLUR);
+            $count = $kept;
             // 거의 다 흰색이거나 거의 없으면 마스크로 못 쓴다(AI가 사진을 그대로 돌려준 경우 등)
             $ratio = $count / max(1, $w * $h);
             if ($ratio < 0.02 || $ratio > 0.97) {
