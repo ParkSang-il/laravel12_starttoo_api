@@ -599,16 +599,26 @@ class Fittings
         $composite = $this->read($r->input_path);
         $stencilBytes = $r->stencil_path ? $this->read($r->stencil_path) : $this->artworkImage($r->artwork_id);
         if ($stencilBytes === '') throw new \RuntimeException('FIT_INPUT_MISSING');
-        $prompt = 'Image 1 is a photo of a body'.$this->where($r).' with a tattoo design roughly overlaid as a flat, semi-transparent sticker to show the intended placement. '
-            .'Image 2 is the original tattoo design artwork. '
-            .'Edit image 1 so that the tattoo looks like a real, fully healed tattoo inked into this skin. '
-            .'Keep exactly the same position, size, rotation and mirroring as the overlay in image 1, and keep the design\'s lines, shapes, shading and colors faithful to image 2 (do not redesign, simplify or add elements). '
-            .'Ignore any white or paper background of the design: only the ink goes on the skin. '
-            .'Do NOT move, shrink, enlarge or re-center the design: every part that is on skin must stay at exactly the same pixel position and scale as in image 1. '
-            .'A tattoo exists only on bare skin, so any part of the overlay that falls outside the visible skin (on clothing, straps, hair, the background or past the body\'s edge) is simply cut off at the skin boundary — cropped, not shrunk or relocated. '
-            .'Wrap the ink naturally around the curvature and muscles of the body, follow the skin\'s lighting, shadows, pores and fine texture, with ink sitting under the skin — no sticker edges, outlines, glow or halo. '
-            .'This is a local photo edit, not a new image: the person\'s body shape, face, skin tone, muscles, hair, clothing, background, lighting and camera framing must remain pixel-identical; only add ink inside the overlay area. '
-            .'No text, no watermark, no extra tattoos.';
+        // 역할 → 입력 → 규칙(번호) → 다시 한 번 핵심. 가장 중요한 「피부에만 · 위치 그대로 · 나머지 그대로」를 처음과 끝에 둔다.
+        $prompt = implode("\n", [
+            'You are a professional photo retoucher adding a realistic tattoo to an existing photo. This is a small LOCAL EDIT of image 1, not a new image.',
+            '',
+            'INPUTS',
+            '- Image 1: a photo of a body'.$this->where($r).'. A tattoo design is roughly pasted on it as a flat, semi-transparent sticker. The sticker shows exactly WHERE the tattoo goes, how BIG it is and its ANGLE.',
+            '- Image 2: the original tattoo design (reference for its exact lines, shapes, shading and colors).',
+            '',
+            'TASK: turn the sticker into a real, fully healed tattoo inked in the skin.',
+            '',
+            'RULES (all are mandatory)',
+            '1. SKIN ONLY. Ink can exist only on bare skin. Where the sticker covers clothing, straps, fabric, hair, background or goes past the edge of the body, delete that part completely and show the original clothing/background there. Cut the design off cleanly at the skin boundary.',
+            '2. SAME PLACE, SAME SIZE. Keep the tattoo at exactly the sticker\'s position, scale, rotation and mirroring. Do not move, shrink, enlarge, re-center or re-frame it to make it "fit" — cropping at the skin edge is the only allowed change.',
+            '3. SAME DESIGN. Reproduce image 2 faithfully: same lines, details, shading and colors. Do not redesign, simplify, add or remove elements. Ignore the white/paper background of the design — only the ink goes on the skin.',
+            '4. REALISTIC INK. Bend the ink around the curve of the arm/leg/body, follow the skin\'s lighting, shadows, pores and texture. The ink sits under the skin: no sticker edges, outlines, white halo, glow or shine.',
+            '5. NOTHING ELSE CHANGES. The person, face, body shape, muscles, skin tone, hair, clothing, background, lighting, camera angle, framing and image size stay exactly as in image 1.',
+            '6. No text, no watermark, no logo, no extra tattoos.',
+            '',
+            'REMEMBER: tattoo on bare skin only, exactly where the sticker is, and the rest of the photo untouched.',
+        ]);
         $bytes = app(NanoBanana::class)->generate($prompt, [[$composite, $this->mime($composite)], [$stencilBytes, $this->mime($stencilBytes)]], $this->aspectOf($composite));
         // 전후 비교가 맞도록 결과를 입력 사진과 같은 크기로 맞춘다(AI는 정해진 비율로만 돌려줌)
         $bytes = $this->matchSize($bytes, $composite);
