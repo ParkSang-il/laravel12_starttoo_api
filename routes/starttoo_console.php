@@ -301,6 +301,43 @@ Artisan::command('starttoo:bookings-sweep', function () {
 })->purpose('예약 자동 완료·만료');
 \Illuminate\Support\Facades\Schedule::command('starttoo:bookings-sweep')->hourly()->withoutOverlapping();
 
+// 자체 광고 관리. 자리(slot): community_top = 커뮤니티 피드 맨 위 카드
+// 목록) php artisan starttoo:ad
+// 등록) php artisan starttoo:ad add --slot=community_top --advertiser="잉크하우스" --title="12월 예약 오픈" --artist=12 --image=ads/a.jpg --from=2026-12-01 --until=2026-12-31
+//       (--artist=작가 회원 번호 → 상점으로 이동 / 또는 --link=/community/post?id=3 → 앱 안 화면으로 이동)
+// 끄기 · 켜기) php artisan starttoo:ad off 3   ·   php artisan starttoo:ad on 3
+Artisan::command('starttoo:ad {action=list} {id?} {--slot=community_top} {--advertiser=} {--title=} {--artist=} {--link=} {--image=} {--from=} {--until=}', function () {
+    $ads = app(\App\Services\Starttoo\Ads::class);
+    $action = (string) $this->argument('action');
+    try {
+        return app(ProjectDatabase::class)->run('starttoo', function () use ($ads, $action) {
+            if ($action === 'add') {
+                $image = $this->option('image');
+                if ($image && !str_starts_with($image, '/')) $image = base_path($image);
+                $id = $ads->add(['image' => $image] + $this->options());
+                $this->info("광고 {$id}번을 등록했어요.");
+                return 0;
+            }
+            if (in_array($action, ['on', 'off'], true)) {
+                $ok = $ads->setActive((int) $this->argument('id'), $action === 'on');
+                $ok ? $this->info('광고를 '.($action === 'on' ? '켰어요.' : '껐어요.')) : $this->error('그 번호의 광고가 없어요.');
+                return $ok ? 0 : 1;
+            }
+            $rows = array_map(fn ($a) => [
+                $a->id, $a->slot, $a->active ? '켜짐' : '꺼짐', $a->advertiser, $a->title,
+                $a->artist_id ? "상점 {$a->artist_id}" : (string) $a->link,
+                ($a->starts_at ? substr((string) $a->starts_at, 0, 10) : '바로').' ~ '.($a->ends_at ? substr((string) $a->ends_at, 0, 10) : '계속'),
+                $a->impressions, $a->clicks,
+            ], $ads->all());
+            $this->table(['번호', '자리', '상태', '광고주', '문구', '이동', '기간', '노출', '누름'], $rows);
+            return 0;
+        });
+    } catch (\InvalidArgumentException $e) {
+        $this->error($e->getMessage());
+        return 1;
+    }
+})->purpose('자체 광고 등록 · 목록 · 끄기');
+
 // 가상 피팅: 운영자가 올린 모델 사진 등록. 폴더 {dir}/{부위}/{면}/파일.jpg (파일 이름 규칙은 Fittings::importModels)
 // 예) php artisan starttoo:fit-models-import fit-models   ·   끄기: --off=파일이름일부 또는 번호
 Artisan::command('starttoo:fit-models-import {dir=fit-models} {--off=}', function () {
