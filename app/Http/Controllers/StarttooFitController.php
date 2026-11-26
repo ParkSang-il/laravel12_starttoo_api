@@ -20,12 +20,15 @@ class StarttooFitController extends Controller
 
     public function modelSkin(Request $r, int $model, Fittings $f, AuthSessions $s, Artworks $a)
     {
-        $this->viewer($r, $s, $a);
-        return $this->json($f->skinForModel($model));
+        // retry=1: 저장된 마스크가 틀렸다 → 꼼꼼한 방식으로 다시 만든다
+        return $this->json($f->skinForModel($this->viewer($r, $s, $a), $model, $r->query('retry') === '1'));
     }
 
-    /** multipart: photo(내 사진) → 피부 마스크 */
-    public function skin(Request $r, Fittings $f, AuthSessions $s, Artworks $a) { return $this->json($f->skinForPhoto($this->viewer($r, $s, $a), $r->file('photo'))); }
+    /** multipart: photo(내 사진) → 피부 마스크. retry=1이면 꼼꼼한 방식 */
+    public function skin(Request $r, Fittings $f, AuthSessions $s, Artworks $a)
+    {
+        return $this->json($f->skinForPhoto($this->viewer($r, $s, $a), $r->file('photo'), filter_var($r->input('retry', false), FILTER_VALIDATE_BOOLEAN)));
+    }
 
     public function stencils(Request $r, Fittings $f, AuthSessions $s, Artworks $a) { return $this->json($f->stencils($this->viewer($r, $s, $a), $r->query())); }
     public function list(Request $r, Fittings $f, AuthSessions $s, Artworks $a) { return $this->json($f->list($this->viewer($r, $s, $a), $r->query())); }
