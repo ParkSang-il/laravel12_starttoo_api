@@ -32,6 +32,15 @@
           <span style="font-size: 13px; font-weight: 700; color: #3A3731">받는 사람</span>
           <div style="display: flex; flex-wrap: wrap; gap: 6px">@foreach ($targets as $t)<a href="{{ $t['href'] }}" class="btn-a" style="{{ $t['style'] }}">{{ $t['label'] }}</a>@endforeach</div>
           <span style="font-size: 13px; color: #66625B">예상 수신 <b style="color: #141413">{{ $reach }}</b> · {{ $reachNote }}</span>
+          @if ($reachList)
+            <details style="font-size: 13px; color: #3A3731">
+              <summary style="cursor: pointer; font-weight: 700">받을 회원 보기</summary>
+              <ul style="margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px">
+                @foreach ($reachList as $u)<li style="padding: 4px 10px; border-radius: 12px; background: #F4F2EE; font-size: 12px"><b style="font-variant-numeric: tabular-nums">{{ $u['id'] }}</b> · {{ $u['nick'] }}</li>@endforeach
+                @if ($reachMore > 0)<li style="padding: 4px 10px; font-size: 12px; color: #66625B">외 {{ number_format($reachMore) }}명</li>@endif
+              </ul>
+            </details>
+          @endif
         </div>
         <div style="display: flex; flex-wrap: wrap; gap: 14px">
           <label style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">누르면 열리는 화면</span><select name="landing" form="f-send" data-draft="push-landing" style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%">@foreach ($landings as $value => $label)<option value="{{ $value }}" @selected($landing === $value)>{{ $label }}</option>@endforeach</select></label>
@@ -74,7 +83,17 @@
             <tbody>
               @forelse ($history as $h)
               <tr>
-                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-weight: 700">{{ $h['title'] }}</td>
+                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; font-weight: 700">{{ $h['title'] }}
+                  @if ($h['recipients'])
+                    <details style="margin-top: 6px; font-weight: 400; font-size: 12px; color: #3A3731">
+                      <summary style="cursor: pointer; color: #66625B">받은 회원 {{ count($h['recipients']) + $h['more'] }}명</summary>
+                      <ul style="margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px">
+                        @foreach ($h['recipients'] as $u)<li><b style="font-variant-numeric: tabular-nums">{{ $u['id'] }}</b> · {{ $u['nick'] }} · <span style="color: #66625B">{{ $u['state'] }}</span></li>@endforeach
+                        @if ($h['more'] > 0)<li style="color: #66625B">외 {{ number_format($h['more']) }}명</li>@endif
+                      </ul>
+                    </details>
+                  @endif
+                </td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">{{ $h['type'] }}</td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">{{ $h['target'] }}</td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-variant-numeric: tabular-nums">{{ $h['sent'] }}</td>

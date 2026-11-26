@@ -167,7 +167,9 @@ class AdminCommsController extends AdminBaseController
                 $prefs = app(UserPreferences::class);
                 $eligible = array_values(array_filter($ids, fn ($id) => $prefs->marketingEligible($id)));
             }
-            return ['devices' => count($ids), 'eligible' => count($eligible), 'ids' => $target === null ? null : $eligible];
+            return ['devices' => count($ids), 'eligible' => count($eligible), 'ids' => $target === null ? null : $eligible,
+                // 화면에 보여 줄 받을 회원(앞 50명)
+                'preview' => array_slice($eligible, 0, 50)];
         });
     }
 
@@ -201,8 +203,16 @@ class AdminCommsController extends AdminBaseController
         $campaigns = $db->table('starttoo_push_campaigns')->orderByDesc('created_at')->limit(30)->get();
         $counts = $campaigns->isEmpty() ? collect() : $db->table('starttoo_campaign_deliveries')->whereIn('campaign_id', $campaigns->pluck('id')->all())
             ->groupBy('campaign_id')->selectRaw("campaign_id, SUM(state = 'sent') as sent, SUM(opened_at IS NOT NULL) as opened")->get()->keyBy('campaign_id');
-        $history = $campaigns->map(function ($c) use ($counts) {
+        // 캠페인별 실제 대상(회원 ID · 닉네임 · 결과), 캠페인마다 앞 50건
+        $stateLabel = ['pending' => '대기', 'sending' => '보내는 중', 'sent' => '보냄', 'skipped' => '건너뜀', 'failed' => '실패'];
+        $deliveries = $campaigns->isEmpty() ? collect() : $db->table('starttoo_campaign_deliveries as d')->leftJoin('starttoo_users as u', 'u.id', '=', 'd.user_id')
+            ->whereIn('d.campaign_id', $campaigns->pluck('id')->all())->orderBy('d.id')
+            ->get(['d.campaign_id', 'd.user_id', 'd.state', 'd.opened_at', 'u.nickname'])->groupBy('campaign_id');
+        $history = $campaigns->map(function ($c) use ($counts, $deliveries, $stateLabel) {
             $n = $counts[$c->id] ?? null;
+            $rows = $deliveries[$c->id] ?? collect();
+            $recipients = $rows->take(50)->map(fn ($d) => ['id' => 'U-' . $d->user_id, 'nick' => $d->nickname ?? '-',
+                'state' => ($stateLabel[$d->state] ?? $d->state) . ($d->opened_at ? ' · 열어 봄' : '')])->values()->all();
             $sent = (int) ($n->sent ?? 0);
             $users = $c->user_ids ? count(json_decode($c->user_ids, true) ?: []) : null;
             return [
@@ -210,6 +220,7 @@ class AdminCommsController extends AdminBaseController
                 'target' => $users === null ? '전체 회원' : "지정 회원 {$users}명",
                 'sent' => $sent ? number_format($sent) : '-', 'open' => $sent ? number_format((int) ($n->opened ?? 0) / $sent * 100, 1) . '%' : '-',
                 'state' => self::CAMPAIGN_STATE[$c->state][0] ?? $c->state, 'pill' => Ui::pill(self::CAMPAIGN_STATE[$c->state][1] ?? 'gray'),
+                'recipients' => $recipients, 'more' => max(0, $rows->count() - 50),
                 'canCancel' => in_array($c->state, ['running', 'paused', 'draft'], true) && $this->can(request(), 'push.send'),
                 'cancelAction' => route('admin.push.cancel', $c->id),
             ];
@@ -236,6 +247,9 @@ class AdminCommsController extends AdminBaseController
             'targets' => Ui::chips(array_keys(self::TARGETS), $target, 'target'),
             'landings' => self::LANDINGS,
             'reach' => number_format($reach['eligible']) . '명',
+            'reachList' => $this->db()->table('starttoo_users')->whereIn('id', $reach['preview'] ?? [])->orderBy('id')->get(['id', 'nickname'])
+                ->map(fn ($u) => ['id' => 'U-' . $u->id, 'nick' => $u->nickname ?? '-'])->all(),
+            'reachMore' => max(0, $reach['eligible'] - 50),
             'reachNote' => $info ? '앱 알림을 켠 모든 회원(광고 수신 동의와 무관)' : '앱 알림을 켠 회원 ' . number_format($reach['devices']) . '명 중 광고성 알림 수신 동의자',
             'night' => !$info && ($hour < 9 || $hour >= 20),
             'canSend' => $this->can($request, 'push.send') && $enabled && $reach['eligible'] > 0 && !$tooMany,
