@@ -33,6 +33,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // 작성 중 내용 지키기: 칩(받는 사람 · 유형)을 눌러 페이지가 다시 열려도 입력값을 되살린다.
+  // data-draft="이름" 이 붙은 칸만, 이 탭(sessionStorage)에만 저장하고, 그 폼을 보내면 지운다.
+  const draftFields = document.querySelectorAll('[data-draft]');
+  const draftKey = (el) => 'admin-draft:' + location.pathname + ':' + el.dataset.draft;
+  draftFields.forEach((el) => {
+    try {
+      const saved = sessionStorage.getItem(draftKey(el));
+      // 글 칸은 비어 있을 때만(서버가 되돌려 준 입력이 우선), 선택 칸은 저장한 값이 목록에 있으면
+      if (saved !== null && el.tagName === 'SELECT') {
+        if ([...el.options].some((o) => o.value === saved)) el.value = saved;
+      } else if (saved !== null && el.value.trim() === '') el.value = saved;
+    } catch (_) { /* 저장소를 못 쓰면 그냥 넘어간다 */ }
+    const save = () => { try { sessionStorage.setItem(draftKey(el), el.value); } catch (_) {} };
+    el.addEventListener('input', save);
+    el.addEventListener('change', save);
+    const owner = el.form || (el.getAttribute('form') && document.getElementById(el.getAttribute('form')));
+    if (owner) owner.addEventListener('submit', () => { try { sessionStorage.removeItem(draftKey(el)); } catch (_) {} });
+  });
+
   // 푸시 미리보기: 제목 · 내용을 입력하는 대로 잠금 화면 카드에 보여 준다
   document.querySelectorAll('[data-preview]').forEach((input) => {
     const key = input.dataset.preview;

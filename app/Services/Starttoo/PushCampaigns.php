@@ -35,7 +35,9 @@ class PushCampaigns
             'kind' => ['sometimes', 'in:marketing,info'],
             'title' => ['required', 'string', 'max:'.($info ? 60 : 45)], 'body' => ['required', 'string', 'max:600'],
             'sender' => [$info ? 'nullable' : 'required', 'string', 'max:50'],
-            'target_type' => ['required', 'in:home,settings,artwork,post'], 'target_id' => ['nullable', 'required_if:target_type,artwork,post', 'uuid'],
+            // notice: 운영 콘솔 공지 푸시(공지 번호) → 앱이 공지 상세를 연다
+            'target_type' => ['required', 'in:home,settings,artwork,post,notice'],
+            'target_id' => ['nullable', 'required_if:target_type,artwork,post,notice', ($input['target_type'] ?? '') === 'notice' ? 'integer' : 'uuid'],
             'user_ids' => ['nullable', 'array', 'min:1', 'max:1000'], 'user_ids.*' => ['integer', 'min:1', 'distinct'],
             'per_minute' => ['sometimes', 'integer', 'min:1', 'max:6000'],
         ]);
@@ -46,12 +48,15 @@ class PushCampaigns
             $alias = $input['target_type'] === 'post' ? 'p' : 'a';
             if (!$service->feedQuery(null, 'public')->where($alias.'.id', $input['target_id'])->exists()) throw new \InvalidArgumentException('공개된 게시물만 광고 대상으로 지정할 수 있어요.');
         }
+        if ($input['target_type'] === 'notice' && !$this->db()->table('starttoo_announcements')->where('id', (int) $input['target_id'])->where('active', true)->exists()) {
+            throw new \InvalidArgumentException('게시 중인 공지만 푸시로 보낼 수 있어요.');
+        }
         $id = (string) Str::uuid();
         $this->db()->table('starttoo_push_campaigns')->insert([
             'id' => $id, 'kind' => $info ? 'info' : 'marketing',
             'title' => $info ? $input['title'] : '(광고) '.$input['title'],
             'body' => $info ? $input['body'] : $input['sender']."\n".$input['body']."\n수신거부: 앱 > 알림 · 개인정보 설정 > 이벤트 · 혜택",
-            'target_type' => $input['target_type'], 'target_id' => in_array($input['target_type'], ['post', 'artwork'], true) ? $input['target_id'] : null,
+            'target_type' => $input['target_type'], 'target_id' => in_array($input['target_type'], ['post', 'artwork', 'notice'], true) ? (string) $input['target_id'] : null,
             'user_ids' => isset($input['user_ids']) ? json_encode($input['user_ids'], JSON_THROW_ON_ERROR) : null,
             'per_minute' => $input['per_minute'] ?? 300, 'created_at' => now(),
         ]);
@@ -223,6 +228,8 @@ class PushCampaigns
         if (!$c || $c->state === 'cancelled') abort(404);
         if ($c->target_type === 'post') app(Posts::class)->detail($c->target_id, $user);
         if ($c->target_type === 'artwork') app(Artworks::class)->detail($c->target_id, $user);
+        // 내려간 공지면 404(앱은 열지 않는다)
+        if ($c->target_type === 'notice') app(Announcements::class)->detail((int) $c->target_id);
         $db->table('starttoo_campaign_deliveries')->where('campaign_id', $id)->where('user_id', $user)->whereNull('opened_at')->update(['opened_at' => now()]);
         app(PushAudit::class)->opened('campaign', $id, $user);
         return ['target_type' => $c->target_type, 'target_id' => $c->target_id];

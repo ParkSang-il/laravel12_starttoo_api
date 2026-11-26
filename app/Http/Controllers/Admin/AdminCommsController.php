@@ -45,6 +45,12 @@ class AdminCommsController extends AdminBaseController
             'sel' => $sel ? ['title' => $sel->title, 'category' => $sel->category, 'body' => $sel->body, 'pinned' => (bool) $sel->pinned,
                 'state' => $state($sel), 'pill' => Ui::pill($kind[$state($sel)])] : ['title' => '', 'category' => 'notice', 'body' => '', 'pinned' => false, 'state' => '새 공지', 'pill' => Ui::pill('blue')],
             'newHref' => Ui::url(['sel' => 'new']),
+            // 새 공지 게시할 때만 「푸시 보내기」(받을 회원 수는 5분 캐시)
+            'canPush' => ($isNew || !$sel) && $this->can($request, 'push.send') && config('starttoo.push_enabled'),
+            'pushNote' => ($isNew || !$sel) && $this->can($request, 'push.send') && config('starttoo.push_enabled')
+                ? '공지 · 업데이트 → 정보성 · 알림 켠 회원 ' . number_format($this->reach(null, true)['eligible']) . '명 / 이벤트 → 광고성 · 수신 동의자 '
+                    . number_format($this->reach(null, false)['eligible']) . '명 (09~20시). 누르면 이 공지가 열려요.'
+                : null,
             'saveAction' => $isNew || !$sel ? route('admin.notices.store') : route('admin.notices.save', $sel->id),
             'saveLabel' => $isNew || !$sel ? '게시' : '저장',
         ]);
@@ -57,21 +63,58 @@ class AdminCommsController extends AdminBaseController
             'category' => ['required', 'in:' . implode(',', array_keys(Announcements::CATEGORIES))],
             'body' => ['required', 'string', 'max:10000'],
             'pinned' => ['nullable', 'boolean'],
+            'push' => ['nullable', 'boolean'],
         ], ['title.required' => '제목을 입력해주세요.', 'body.required' => '본문을 입력해주세요.']);
+    }
+
+    /** 공지 분류 → 푸시 종류: 이벤트는 광고(정보통신망법), 공지 · 업데이트는 정보성 */
+    private static function noticePushInfo(string $category): bool
+    {
+        return $category !== 'event';
     }
 
     public function storeNotice(Request $request): RedirectResponse
     {
         $this->need($request, 'notice.manage');
         $in = $this->noticeInput($request);
+        $push = (bool) ($in['push'] ?? false);
+        if ($push) $this->need($request, 'push.send');
         try {
             $id = app(Announcements::class)->add(['title' => $in['title'], 'body' => $in['body'], 'category' => $in['category'], 'pin' => (bool) ($in['pinned'] ?? false)]);
         } catch (\InvalidArgumentException $e) {
             return back()->withErrors(['title' => $e->getMessage()])->withInput();
         }
         $this->audit($request, '콘텐츠', '공지 게시', "공지 #{$id} · {$in['title']}");
+        $message = '공지를 게시했어요';
 
-        return redirect(route('admin.notices', ['sel' => $id]))->with('status', '공지를 게시했어요');
+        // 「게시할 때 푸시 보내기」: 공지 제목 · 본문 첫 줄로 보내고, 누르면 공지 상세가 열린다
+        if ($push) {
+            $info = self::noticePushInfo($in['category']);
+            $firstLine = trim(strtok(str_replace("\r", '', trim($in['body'])), "\n") ?: '');
+            try {
+                $campaignId = $this->startCampaign($info, mb_strimwidth(trim($in['title']), 0, $info ? 60 : 45, '…'),
+                    mb_strimwidth($firstLine !== '' ? $firstLine : trim($in['title']), 0, 200, '…'), 'notice', (string) $id, null);
+                $reach = $this->reach(null, $info)['eligible'];
+                $this->audit($request, '설정', $info ? '정보성 푸시 발송' : '광고 푸시 발송', "공지 #{$id} · {$in['title']} · 전체 회원 " . number_format($reach) . '명', ['campaign' => $campaignId]);
+                $hour = (int) now('Asia/Seoul')->format('G');
+                $message .= !$info && ($hour < 9 || $hour >= 20) ? ' · 광고 푸시는 오전 9시부터 보내요' : ' · 푸시를 보내기 시작했어요';
+            } catch (\InvalidArgumentException $e) {
+                // 공지는 이미 올라갔다. 푸시만 실패한 이유를 알려 준다.
+                return redirect(route('admin.notices', ['sel' => $id]))->withErrors(['push' => '공지는 게시했지만 푸시는 보내지 못했어요: ' . $e->getMessage()]);
+            }
+        }
+
+        return redirect(route('admin.notices', ['sel' => $id]))->with('status', $message);
+    }
+
+    /** 캠페인 만들고 바로 시작(정보성 · 광고성). $ids = null 이면 전체 */
+    private function startCampaign(bool $info, string $title, string $body, string $landing, ?string $targetId, ?array $ids): string
+    {
+        $campaigns = app(PushCampaigns::class);
+        $id = $campaigns->create(['kind' => $info ? 'info' : 'marketing', 'title' => $title, 'body' => $body, 'sender' => 'STARTTOO',
+            'target_type' => $landing, 'target_id' => $targetId, 'user_ids' => $ids]);
+        $campaigns->control($id, 'start');
+        return $id;
     }
 
     public function saveNotice(Request $request, int $id): RedirectResponse
@@ -221,11 +264,8 @@ class AdminCommsController extends AdminBaseController
         if ($reach['ids'] !== null && ($reach['ids'] === [] || count($reach['ids']) > self::MAX_USERS)) {
             return back()->withErrors(['target' => '보낼 수 있는 대상이 아니에요.'])->withInput();
         }
-        $campaigns = app(PushCampaigns::class);
         try {
-            $id = $campaigns->create(['kind' => self::TYPES[$data['type']], 'title' => $title, 'body' => trim($data['body']), 'sender' => 'STARTTOO',
-                'target_type' => $data['landing'], 'user_ids' => $reach['ids']]);
-            $campaigns->control($id, 'start');
+            $id = $this->startCampaign($info, $title, trim($data['body']), $data['landing'], null, $reach['ids']);
         } catch (\InvalidArgumentException $e) {
             return back()->withErrors(['title' => $e->getMessage()])->withInput();
         }

@@ -14,6 +14,8 @@ return new class extends Migration {
     {
         Schema::table('starttoo_push_campaigns', function (Blueprint $t) {
             $t->string('kind', 12)->default('marketing')->after('id')->comment('marketing 광고성 · info 정보성');
+            // 공지 푸시(target_type notice)는 공지 번호를 넣으므로 UUID 전용 칸을 문자 칸으로
+            $t->string('target_id', 36)->nullable()->comment('게시물 · 작품 UUID 또는 공지 번호')->change();
         });
     }
 
