@@ -5,6 +5,7 @@ namespace App\Services\Starttoo;
 use App\Services\ProjectDatabase;
 use Carbon\Carbon;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
@@ -38,6 +39,8 @@ class ArtistAds
     public const VAT_RATE = 0.1;
     /** 광고를 누른 뒤 이 기간 안에 상담을 요청하면 광고 성과로 센다 */
     public const LEAD_DAYS = 7;
+    /** 직접 올리는 광고 사진 최대 크기 */
+    public const IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 
     private function db() { return app(ProjectDatabase::class)->database(); }
 
@@ -57,17 +60,63 @@ class ArtistAds
         ['title' => '광고비는 얼마인가요?', 'body' => "광고 만들기 화면에 상품별 단가와 예상 광고비(부가세 별도)를 안내해요.\n광고비 결제 방법은 결제 기능을 열 때 따로 안내해드려요."],
     ];
 
+    /**
+     * 광고 운영 정책 기본안(저장된 정책이 없을 때). 작가가 광고 심사를 요청할 때 동의하는 문서다.
+     * 개발용 초안: 정식 운영 전에 법률 검토 후 운영 콘솔 「광고 운영 정책」에서 확정한다.
+     */
+    private const POLICY_DEFAULT = [
+        ['title' => '적용 범위', 'body' => "이 정책은 STARTTOO 앱 안에 나오는 모든 작가 광고(검색 결과 상단 · 추천 피드 카드 · 커뮤니티 상단 · 지역 탐색 상단 · 인기 작가 캐러셀)에 적용돼요.\n광고를 신청하거나 문구 · 작품을 바꿀 때마다 그때의 정책에 동의해야 심사를 요청할 수 있어요."],
+        ['title' => '광고 표시', 'body' => "모든 광고에는 ‘광고’ 표시가 붙고, 이 표시는 빼거나 가릴 수 없어요.\n일반 게시물 · 후기 · 운영자 공지처럼 보이게 만드는 광고는 등록할 수 없어요."],
+        ['title' => '등록할 수 없는 광고', 'body' => "· 가격 · 할인 · 무료 · 이벤트 가격 표현(예: 50% 할인, 오늘만 무료 리터치)\n· 시술 효과를 보장하거나 과장하는 표현(예: 통증 없는 시술, 100% 지워지는 커버업, 부작용 없음)\n· 의료 행위나 치료 효과를 떠올리게 하는 표현\n· 내 작품이 아닌 사진, 다른 사람의 저작물 · 얼굴을 허락 없이 쓴 사진\n· 전화번호 · 메신저 · SNS 계정 · 계좌 등 앱 밖 연락 · 거래로 이끄는 내용\n· 미성년자를 대상으로 하거나 미성년자 시술을 권하는 내용\n· 다른 작가 · 상점을 비교하거나 깎아내리는 내용\n· 사실과 다른 경력 · 수상 · 자격 표시\n· 선정적 · 폭력적 · 혐오 표현, 법령에 어긋나는 내용"],
+        ['title' => '심사', 'body' => "심사 요청 후 보통 영업일 하루 안에 결과를 알림으로 알려드려요.\n정책에 맞지 않으면 반려 사유와 함께 알려드리고, 고쳐서 다시 요청할 수 있어요.\n노출 중인 광고의 문구 · 작품을 바꾸면 다시 심사하고, 심사하는 동안에는 기존 광고가 계속 나와요."],
+        ['title' => '노출 중지 · 제한', 'body' => "승인 뒤라도 정책 위반이 확인되거나 신고가 이어지면 광고를 멈추거나 내릴 수 있어요.\n상점 숨김 · 이용 제한 · 탈퇴 상태가 되면 광고는 자동으로 나오지 않아요.\n광고를 본 회원과 서로 차단한 사이라면 그 회원에게는 광고가 나오지 않아요."],
+        ['title' => '노출 · 성과', 'body' => "노출 위치 안에서의 순서 · 횟수는 보는 사람과 시점에 따라 달라지며, 특정 노출 수나 상담 수를 보장하지 않아요.\n· 노출: 광고가 화면에 나온 횟수\n· 클릭: 광고를 누른 횟수\n· 상담 요청: 광고를 누른 회원이 7일 안에 새 상담을 요청한 수(한 상담에 한 번)"],
+        ['title' => '광고비', 'body' => "광고 만들기 화면의 금액은 예상 광고비(부가세 별도)예요.\n결제 · 환불 기준은 결제 기능을 열 때 이 정책에 추가하고 앱에서 다시 안내해드려요."],
+        ['title' => '책임', 'body' => "광고 문구 · 사진의 내용과 권리에 대한 책임은 광고를 신청한 작가에게 있어요.\n광고를 보고 이뤄진 상담 · 예약 · 시술의 조건과 결과는 작가와 회원 사이의 약속이에요."],
+        ['title' => '정책 변경', 'body' => "정책을 바꾸면 앱 「광고 운영 정책」에 바로 반영돼요.\n이미 노출 중인 광고에는 다음 심사(문구 · 작품 변경, 다시 요청)부터 바뀐 정책이 적용돼요."],
+    ];
+
     /** 앱 「광고 안내」 · 콘솔 편집용 섹션 목록 */
     public function guide(): array
     {
-        $saved = app(Settings::class)->json('ad_guide');
-        $sections = is_array($saved['sections'] ?? null) ? $saved['sections'] : self::GUIDE_DEFAULT;
+        return $this->sections('ad_guide', self::GUIDE_DEFAULT);
+    }
+
+    /** 앱 「광고 운영 정책」 · 콘솔 편집용 섹션 목록 + 버전(동의 기록에 남긴다) */
+    public function policy(): array
+    {
+        return $this->sections('ad_policy', self::POLICY_DEFAULT);
+    }
+
+    private function sections(string $key, array $default): array
+    {
+        $saved = app(Settings::class)->json($key);
+        $sections = is_array($saved['sections'] ?? null) ? $saved['sections'] : $default;
         return ['sections' => array_values(array_map(fn ($s) => ['title' => (string) ($s['title'] ?? ''), 'body' => (string) ($s['body'] ?? '')], $sections)),
-            'updated_at' => $saved['updated_at'] ?? null];
+            'updated_at' => $saved['updated_at'] ?? null,
+            // 기본안은 basic, 콘솔에서 저장하면 저장 시각
+            'version' => isset($saved['updated_at']) ? date('Y-m-d H:i', strtotime($saved['updated_at'])) : 'basic'];
+    }
+
+    /** 심사 요청 · 다시 요청 · 변경 요청: 광고 운영 정책 동의 확인 후 동의한 버전 · 시각 */
+    private function agreement(array $input): array
+    {
+        if (($input['agree_policy'] ?? false) !== true) $this->fail(422, 'AD_POLICY_REQUIRED', '광고 운영 정책에 동의해주세요.');
+        return ['policy_version' => $this->policy()['version'], 'policy_agreed_at' => now()];
+    }
+
+    public function savePolicy(array $rows, int $adminId): array
+    {
+        return $this->saveSections('ad_policy', $rows, $adminId);
     }
 
     /** 콘솔 저장: 제목 · 본문이 모두 빈 섹션은 버리고, order(작은 수가 위) 순으로 둔다 */
     public function saveGuide(array $rows, int $adminId): array
+    {
+        return $this->saveSections('ad_guide', $rows, $adminId);
+    }
+
+    private function saveSections(string $key, array $rows, int $adminId): array
     {
         $sections = [];
         foreach ($rows as $i => $row) {
@@ -79,11 +128,11 @@ class ArtistAds
             if (mb_strlen($body) > self::GUIDE_BODY_MAX) throw new \InvalidArgumentException('본문은 '.self::GUIDE_BODY_MAX.'자까지 적을 수 있어요.');
             $sections[] = ['order' => (int) ($row['order'] ?? $i), 'i' => count($sections), 'title' => $title, 'body' => $body];
         }
-        if (!$sections) throw new \InvalidArgumentException('안내 섹션을 1개 이상 적어주세요.');
+        if (!$sections) throw new \InvalidArgumentException('섹션을 1개 이상 적어주세요.');
         if (count($sections) > self::GUIDE_MAX_SECTIONS) throw new \InvalidArgumentException('섹션은 '.self::GUIDE_MAX_SECTIONS.'개까지 둘 수 있어요.');
         usort($sections, fn ($a, $b) => [$a['order'], $a['i']] <=> [$b['order'], $b['i']]);
         $value = ['sections' => array_map(fn ($s) => ['title' => $s['title'], 'body' => $s['body']], $sections), 'updated_at' => now()->toIso8601String()];
-        app(Settings::class)->set('ad_guide', $value, $adminId);
+        app(Settings::class)->set($key, $value, $adminId);
         return $value;
     }
 
@@ -297,7 +346,10 @@ class ArtistAds
             'id' => (int) $ad->id, 'product' => $ad->product, 'product_name' => $p['name'] ?? $ad->product, 'state' => $state,
             'title' => $ad->title, 'keywords' => $keywords, 'days' => $ad->days === null ? null : (int) $ad->days,
             'amount' => $ad->amount === null ? null : (int) $ad->amount, 'unit' => $p['unit'] ?? 'day', 'artwork_id' => $ad->artwork_id,
-            'image_url' => $ad->artwork_id && isset($images[$ad->artwork_id]) ? app(MediaUrls::class)->url($images[$ad->artwork_id], 300) : null,
+            // 직접 올린 사진이 있으면 그 사진, 아니면 작품 첫 사진
+            'image_url' => $ad->image_path ? app(MediaUrls::class)->url($ad->image_path, 300)
+                : ($ad->artwork_id && isset($images[$ad->artwork_id]) ? app(MediaUrls::class)->url($images[$ad->artwork_id], 300) : null),
+            'own_image' => (bool) $ad->image_path,
             'starts_at' => $start?->toIso8601String(), 'ends_at' => $end?->toIso8601String(),
             'requested_at' => $ad->requested_at ? Carbon::parse($ad->requested_at)->toIso8601String() : null,
             'total_days' => $total, 'elapsed_days' => $elapsed,
@@ -335,18 +387,21 @@ class ArtistAds
     // ── 작가: 신청 · 변경 ─────────────────────────────
 
     /** 6-08 심사 요청. 같은 상품의 심사 중 · 노출 중 광고가 있으면 받지 않는다. */
-    public function create(int $artist, array $input): array
+    /** $image: 작가가 직접 올린(앱 편집기로 다듬은) 광고 사진. 있으면 작품 대신 이 사진을 쓴다 */
+    public function create(int $artist, array $input, ?UploadedFile $image = null): array
     {
         $config = $this->config();
         $id = (string) ($input['product'] ?? '');
         $p = $config[$id] ?? null;
         if (!$p) $this->fail(422, 'INVALID_AD', '광고 위치를 골라주세요.');
         if ($sold = $this->soldOut($id, $p)) $this->fail(409, 'AD_SOLD_OUT', $sold === '잠시 신청을 받지 않아요' ? '지금은 이 위치 광고를 신청할 수 없어요.' : "{$sold}이에요. 다른 위치를 골라주세요.");
-        $values = $this->content($artist, $p, $input);
+        $agreed = $this->agreement($input);
         $exists = $this->db()->table('starttoo_ads')->where('artist_id', $artist)->where('product', $id)
             ->where(fn ($q) => $q->where('status', 'reviewing')->orWhere(fn ($r) => $r->where('status', 'running')
                 ->where(fn ($e) => $e->whereNull('ends_at')->orWhere('ends_at', '>', now()))))->exists();
         if ($exists) $this->fail(409, 'AD_EXISTS', '이 위치에 심사 중이거나 노출 중인 광고가 있어요.');
+        // 사진 저장은 다른 검사를 모두 통과한 뒤에(거절될 요청에 파일을 남기지 않게)
+        $values = $this->content($artist, $p, $input, $image, null) + $agreed;
         $days = $p['unit'] === 'day' ? $this->days($input['days'] ?? null) : null;
         $price = $this->price($id, $artist, $config);
         $adId = $this->db()->table('starttoo_ads')->insertGetId($values + [
@@ -359,33 +414,47 @@ class ArtistAds
     }
 
     /** 반려된 광고를 고쳐 다시 요청 · 노출 중 광고의 문구 · 작품 바꾸기(다시 심사) */
-    public function edit(int $artist, int $id, array $input): array
+    public function edit(int $artist, int $id, array $input, ?UploadedFile $image = null): array
     {
         $ad = $this->mine($artist, $id);
         $p = $this->config()[$ad->product];
-        $values = $this->content($artist, $p, $input);
         $state = $this->state($ad);
+        if (!in_array($state, ['rejected', 'running', 'paused', 'scheduled'], true)) {
+            $this->fail(409, 'AD_STATE', $state === 'reviewing' ? '심사 중인 광고는 결과가 나온 뒤 고칠 수 있어요.' : '종료된 광고는 고칠 수 없어요.');
+        }
+        // 다시 요청 · 변경 요청도 그때의 광고 운영 정책에 동의해야 한다
+        $agreed = $this->agreement($input);
+        $values = $this->content($artist, $p, $input, $image, $ad);
         if ($state === 'rejected') {
             $days = $p['unit'] === 'day' ? $this->days($input['days'] ?? $ad->days) : null;
             $price = $this->price($ad->product, $artist);
-            $this->db()->table('starttoo_ads')->where('id', $id)->update($values + ['status' => 'reviewing', 'reject_reason' => null,
+            $this->db()->table('starttoo_ads')->where('id', $id)->update($values + $agreed + ['status' => 'reviewing', 'reject_reason' => null,
                 'days' => $days, 'amount' => $p['unit'] === 'day' ? $price * $days : $price,
                 'requested_at' => now(), 'updated_at' => now()]);
         } elseif (in_array($state, ['running', 'paused', 'scheduled'], true)) {
             $this->db()->table('starttoo_ads')->where('id', $id)->update(['pending' => json_encode([
                 'title' => $values['title'], 'artwork_id' => $values['artwork_id'], 'keywords' => json_decode((string) $values['keywords'], true),
-            ], JSON_UNESCAPED_UNICODE), 'pending_reject_reason' => null, 'requested_at' => now(), 'updated_at' => now()]);
-        } else {
-            $this->fail(409, 'AD_STATE', $state === 'reviewing' ? '심사 중인 광고는 결과가 나온 뒤 고칠 수 있어요.' : '종료된 광고는 고칠 수 없어요.');
+                // 바꿀 사진(직접 올린 사진 경로, 작품으로 바꾸면 null)
+                'image_path' => $values['image_path'],
+            ], JSON_UNESCAPED_UNICODE), 'pending_reject_reason' => null, 'requested_at' => now(), 'updated_at' => now()] + $agreed);
         }
         return $this->detail($artist, $id);
     }
 
     /** 문구 · 작품 · 키워드 검사 → 저장 값 */
-    private function content(int $artist, array $p, array $input): array
+    /**
+     * 광고 내용: 문구 · 키워드 + 광고 사진(셋 중 하나)
+     *  - 새로 올린 사진($image): 작품 없이 이 사진을 쓴다
+     *  - keep_image: 고치는 광고($current)에 이미 올린 사진을 그대로 쓴다
+     *  - artwork_id: 공개한 내 작품의 첫 사진을 쓴다(올린 사진은 비운다)
+     * 돌려주는 image_path 는 광고에 둘 사진 경로(작품이면 null)
+     */
+    private function content(int $artist, array $p, array $input, ?UploadedFile $image = null, ?object $current = null): array
     {
+        $keep = !$image && ($input['keep_image'] ?? false) === true && $current && $current->image_path;
+        $own = $image !== null || $keep;
         $v = Validator::make($input, [
-            'artwork_id' => ['required', 'uuid'],
+            'artwork_id' => [$own ? 'nullable' : 'required', 'uuid'],
             'copy' => ['required', 'string', 'max:'.self::MAX_COPY],
             'keywords' => ['array', 'max:'.self::MAX_KEYWORDS],
             'keywords.*' => ['string', 'min:1', 'max:20'],
@@ -395,11 +464,19 @@ class ArtistAds
         if ($copy === '') $this->fail(422, 'INVALID_AD', '한 줄 문구를 적어주세요.');
         $keywords = array_values(array_unique(array_filter(array_map(fn ($k) => trim((string) $k), $input['keywords'] ?? []))));
         if ($p['keywords'] && !$keywords) $this->fail(422, 'INVALID_AD', '검색 키워드를 1개 이상 골라주세요.');
+        $base = ['title' => $copy, 'keywords' => $p['keywords'] ? json_encode($keywords, JSON_UNESCAPED_UNICODE) : null];
+        if ($image) {
+            if (!$image->isValid() || !in_array($image->getMimeType(), ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'], true)
+                || $image->getSize() > self::IMAGE_MAX_BYTES) {
+                $this->fail(422, 'INVALID_AD_IMAGE', '광고 사진을 확인해주세요(JPG · PNG · 20MB까지).');
+            }
+            return $base + ['artwork_id' => null, 'image_path' => app(ArtworkPhotos::class)->store($artist, $image)];
+        }
+        if ($keep) return $base + ['artwork_id' => null, 'image_path' => $current->image_path];
         $art = $this->db()->table('starttoo_artworks')->where('id', $input['artwork_id'])->where('user_id', $artist)
             ->where('visibility', 'public')->where('moderation_hidden', false)->exists();
         if (!$art || !$this->firstImages([$input['artwork_id']])) $this->fail(422, 'INVALID_AD', '공개된 내 작품을 골라주세요.');
-        return ['title' => $copy, 'artwork_id' => $input['artwork_id'],
-            'keywords' => $p['keywords'] ? json_encode($keywords, JSON_UNESCAPED_UNICODE) : null];
+        return $base + ['artwork_id' => $input['artwork_id'], 'image_path' => null];
     }
 
     private function days(mixed $days): int
@@ -467,7 +544,9 @@ class ArtistAds
         if ($ad->pending) {
             $p = json_decode((string) $ad->pending, true) ?: [];
             $this->db()->table('starttoo_ads')->where('id', $id)->update(['title' => $p['title'] ?? $ad->title,
-                'artwork_id' => $p['artwork_id'] ?? $ad->artwork_id,
+                // 사진을 바꾼 요청이면 작품 · 직접 올린 사진을 함께 바꾼다(예전 요청은 작품만)
+                'artwork_id' => array_key_exists('image_path', $p) ? ($p['artwork_id'] ?? null) : ($p['artwork_id'] ?? $ad->artwork_id),
+                'image_path' => array_key_exists('image_path', $p) ? $p['image_path'] : $ad->image_path,
                 'keywords' => array_key_exists('keywords', $p) && $p['keywords'] !== null ? json_encode($p['keywords'], JSON_UNESCAPED_UNICODE) : $ad->keywords,
                 'pending' => null, 'pending_reject_reason' => null, 'reviewed_at' => now(), 'reviewed_by' => $adminId, 'updated_at' => now()]);
             $this->notify($ad, 'changed');
@@ -533,6 +612,9 @@ class ArtistAds
         return $rows->map(function ($r) use ($images) {
             $pending = $r->pending ? json_decode((string) $r->pending, true) : null;
             $art = $pending['artwork_id'] ?? $r->artwork_id;
+            // 심사할 사진: 변경 요청의 사진 → 지금 광고에 올린 사진 → 작품 첫 사진
+            $own = $pending && array_key_exists('image_path', $pending) ? $pending['image_path'] : $r->image_path;
+            if ($own) $art = null;
             $p = self::PRODUCTS[$r->product] ?? ['name' => $r->product, 'unit' => 'day'];
             return [
                 'id' => (int) $r->id, 'artist_id' => (int) $r->artist_id, 'artist' => $r->nickname, 'advertiser' => $r->advertiser,
@@ -541,7 +623,9 @@ class ArtistAds
                 'keywords' => $pending['keywords'] ?? (json_decode((string) $r->keywords, true) ?: []),
                 'period' => $p['unit'] === 'month' ? $this->nextMonth()[0]->month.'월 한 달' : ((int) $r->days).'일',
                 'amount' => (int) $r->amount, 'artwork_id' => $art,
-                'image' => $art && isset($images[$art]) ? app(MediaUrls::class)->url($images[$art], 300) : null,
+                'image' => $own ? app(MediaUrls::class)->url($own, 600)
+                    : ($art && isset($images[$art]) ? app(MediaUrls::class)->url($images[$art], 300) : null),
+                'own_image' => (bool) $own,
                 'requested_at' => $r->requested_at,
             ];
         })->all();

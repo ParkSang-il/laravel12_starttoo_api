@@ -29,6 +29,7 @@ Route::prefix('v1/projects/starttoo/studio')->middleware([StarttooDatabase::clas
     Route::get('ads', [StarttooStudioController::class, 'ads']);
     Route::get('ads/products', [StarttooStudioController::class, 'adProducts']);
     Route::get('ads/guide', [StarttooStudioController::class, 'adGuide']);
+    Route::get('ads/policy', [StarttooStudioController::class, 'adPolicy']);
     Route::post('ads', [StarttooStudioController::class, 'createAd'])->middleware('throttle:20,1,studio-ads');
     Route::get('ads/{ad}', [StarttooStudioController::class, 'ad'])->whereNumber('ad');
     Route::post('ads/{ad}', [StarttooStudioController::class, 'editAd'])->whereNumber('ad')->middleware('throttle:20,1,studio-ads');

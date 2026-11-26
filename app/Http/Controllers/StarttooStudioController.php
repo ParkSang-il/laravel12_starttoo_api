@@ -30,9 +30,26 @@ class StarttooStudioController extends Controller
         return $this->json($ads->guide());
     }
 
+    /** 광고 운영 정책(심사 요청 때 동의하는 문서, 운영 콘솔에서 고친 섹션) */
+    public function adPolicy(Request $request, Studios $studios, AuthSessions $sessions, ArtistAds $ads)
+    {
+        $this->artist($request, $sessions, $studios);
+        return $this->json($ads->policy());
+    }
+
     public function createAd(Request $request, Studios $studios, AuthSessions $sessions, ArtistAds $ads)
     {
-        return $this->json($ads->create($this->artist($request, $sessions, $studios), $request->all()));
+        return $this->json($ads->create($this->artist($request, $sessions, $studios), $this->adInput($request), $request->file('image')));
+    }
+
+    /** 광고 내용: 사진을 직접 올리면 multipart(payload JSON + image 파일), 아니면 JSON 본문 */
+    private function adInput(Request $request): array
+    {
+        if ($request->has('payload')) {
+            $input = json_decode((string) $request->input('payload'), true);
+            return is_array($input) ? $input : [];
+        }
+        return $request->all();
     }
 
     public function ad(Request $request, int $ad, Studios $studios, AuthSessions $sessions, ArtistAds $ads)
@@ -42,7 +59,7 @@ class StarttooStudioController extends Controller
 
     public function editAd(Request $request, int $ad, Studios $studios, AuthSessions $sessions, ArtistAds $ads)
     {
-        return $this->json($ads->edit($this->artist($request, $sessions, $studios), $ad, $request->all()));
+        return $this->json($ads->edit($this->artist($request, $sessions, $studios), $ad, $this->adInput($request), $request->file('image')));
     }
 
     public function pauseAd(Request $request, int $ad, Studios $studios, AuthSessions $sessions, ArtistAds $ads)

@@ -35,7 +35,32 @@ class AdminArtistAdsController extends AdminBaseController
             'guide' => $ads->guide(),
             'guideAction' => route('admin.ads.artist.guide'),
             'guideLimits' => ['title' => ArtistAds::GUIDE_TITLE_MAX, 'body' => ArtistAds::GUIDE_BODY_MAX, 'sections' => ArtistAds::GUIDE_MAX_SECTIONS],
+            // 광고 운영 정책(작가가 심사 요청 때 동의하는 문서)
+            'policy' => $ads->policy(),
+            'policyAction' => route('admin.ads.artist.policy'),
         ];
+    }
+
+    /** 광고 운영 정책 저장(저장 시각이 새 버전이 되고, 다음 심사 요청부터 그 버전에 동의한다) */
+    public function policy(Request $request): RedirectResponse
+    {
+        $this->need($request, 'ads.manage');
+        $data = $request->validate([
+            'policy' => ['required', 'array', 'max:' . (ArtistAds::GUIDE_MAX_SECTIONS + 5)],
+            'policy.*.title' => ['nullable', 'string', 'max:' . ArtistAds::GUIDE_TITLE_MAX],
+            'policy.*.body' => ['nullable', 'string', 'max:' . ArtistAds::GUIDE_BODY_MAX],
+            'policy.*.order' => ['nullable', 'integer', 'min:0', 'max:999'],
+        ], ['policy.*.title.max' => '제목은 ' . ArtistAds::GUIDE_TITLE_MAX . '자까지 적을 수 있어요.',
+            'policy.*.body.max' => '본문은 ' . ArtistAds::GUIDE_BODY_MAX . '자까지 적을 수 있어요.']);
+        $before = app(ArtistAds::class)->policy();
+        try {
+            $after = app(ArtistAds::class)->savePolicy($data['policy'], (int) $this->admin($request)->id);
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['policy' => $e->getMessage()])->withInput();
+        }
+        $this->audit($request, '설정', '광고 운영 정책 저장', '광고 · 프리미엄 · 섹션 ' . count($after['sections']) . '개',
+            ['before' => $before['sections'], 'after' => $after['sections']]);
+        return back()->with('status', '광고 운영 정책을 저장했어요 · 다음 심사 요청부터 새 정책에 동의해요');
     }
 
     /** 앱 「광고 안내」 페이지 저장 */

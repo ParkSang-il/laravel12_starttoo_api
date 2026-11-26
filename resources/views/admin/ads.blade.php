@@ -60,7 +60,11 @@
       @forelse ($queue as $q)
         <article style="padding: 16px 20px; border-top: 1px solid #F0EDE7; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
           @if ($q['image'])
-            <img src="{{ $q['image'] }}" alt="광고 작품" style="width: 72px; height: 90px; object-fit: cover; border-radius: 8px; border: 1px solid #E4E0D8; flex: none">
+            {{-- 직접 올린 사진은 크게 열어 심사할 수 있게 링크 + 표시 --}}
+            <a href="{{ $q['image'] }}" target="_blank" rel="noopener" style="flex: none; display: flex; flex-direction: column; gap: 4px; align-items: center; text-decoration: none">
+              <img src="{{ $q['image'] }}" alt="{{ ($q['own_image'] ?? false) ? '직접 올린 광고 사진' : '광고 작품' }}" style="width: 72px; height: 90px; object-fit: cover; border-radius: 8px; border: 1px solid #E4E0D8">
+              @if ($q['own_image'] ?? false)<span style="{{ \App\Support\AdminUi::pill('amber') }}">직접 올린 사진</span>@endif
+            </a>
           @else
             <div style="width: 72px; height: 90px; border-radius: 8px; background: #F0EDE7; flex: none"></div>
           @endif
@@ -159,6 +163,42 @@
           <div style="display: flex; gap: 8px; align-items: center">
             <span style="flex: 1; font-size: 12px; color: #66625B; line-height: 1.5">섹션은 {{ $guideLimits['sections'] }}개까지예요. 더 추가하려면 저장한 뒤 다시 열면 빈 칸 2개가 새로 생겨요.</span>
             <button type="submit" style="height: 40px; padding: 0 20px; border-radius: 10px; font-size: 14px; font-weight: 700; border: 0; background: #141413; color: #FFFFFF">저장</button>
+          </div>
+        @endif
+      </form>
+    </section>
+
+    {{-- 광고 운영 정책: 작가가 앱에서 심사를 요청할 때 동의하는 문서. 저장 시각이 새 버전이 된다 --}}
+    @php
+      $policyRows = old('policy', array_merge(
+        array_map(fn ($s, $i) => $s + ['order' => $i + 1], $policy['sections'], array_keys($policy['sections'])),
+        [['title' => '', 'body' => '', 'order' => count($policy['sections']) + 1], ['title' => '', 'body' => '', 'order' => count($policy['sections']) + 2]]
+      ));
+    @endphp
+    <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-size: 17px; font-weight: 700">광고 운영 정책</h2>
+          <span style="font-size: 13px; color: #66625B">작가가 광고 심사를 요청할 때 동의하는 정책이에요(앱 「광고 만들기 → 심사 요청」에서 열어 봐요). 저장하면 새 버전이 되고, 다음 심사 요청부터 새 정책에 동의해요. 동의한 버전은 광고마다 남아요.</span>
+        </div>
+        <span style="font-size: 12px; color: #66625B">{{ $policy['updated_at'] ? '현재 버전 ' . $policy['version'] : '기본안(개발용 초안) 사용 중 · 정식 운영 전 검토 필요' }}</span>
+      </div>
+      @error('policy')<div style="font-size: 13px; color: #B3261E">{{ $message }}</div>@enderror
+      <form method="POST" action="{{ $policyAction }}" style="display: flex; flex-direction: column; gap: 10px">
+        @csrf
+        @foreach ($policyRows as $i => $row)
+          <div style="padding: 14px; border-radius: 12px; background: #F7F5F1; display: flex; flex-direction: column; gap: 8px">
+            <div style="display: flex; gap: 8px">
+              <label style="flex: 0 0 72px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">순서</span><input type="number" name="policy[{{ $i }}][order]" min="0" max="999" value="{{ $row['order'] ?? $i + 1 }}" @disabled(! $canReview) style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 10px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+              <label style="flex: 1; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">제목 <span style="font-weight: 400; color: #66625B">· {{ $guideLimits['title'] }}자까지</span></span><input name="policy[{{ $i }}][title]" maxlength="{{ $guideLimits['title'] }}" value="{{ $row['title'] ?? '' }}" placeholder="{{ ($row['title'] ?? '') === '' ? '새 조항 제목(비우면 추가하지 않아요)' : '' }}" @disabled(! $canReview) style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; font-weight: 700; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+            </div>
+            <label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">본문 <span style="font-weight: 400; color: #66625B">· {{ number_format($guideLimits['body']) }}자까지</span></span><textarea name="policy[{{ $i }}][body]" maxlength="{{ $guideLimits['body'] }}" rows="5" @disabled(! $canReview) style="border-radius: 10px; border: 1px solid #D9D4CB; padding: 10px 12px; font-size: 14px; line-height: 1.6; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%; resize: vertical; font-family: inherit">{{ $row['body'] ?? '' }}</textarea></label>
+          </div>
+        @endforeach
+        @if ($canReview)
+          <div style="display: flex; gap: 8px; align-items: center">
+            <span style="flex: 1; font-size: 12px; color: #66625B; line-height: 1.5">조항은 {{ $guideLimits['sections'] }}개까지예요. 더 추가하려면 저장한 뒤 다시 열면 빈 칸 2개가 새로 생겨요.</span>
+            <button type="submit" data-confirm="광고 운영 정책을 새 버전으로 저장할까요? 다음 심사 요청부터 작가가 새 정책에 동의해요." style="height: 40px; padding: 0 20px; border-radius: 10px; font-size: 14px; font-weight: 700; border: 0; background: #141413; color: #FFFFFF">저장</button>
           </div>
         @endif
       </form>
