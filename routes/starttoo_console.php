@@ -298,9 +298,11 @@ Artisan::command('starttoo:bookings-sweep', function () {
     $r = app(ProjectDatabase::class)->run('starttoo', fn () => app(\App\Services\Starttoo\Bookings::class)->sweep());
     // 24시간 안으로 다가온 확정 예약 리마인더(고객 · 작가)
     $sent = app(ProjectDatabase::class)->run('starttoo', fn () => app(\App\Services\Starttoo\Bookings::class)->remind());
-    $this->info("자동 완료 {$r['done']}건 · 만료 {$r['expired']}건 · 리마인더 {$sent}건");
+    // 운영 콘솔 기간 정지가 끝난 회원 풀기(로그인하지 않은 회원도 공개 목록에 다시 보이게)
+    $lifted = app(ProjectDatabase::class)->run('starttoo', fn () => app(\App\Services\Starttoo\Sanctions::class)->liftExpired());
+    $this->info("자동 완료 {$r['done']}건 · 만료 {$r['expired']}건 · 리마인더 {$sent}건 · 정지 해제 {$lifted}명");
     return 0;
-})->purpose('예약 자동 완료·만료 · 리마인더');
+})->purpose('예약 자동 완료·만료 · 리마인더 · 정지 기간 끝난 회원 해제');
 \Illuminate\Support\Facades\Schedule::command('starttoo:bookings-sweep')->hourly()->withoutOverlapping();
 
 // MY 「공지사항」 관리

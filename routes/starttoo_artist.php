@@ -9,21 +9,21 @@ use Illuminate\Support\Facades\Route;
 // 2-12·2-13 아티스트 전환 신청
 Route::prefix('v1/projects/starttoo/artist')->middleware([StarttooDatabase::class])->group(function () {
     Route::get('application', [StarttooArtistController::class, 'show']);
-    Route::post('application', [StarttooArtistController::class, 'submit'])->middleware('throttle:10,1');
-    Route::post('identity', [StarttooArtistController::class, 'identity'])->middleware('throttle:10,1');
+    Route::post('application', [StarttooArtistController::class, 'submit'])->middleware('throttle:10,1,artist-application');
+    Route::post('identity', [StarttooArtistController::class, 'identity'])->middleware('throttle:10,1,artist-identity');
 });
 
 // 2-14·2-15·2-16 아티스트 스튜디오
 Route::prefix('v1/projects/starttoo/studio')->middleware([StarttooDatabase::class])->group(function () {
     Route::get('/', [StarttooStudioController::class, 'dashboard']);
-    Route::post('shop', [StarttooStudioController::class, 'updateShop'])->middleware('throttle:30,1');
-    Route::get('address-search', [StarttooStudioController::class, 'addressSearch'])->middleware('throttle:30,1');
+    Route::post('shop', [StarttooStudioController::class, 'updateShop'])->middleware('throttle:30,1,studio-shop');
+    Route::get('address-search', [StarttooStudioController::class, 'addressSearch'])->middleware('throttle:30,1,studio-address');
     Route::get('artworks', [StarttooStudioController::class, 'artworks']);
     Route::get('customers', [StarttooStudioController::class, 'customers'])->middleware('throttle:60,1,studio-customers');
     Route::get('stats', [StarttooStudioController::class, 'stats'])->middleware('throttle:60,1,studio-stats');
-    Route::post('artworks/{artwork}', [StarttooStudioController::class, 'updateArtwork'])->whereUuid('artwork')->middleware('throttle:60,1');
+    Route::post('artworks/{artwork}', [StarttooStudioController::class, 'updateArtwork'])->whereUuid('artwork')->middleware('throttle:60,1,studio-artwork');
     Route::get('news', [StarttooShopController::class, 'myNews']);
-    Route::post('news', [StarttooShopController::class, 'createNews'])->middleware('throttle:20,1');
+    Route::post('news', [StarttooShopController::class, 'createNews'])->middleware('throttle:20,1,studio-news');
     Route::post('news/{news}/delete', [StarttooShopController::class, 'deleteNews'])->whereNumber('news');
 });
 

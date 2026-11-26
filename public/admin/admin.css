@@ -1,0 +1,23 @@
+/* STARTTOO 운영 콘솔 공통 스타일 (화면 스타일은 디자인과 같게 각 뷰의 inline style) */
+body { margin: 0; background: #F4F2EE; }
+a { color: #141413; text-decoration: none; }
+a:hover { color: #B93415; }
+button, input, select, textarea { font-family: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+input::placeholder, textarea::placeholder { color: #77736B; }
+input[type="search"]::-webkit-search-cancel-button { cursor: pointer; }
+th { font-weight: 500; }
+[hidden] { display: none !important; }
+
+/* 디자인의 <button> 탭 · 행 선택을 링크로 바꾼 요소 */
+.btn-a { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; text-decoration: none; }
+.btn-a:hover { color: inherit; }
+.admin-nav:hover { color: #FFFFFF !important; }
+[aria-disabled="true"] { cursor: not-allowed; }
+
+/* 키보드 포커스 */
+a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid #FF5A36;
+  outline-offset: 2px;
+}

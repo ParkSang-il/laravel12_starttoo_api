@@ -20,6 +20,7 @@ require __DIR__.'/starttoo_reviews.php';
 require __DIR__.'/starttoo_community.php';
 require __DIR__.'/starttoo_ads.php';
 require __DIR__.'/starttoo_announcements.php';
+require __DIR__.'/starttoo_app.php';
 
 Route::prefix('v1/projects/{projectCode}')
     ->where(['projectCode' => '[a-z][a-z0-9-]{1,49}'])
@@ -34,12 +35,12 @@ Route::prefix('v1/projects/{projectCode}')
             Route::delete('me/push-device', [\App\Http\Controllers\PushDeviceController::class, 'delete']);
             Route::get('me', [ProjectAuthController::class, 'me']);
             Route::patch('me', [ProjectAuthController::class, 'updateProfile']);
-            Route::post('me/avatar', [ProjectAuthController::class, 'uploadAvatar'])->middleware('throttle:10,1');
+            Route::post('me/avatar', [ProjectAuthController::class, 'uploadAvatar'])->middleware('throttle:10,1,project-avatar');
             Route::delete('me/avatar', [ProjectAuthController::class, 'deleteAvatar']);
             Route::post('auth/logout', [ProjectAuthController::class, 'logout']);
             Route::get('support-messages', [\App\Http\Controllers\SupportMessageController::class, 'index']);
             Route::post('support-messages', [\App\Http\Controllers\SupportMessageController::class, 'store'])
-                ->middleware('throttle:5,1');
+                ->middleware('throttle:5,1,project-support');
             require __DIR__.'/groups.php';
         });
     });

@@ -22,6 +22,8 @@ class Reviews
     public const TAGS = ['선이 깔끔해요', '상담이 친절해요', '시간을 잘 지켜요', '위생이 철저해요', '도안을 잘 다듬어줘요', '통증 배려'];
     public const MIN_LENGTH = 20;
     public const MAX_PHOTOS = 5;
+    /** 목록에 남기는 작성자 상태: 정상 · 탈퇴(「탈퇴한 회원」으로 표시) */
+    public const LISTED_STATUSES = ['active', 'withdrawn'];
 
     private function db() { return app(ProjectDatabase::class)->database(); }
 
@@ -185,7 +187,7 @@ class Reviews
         $rows = $q->select('r.*')->offset(($page - 1) * 20)->limit(21)->get();
         return [
             'summary' => $this->summary($artist, $viewer),
-            'items' => $rows->take(20)->map(fn ($r) => $this->format($r, $viewer))->values()->all(),
+            'items' => $this->formatMany($rows->take(20), $viewer),
             'has_more' => $rows->count() > 20,
         ];
     }
@@ -196,7 +198,23 @@ class Reviews
         $page = max(1, (int) ($input['page'] ?? 1));
         $rows = $this->db()->table('starttoo_reviews')->where('customer_id', $viewer)->orderByDesc('id')
             ->offset(($page - 1) * 20)->limit(21)->get();
-        return ['items' => $rows->take(20)->map(fn ($r) => $this->format($r, $viewer))->values()->all(), 'has_more' => $rows->count() > 20];
+        return ['items' => $this->formatMany($rows->take(20), $viewer), 'has_more' => $rows->count() > 20];
+    }
+
+    /** 목록용 format: 회원 · 상점 이름 · 「도움이 됐어요」 여부를 목록 전체에서 한 번씩만 조회한다. */
+    public function formatMany(iterable $rows, ?int $viewer): array
+    {
+        $rows = collect($rows)->values();
+        if ($rows->isEmpty()) return [];
+        $db = $this->db();
+        $userIds = $rows->pluck('customer_id')->merge($rows->pluck('artist_id'))->map(fn ($v) => (int) $v)->unique()->values()->all();
+        $ctx = [
+            'users' => $db->table('starttoo_users')->whereIn('id', $userIds)->get(['id', 'nickname', 'avatar_path', 'status'])->keyBy('id')->all(),
+            'shops' => $db->table('starttoo_shops')->whereIn('user_id', $rows->pluck('artist_id')->unique()->all())->pluck('studio_name', 'user_id')->all(),
+            'helped' => $viewer === null ? [] : array_flip($db->table('starttoo_review_helpfuls')->where('user_id', $viewer)
+                ->whereIn('review_id', $rows->pluck('id')->all())->pluck('review_id')->map(fn ($v) => (int) $v)->all()),
+        ];
+        return $rows->map(fn ($r) => $this->format($r, $viewer, false, $ctx))->all();
     }
 
     /** 5-03 상세 */
@@ -218,7 +236,8 @@ class Reviews
     {
         $q = $this->db()->table('starttoo_reviews as r')->join('starttoo_users as u', 'u.id', '=', 'r.customer_id')
             ->where('r.artist_id', $artist)->where('r.moderation_hidden', false)
-            ->where('u.status', 'active')->where('u.moderation_hidden', false);
+            // 탈퇴한 회원의 리뷰는 남기고 작성자를 「탈퇴한 회원」으로 보여 준다(이용 정지 회원은 뺀다).
+            ->whereIn('u.status', self::LISTED_STATUSES)->where('u.moderation_hidden', false);
         app(Blocks::class)->filter($q, 'r.customer_id', $viewer);
         return $q;
     }
@@ -240,7 +259,7 @@ class Reviews
         $party = $viewer !== null && ((int) $r->customer_id === $viewer || (int) $r->artist_id === $viewer);
         if (!$party) {
             $author = $this->db()->table('starttoo_users')->where('id', $r->customer_id)->first(['status', 'moderation_hidden']);
-            if ($r->moderation_hidden || !$author || $author->status !== 'active' || $author->moderation_hidden
+            if ($r->moderation_hidden || !$author || !in_array($author->status, self::LISTED_STATUSES, true) || $author->moderation_hidden
                 || app(Blocks::class)->between($viewer, (int) $r->customer_id) || app(Blocks::class)->between($viewer, (int) $r->artist_id)) {
                 $this->fail(404, 'REVIEW_NOT_FOUND', '리뷰를 찾을 수 없어요.');
             }
@@ -310,12 +329,15 @@ class Reviews
         }
     }
 
-    public function format(object $r, ?int $viewer, bool $detail = false): array
+    /** $ctx: formatMany 가 미리 모은 회원(users) · 상점 이름(shops) · 도움이 됐어요(helped). 없으면 한 건씩 조회. */
+    public function format(object $r, ?int $viewer, bool $detail = false, ?array $ctx = null): array
     {
         $db = $this->db();
-        $author = $db->table('starttoo_users')->where('id', $r->customer_id)->first(['nickname', 'avatar_path', 'status']);
+        $author = $ctx ? ($ctx['users'][(int) $r->customer_id] ?? null)
+            : $db->table('starttoo_users')->where('id', $r->customer_id)->first(['nickname', 'avatar_path', 'status']);
         $withdrawn = ($author->status ?? null) !== 'active';
-        $artist = $db->table('starttoo_users')->where('id', $r->artist_id)->first(['nickname', 'avatar_path']);
+        $artist = $ctx ? ($ctx['users'][(int) $r->artist_id] ?? null)
+            : $db->table('starttoo_users')->where('id', $r->artist_id)->first(['nickname', 'avatar_path']);
         $urls = app(MediaUrls::class);
         $images = json_decode((string) $r->images, true) ?: [];
         $out = [
@@ -327,10 +349,12 @@ class Reviews
             'author' => ['id' => (int) $r->customer_id, 'nickname' => $withdrawn ? '탈퇴한 회원' : ($author->nickname ?? ''),
                 'avatar_url' => $withdrawn ? null : $urls->url($author->avatar_path ?? null, 300)],
             'artist' => ['id' => (int) $r->artist_id, 'nickname' => $artist->nickname ?? '',
-                'studio_name' => $db->table('starttoo_shops')->where('user_id', $r->artist_id)->value('studio_name')],
+                'studio_name' => $ctx ? ($ctx['shops'][(int) $r->artist_id] ?? null)
+                    : $db->table('starttoo_shops')->where('user_id', $r->artist_id)->value('studio_name')],
             'reply' => $r->reply, 'replied_at' => $r->replied_at ? Carbon::parse($r->replied_at)->toIso8601String() : null,
             'helpful_count' => (int) $r->helpful_count,
-            'helped' => $viewer !== null && $db->table('starttoo_review_helpfuls')->where('review_id', $r->id)->where('user_id', $viewer)->exists(),
+            'helped' => $viewer !== null && ($ctx ? isset($ctx['helped'][(int) $r->id])
+                : $db->table('starttoo_review_helpfuls')->where('review_id', $r->id)->where('user_id', $viewer)->exists()),
             'mine' => $viewer !== null && (int) $r->customer_id === $viewer,
             'can_reply' => $viewer !== null && (int) $r->artist_id === $viewer,
             'hidden' => (bool) $r->moderation_hidden,

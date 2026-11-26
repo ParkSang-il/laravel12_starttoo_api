@@ -130,6 +130,7 @@ class Reports
                     'status' => 'pending', 'open_key' => $openKey, 'created_at' => now(), 'updated_at' => now()]);
                 $db->table('starttoo_safety_audits')->insert(['actor_type' => 'member', 'actor_user_id' => $viewer,
                     'report_id' => $id, 'target_type' => $type, 'target_id' => $input['target_id'], 'action' => 'report', 'reason' => $input['reason']]);
+                $this->autoHide($type, (string) $input['target_id']);
             }
             $result = ['report_id' => (int) $id, 'status' => 'pending', 'duplicate' => $existing !== null];
             $requests->remember($viewer, $input['request_key'], $hash, $result);
@@ -184,10 +185,7 @@ class Reports
             if (!$record) throw new \InvalidArgumentException('신고를 찾을 수 없습니다.');
             // 앱 변경 작업과 회원 -> 작품 -> 신고 순서로 잠금을 맞춘다.
             $db->table('starttoo_users')->where('id', $record->subject_user_id)->lockForUpdate()->first();
-            $table = match ($record->target_type) { 'user' => 'starttoo_users', 'post' => 'starttoo_posts', 'comment' => 'starttoo_artwork_comments',
-                'post_comment' => 'starttoo_post_comments', 'message' => 'starttoo_messages', 'consultation' => 'starttoo_consultations',
-                'review' => 'starttoo_reviews', 'community' => 'starttoo_community_posts',
-                'community_comment' => 'starttoo_community_comments', default => 'starttoo_artworks' };
+            $table = self::table($record->target_type);
             // 대화 전체 신고는 가릴 대상이 없다: 처리(resolved)·기각만 기록하고, 조치는 메시지·회원 단위로 한다.
             $conversation = $record->target_type === 'consultation';
             $target = $db->table($table)->where('id', $record->target_id)->lockForUpdate()->first();
@@ -212,6 +210,36 @@ class Reports
             }
             return ['report_id' => $id, 'status' => $status, 'moderation_hidden' => $hidden];
         }, 3);
+    }
+
+    public static function table(string $type): string
+    {
+        return match ($type) { 'user' => 'starttoo_users', 'post' => 'starttoo_posts', 'comment' => 'starttoo_artwork_comments',
+            'post_comment' => 'starttoo_post_comments', 'message' => 'starttoo_messages', 'consultation' => 'starttoo_consultations',
+            'review' => 'starttoo_reviews', 'community' => 'starttoo_community_posts',
+            'community_comment' => 'starttoo_community_comments', default => 'starttoo_artworks' };
+    }
+
+    /**
+     * 운영 콘솔 「신고 누적 자동 숨김」: 서로 다른 회원의 미처리 신고가 기준 이상이면 검토 전까지 숨긴다.
+     * 회원 자체 · 대화 전체 신고는 자동으로 가리지 않는다(운영자가 판단).
+     */
+    private function autoHide(string $type, string $targetId): void
+    {
+        if (in_array($type, ['user', 'consultation'], true) || !app(Settings::class)->bool('report_auto_hide')) return;
+        $db = app(ProjectDatabase::class)->database();
+        $reporters = $db->table('starttoo_reports')->where('target_type', $type)->where('target_id', $targetId)
+            ->where('status', 'pending')->distinct()->count('reporter_id');
+        if ($reporters < Settings::AUTO_HIDE_REPORTS) return;
+        $table = self::table($type);
+        $target = $db->table($table)->where('id', $targetId)->lockForUpdate()->first();
+        if (!$target || ($target->moderation_hidden ?? true)) return;
+        $values = ['moderation_hidden' => true];
+        if (in_array($type, ['artwork', 'post'], true)) $values['version'] = $target->version + 1;
+        $db->table($table)->where('id', $targetId)->update($values);
+        $db->table('starttoo_safety_audits')->insert(['actor_type' => 'system', 'target_type' => $type, 'target_id' => $targetId,
+            'action' => 'auto_hide', 'reason' => "미처리 신고 {$reporters}건 누적",
+            'changes' => json_encode(['moderation_hidden' => [false, true]], JSON_THROW_ON_ERROR)]);
     }
 
     private function fail(int $status, string $code, string $message): never

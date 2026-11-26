@@ -46,7 +46,7 @@ class Community
         };
         $rows = $q->select('p.*')->offset(($page - 1) * self::PAGE)->limit(self::PAGE + 1)->get();
         $out = [
-            'items' => $rows->take(self::PAGE)->map(fn ($p) => $this->format($p, $viewer))->values()->all(),
+            'items' => $this->formatMany($rows->take(self::PAGE), $viewer),
             'has_more' => $rows->count() > self::PAGE, 'total' => $total,
         ];
         if ($page === 1 && filter_var($input['hot'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
@@ -245,9 +245,10 @@ class Community
             app(Blocks::class)->filter($q, 'u.id', $viewer);
             $ids = $q->orderBy('u.nickname')->limit(20)->pluck('u.id')->all();
         }
+        $cards = $this->artistCards($ids, $viewer);
         $items = [];
         foreach ($ids as $id) {
-            if ($a = $this->artistCard((int) $id, $viewer)) $items[] = $a;
+            if (isset($cards[(int) $id])) $items[] = $cards[(int) $id];
         }
         return ['items' => $items];
     }
@@ -257,7 +258,7 @@ class Community
     private function listQuery(?int $viewer)
     {
         $q = $this->db()->table('starttoo_community_posts as p')->join('starttoo_users as u', 'u.id', '=', 'p.user_id')
-            ->where('p.moderation_hidden', false)->where('u.status', 'active')->where('u.moderation_hidden', false);
+            ->where('p.moderation_hidden', false)->whereIn('u.status', Reviews::LISTED_STATUSES)->where('u.moderation_hidden', false);
         app(Blocks::class)->filter($q, 'p.user_id', $viewer);
         return $q;
     }
@@ -269,7 +270,7 @@ class Community
         if (!$p) $this->fail(404, 'COMMUNITY_NOT_FOUND', '글을 찾을 수 없어요.');
         if ($viewer === null || (int) $p->user_id !== $viewer) {
             $author = $this->db()->table('starttoo_users')->where('id', $p->user_id)->first(['status', 'moderation_hidden']);
-            if ($p->moderation_hidden || !$author || $author->status !== 'active' || $author->moderation_hidden
+            if ($p->moderation_hidden || !$author || !in_array($author->status, Reviews::LISTED_STATUSES, true) || $author->moderation_hidden
                 || app(Blocks::class)->between($viewer, (int) $p->user_id)) {
                 $this->fail(404, 'COMMUNITY_NOT_FOUND', '글을 찾을 수 없어요.');
             }
@@ -318,13 +319,27 @@ class Community
 
     private function artistCard(int $id, ?int $viewer): ?array
     {
-        $u = $this->db()->table('starttoo_users')->where('id', $id)->first(['id', 'nickname', 'avatar_path', 'status', 'moderation_hidden', 'artist_status']);
-        if (!$u || $u->status !== 'active' || $u->moderation_hidden || $u->artist_status !== 'approved' || app(Blocks::class)->between($viewer, $id)) return null;
-        return [
-            'id' => (int) $u->id, 'nickname' => $u->nickname,
-            'studio_name' => $this->db()->table('starttoo_shops')->where('user_id', $id)->value('studio_name'),
-            'avatar_url' => app(MediaUrls::class)->url($u->avatar_path, 300),
-        ];
+        return $this->artistCards([$id], $viewer)[$id] ?? null;
+    }
+
+    /** 태그할 수 있는 작가 카드(승인 · 정상 · 차단 아님)를 한 번에: [작가 번호 => 카드] */
+    private function artistCards(array $ids, ?int $viewer): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn ($id) => $id > 0)));
+        if (!$ids) return [];
+        $db = $this->db();
+        $blocked = array_flip(app(Blocks::class)->blockedAmong($viewer, $ids));
+        $shops = $db->table('starttoo_shops')->whereIn('user_id', $ids)->pluck('studio_name', 'user_id')->all();
+        $out = [];
+        foreach ($db->table('starttoo_users')->whereIn('id', $ids)->get(['id', 'nickname', 'avatar_path', 'status', 'moderation_hidden', 'artist_status']) as $u) {
+            $id = (int) $u->id;
+            if ($u->status !== 'active' || $u->moderation_hidden || $u->artist_status !== 'approved' || isset($blocked[$id])) continue;
+            $out[$id] = [
+                'id' => $id, 'nickname' => $u->nickname, 'studio_name' => $shops[$id] ?? null,
+                'avatar_url' => app(MediaUrls::class)->url($u->avatar_path, 300),
+            ];
+        }
+        return $out;
     }
 
     private function recount(int $postId): void
@@ -347,11 +362,11 @@ class Community
     {
         $q = $this->db()->table('starttoo_community_comments as c')->join('starttoo_users as u', 'u.id', '=', 'c.user_id')
             ->where('c.post_id', $postId)->where('c.moderation_hidden', false)
-            ->where('u.status', 'active')->where('u.moderation_hidden', false);
+            ->whereIn('u.status', Reviews::LISTED_STATUSES)->where('u.moderation_hidden', false);
         app(Blocks::class)->filter($q, 'c.user_id', $viewer);
         $urls = app(MediaUrls::class);
         $rows = $q->orderByDesc('c.id')->limit(300)
-            ->get(['c.id', 'c.user_id', 'c.parent_id', 'c.content', 'c.created_at', 'u.nickname', 'u.avatar_path', 'u.artist_status'])
+            ->get(['c.id', 'c.user_id', 'c.parent_id', 'c.content', 'c.created_at', 'u.nickname', 'u.avatar_path', 'u.artist_status', 'u.status as user_status'])
             ->reverse()->values();
         // 답글은 맨 위 댓글이 보일 때만 준다(댓글이 숨김 · 차단이면 그 답글도 뺀다)
         $roots = $rows->whereNull('parent_id')->pluck('id')->map(fn ($v) => (int) $v)->all();
@@ -359,8 +374,10 @@ class Community
             ->values()->map(fn ($c) => [
                 'id' => (int) $c->id, 'content' => $c->content,
                 'parent_id' => $c->parent_id === null ? null : (int) $c->parent_id,
-                'author' => ['id' => (int) $c->user_id, 'nickname' => $c->nickname,
-                    'avatar_url' => $urls->url($c->avatar_path, 300), 'is_artist' => $c->artist_status === 'approved'],
+                'author' => $c->user_status !== 'active'
+                    ? ['id' => (int) $c->user_id, 'nickname' => '탈퇴한 회원', 'avatar_url' => null, 'is_artist' => false]
+                    : ['id' => (int) $c->user_id, 'nickname' => $c->nickname,
+                        'avatar_url' => $urls->url($c->avatar_path, 300), 'is_artist' => $c->artist_status === 'approved'],
                 'mine' => $viewer !== null && (int) $c->user_id === $viewer,
                 'created_at' => Carbon::parse($c->created_at)->toIso8601String(),
             ])->all();
@@ -377,10 +394,28 @@ class Community
         }
     }
 
-    public function format(object $p, ?int $viewer): array
+    /** 목록용 format: 작성자 · 내 좋아요 · 태그 작가를 목록 전체에서 한 번씩만 조회한다. */
+    private function formatMany(iterable $rows, ?int $viewer): array
+    {
+        $rows = collect($rows)->values();
+        if ($rows->isEmpty()) return [];
+        $db = $this->db();
+        $ctx = [
+            'users' => $db->table('starttoo_users')->whereIn('id', $rows->pluck('user_id')->unique()->all())
+                ->get(['id', 'nickname', 'avatar_path', 'status', 'artist_status'])->keyBy('id')->all(),
+            'liked' => $viewer === null ? [] : array_flip($db->table('starttoo_community_likes')->where('user_id', $viewer)
+                ->whereIn('post_id', $rows->pluck('id')->all())->pluck('post_id')->map(fn ($v) => (int) $v)->all()),
+            'artists' => $this->artistCards($rows->pluck('artist_id')->filter()->all(), $viewer),
+        ];
+        return $rows->map(fn ($p) => $this->format($p, $viewer, $ctx))->all();
+    }
+
+    /** $ctx: formatMany 가 미리 모은 작성자(users) · 내 좋아요(liked) · 태그 작가(artists). 없으면 한 건씩 조회. */
+    public function format(object $p, ?int $viewer, ?array $ctx = null): array
     {
         $db = $this->db();
-        $author = $db->table('starttoo_users')->where('id', $p->user_id)->first(['nickname', 'avatar_path', 'status', 'artist_status']);
+        $author = $ctx ? ($ctx['users'][(int) $p->user_id] ?? null)
+            : $db->table('starttoo_users')->where('id', $p->user_id)->first(['nickname', 'avatar_path', 'status', 'artist_status']);
         $withdrawn = ($author->status ?? null) !== 'active';
         $urls = app(MediaUrls::class);
         $images = json_decode((string) $p->images, true) ?: [];
@@ -391,9 +426,11 @@ class Community
             'author' => ['id' => (int) $p->user_id, 'nickname' => $withdrawn ? '탈퇴한 회원' : ($author->nickname ?? ''),
                 'avatar_url' => $withdrawn ? null : $urls->url($author->avatar_path ?? null, 300),
                 'is_artist' => !$withdrawn && ($author->artist_status ?? null) === 'approved'],
-            'artist' => $p->artist_id ? $this->artistCard((int) $p->artist_id, $viewer) : null,
+            'artist' => !$p->artist_id ? null
+                : ($ctx ? ($ctx['artists'][(int) $p->artist_id] ?? null) : $this->artistCard((int) $p->artist_id, $viewer)),
             'like_count' => (int) $p->like_count, 'comment_count' => (int) $p->comment_count, 'view_count' => (int) $p->view_count,
-            'liked' => $viewer !== null && $db->table('starttoo_community_likes')->where('post_id', $p->id)->where('user_id', $viewer)->exists(),
+            'liked' => $viewer !== null && ($ctx ? isset($ctx['liked'][(int) $p->id])
+                : $db->table('starttoo_community_likes')->where('post_id', $p->id)->where('user_id', $viewer)->exists()),
             'mine' => $viewer !== null && (int) $p->user_id === $viewer,
             'hidden' => (bool) $p->moderation_hidden,
             'edited' => Carbon::parse($p->updated_at)->gt(Carbon::parse($p->created_at)->addSeconds(5)),

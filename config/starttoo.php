@@ -31,6 +31,18 @@ return [
     // 공유 링크 미리보기 페이지의 앱 받기 버튼(출시 후 채운다)
     'app_store_url' => env('STARTTOO_APP_STORE_URL', ''),
     'play_store_url' => env('STARTTOO_PLAY_STORE_URL', ''),
+    // 앱 업데이트 안내(GET /v1/projects/starttoo/app/version). 비우면 안내하지 않는다.
+    // min_version 보다 낮으면 강제 업데이트, latest_version 보다 낮으면 권장 업데이트(예: 1.2.0)
+    'app_min_version' => env('STARTTOO_APP_MIN_VERSION', ''),
+    'app_latest_version' => env('STARTTOO_APP_LATEST_VERSION', ''),
+    // 업데이트 화면 안내 문구(비우면 앱 기본 문구) · 권장 안내 「나중에」 후 다시 띄우지 않는 일수
+    'app_update_message' => env('STARTTOO_APP_UPDATE_MESSAGE', ''),
+    'app_soft_snooze_days' => (int) env('STARTTOO_APP_SOFT_SNOOZE_DAYS', 7),
+    // 점검 모드: 문구를 넣으면 모든 앱이 점검 화면으로 막힌다(비우면 해제)
+    'app_maintenance_message' => env('STARTTOO_APP_MAINTENANCE_MESSAGE', ''),
+    // 운영 콘솔(/admin): 접속 허용 IP(쉼표로 여러 개, CIDR 가능, 비우면 제한 없음) · 미사용 자동 로그아웃(분)
+    'admin_allowed_ips' => env('STARTTOO_ADMIN_ALLOWED_IPS', ''),
+    'admin_idle_minutes' => (int) env('STARTTOO_ADMIN_IDLE_MINUTES', 60),
     // 개발용 초안은 별도 설정을 켠 환경에서만 노출하고 정식 문안 발행 시 버전을 올린다.
     'draft_terms_enabled' => env('STARTTOO_DRAFT_TERMS_ENABLED', false),
     'terms_version' => '2026-11-17-draft',

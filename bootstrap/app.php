@@ -14,6 +14,8 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        // 운영 콘솔(/admin): 세션 · CSRF 가 있는 web 미들웨어
+        then: fn () => \Illuminate\Support\Facades\Route::middleware('web')->group(base_path('routes/admin.php')),
     )
     ->withBroadcasting(__DIR__.'/../routes/channels.php', [
         'prefix' => 'api/v1/projects/{projectCode}',
@@ -41,6 +43,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'project.resolve' => ResolveProject::class,
             'project.account' => EnsureProjectAccount::class,
             'broadcast.request' => ValidateBroadcastAuthRequest::class,
+            'admin.console' => \App\Http\Middleware\AdminConsole::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

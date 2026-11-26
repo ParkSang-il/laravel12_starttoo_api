@@ -30,6 +30,18 @@ class Blocks
         })->exists();
     }
 
+    /** 목록용: $ids 중 로그인한 회원과 차단 관계인 회원 번호(한 번 조회) */
+    public function blockedAmong(?int $viewer, array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn ($id) => $id > 0 && $id !== $viewer)));
+        if ($viewer === null || !$ids) return [];
+        $rows = app(ProjectDatabase::class)->database()->table('starttoo_user_blocks')->where(function ($q) use ($viewer, $ids) {
+            $q->where(fn ($q) => $q->where('user_id', $viewer)->whereIn('blocked_user_id', $ids))
+                ->orWhere(fn ($q) => $q->where('blocked_user_id', $viewer)->whereIn('user_id', $ids));
+        })->get(['user_id', 'blocked_user_id']);
+        return $rows->map(fn ($r) => (int) $r->user_id === $viewer ? (int) $r->blocked_user_id : (int) $r->user_id)->unique()->values()->all();
+    }
+
     public function set(int $target, string $token, array $input, AuthSessions $sessions, Artworks $artworks): array
     {
         $viewer = (int) $artworks->ready($token, $sessions)['account']['id'];

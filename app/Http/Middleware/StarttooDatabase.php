@@ -21,6 +21,10 @@ class StarttooDatabase
         RateLimiter::hit($key, 60);
 
         // 서버에 고정된 프로젝트 코드만 사용하며 입력값으로 DB를 선택하지 않는다.
-        return app(ProjectDatabase::class)->run('starttoo', fn () => $next($request));
+        return app(ProjectDatabase::class)->run('starttoo', function () use ($request, $next) {
+            // 운영 콘솔 「비회원 피드 공개」 스위치(저장된 값이 없으면 .env 값 그대로)
+            config(['starttoo.guest_browsing_enabled' => app(\App\Services\Starttoo\Settings::class)->bool('guest_browsing')]);
+            return $next($request);
+        });
     }
 }

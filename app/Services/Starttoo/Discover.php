@@ -201,6 +201,7 @@ class Discover
         $likes = $this->db()->table('starttoo_artwork_interactions')->where('kind', 'like')->whereBetween('created_at', [$from, $now])
             ->groupBy('artwork_id')->selectRaw('artwork_id, COUNT(*) as likes');
         $rows = $this->artworks($f, $viewer)->joinSub($likes, 'pop_likes', fn ($j) => $j->on('pop_likes.artwork_id', '=', 'a.id'))
+            ->where('a.recommend_excluded', false) // 운영 콘솔 「추천 제외」
             ->select('a.*', 'pop_likes.likes')->orderByDesc('pop_likes.likes')->orderByDesc('a.created_at')->orderByDesc('a.id')->limit(3)->get();
         $cards = $this->artworkCards($rows);
         foreach ($rows->values() as $i => $row) $cards[$i]['likes'] = (int) $row->likes;

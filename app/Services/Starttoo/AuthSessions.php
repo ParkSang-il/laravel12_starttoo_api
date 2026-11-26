@@ -71,7 +71,7 @@ class AuthSessions
             if ($this->expired($session)) {
                 return null;
             }
-            $user = $this->db()->table('starttoo_users')->where('id', $session->user_id)->first();
+            $user = $this->liftIfExpired($this->db()->table('starttoo_users')->where('id', $session->user_id)->first());
             if (! $user || $user->status !== 'active') {
                 $table->where('id', $session->id)->update(['revoked_at' => now()]);
 
@@ -155,11 +155,30 @@ class AuthSessions
             || now()->gte(Carbon::parse($session->absolute_expires_at));
     }
 
-    private function activeUser(?object $user): void
+    private function activeUser(?object &$user): void
     {
+        $user = $this->liftIfExpired($user);
+        if ($user && $user->status === 'suspended') {
+            $until = $user->suspended_until ?? null;
+            $this->fail(403, 'ACCOUNT_SUSPENDED', $until
+                ? '운영 정책 위반으로 '.Carbon::parse($until)->timezone('Asia/Seoul')->format('n월 j일 H:i').'까지 이용이 정지된 계정이에요.'
+                : '운영 정책 위반으로 이용이 정지된 계정이에요. 고객지원에 문의해주세요.');
+        }
         if (! $user || $user->status !== 'active') {
             $this->fail(403, 'ACCOUNT_SUSPENDED', '이용할 수 없는 계정이에요. 고객지원에 문의해주세요.');
         }
+    }
+
+    /** 기간 정지가 끝났으면 풀고 다시 읽는다(운영 콘솔 제재, Sanctions). */
+    private function liftIfExpired(?object $user): ?object
+    {
+        if (! $user || $user->status !== 'suspended' || empty($user->suspended_until)
+            || now()->lt(Carbon::parse($user->suspended_until))) {
+            return $user;
+        }
+        app(Sanctions::class)->liftExpired((int) $user->id);
+
+        return $this->db()->table('starttoo_users')->where('id', $user->id)->first();
     }
 
     private function account(object $user): array

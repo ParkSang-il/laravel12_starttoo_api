@@ -893,9 +893,10 @@ class Fittings
         $tab = in_array($input['tab'] ?? 'saved', ['artist', 'saved'], true) ? $input['tab'] : 'saved';
         $selected = null;
         if (!empty($input['artwork']) && Str::isUuid((string) $input['artwork'])) {
-            $selected = $artworks->feedQuery($viewer, 'public')->where('a.id', $input['artwork'])->first();
+            $selected = $artworks->feedQuery($viewer, 'public')->where('a.id', $input['artwork'])->where('a.fit_blocked', false)->first();
         }
-        $q = $artworks->feedQuery($viewer, 'public')->where('a.kind', 'design');
+        // 운영 콘솔에서 「피팅 차단」한 도안(저작권 의심)은 피팅 도안으로 쓰지 않는다
+        $q = $artworks->feedQuery($viewer, 'public')->where('a.kind', 'design')->where('a.fit_blocked', false);
         if ($tab === 'artist') {
             if (!$selected) return ['items' => [], 'selected' => null];
             $q->where('a.user_id', $selected->user_id);
@@ -1017,7 +1018,7 @@ class Fittings
         }
         $artworkId = $input['artwork_id'] ?? null;
         if ($artworkId) {
-            $ok = app(Artworks::class)->feedQuery($viewer, 'public')->where('a.id', $artworkId)->where('a.kind', 'design')->exists();
+            $ok = app(Artworks::class)->feedQuery($viewer, 'public')->where('a.id', $artworkId)->where('a.kind', 'design')->where('a.fit_blocked', false)->exists();
             if (!$ok) $this->fail(409, 'FIT_STENCIL_UNAVAILABLE', '이 도안은 지금 쓸 수 없어요. 다른 도안을 골라주세요.');
         } elseif ($type === 'blend' && empty($files['stencil'])) {
             $this->fail(422, 'INVALID_FIT', '입힐 도안을 골라주세요.');
