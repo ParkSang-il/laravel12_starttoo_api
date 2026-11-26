@@ -190,7 +190,12 @@ class ArtworkComments
         foreach ($input['mentions'] ?? [] as $mention) {
             $id = (int) $mention['user_id'];
             if (isset($mentions[$id])) continue;
-            if (!$this->visible($viewer)->where('c.'.static::CONTENT_ID, $artwork)->where('c.user_id', $id)->whereNull('c.deleted_at')->exists()) continue;
+            // 멘션할 수 있는 회원: 이 글에 댓글을 단 회원 또는 내가 팔로우하는 회원(@ 입력 시 팔로우 목록을 추천한다)
+            $commented = $this->visible($viewer)->where('c.'.static::CONTENT_ID, $artwork)->where('c.user_id', $id)->whereNull('c.deleted_at')->exists();
+            $followed = !$commented && $this->db()->table('starttoo_follows')->where('user_id', $viewer)->where('target_user_id', $id)->exists()
+                && $this->db()->table('starttoo_users')->where('id', $id)->where('status', 'active')->where('moderation_hidden', false)->exists()
+                && !app(Blocks::class)->between($viewer, $id);
+            if (!$commented && !$followed) continue;
             $name = $this->db()->table('starttoo_users')->where('id', $id)->value('nickname');
             if ($name !== $mention['nickname'] || !preg_match('/(?<![가-힣a-z0-9@])@'.preg_quote($name, '/').'(?![가-힣a-z0-9])/u', $input['content'])) continue;
             $mentions[$id] = ['user_id' => $id, 'nickname' => $name];
