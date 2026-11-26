@@ -56,7 +56,7 @@ return [
     // 회원당 하루 AI 횟수(가상 피팅 · 도안 추출 · 필러 · 커버업 공통, 실패는 세지 않음). 0 = 제한 없음
     'fit_daily_limit' => (int) env('STARTTOO_FIT_DAILY_LIMIT', 3),
     // 내 사진의 피부 영역 찾기(배치 화면을 열 때마다 1번, 이미지 1장 비용)를 회원당 하루 몇 번. 0 = 제한 없음
-    'fit_skin_daily_limit' => (int) env('STARTTOO_FIT_SKIN_DAILY_LIMIT', 100),
+    'fit_skin_daily_limit' => (int) env('STARTTOO_FIT_SKIN_DAILY_LIMIT', 10),
     // 타투 필러(3안 = 1회 차감)를 하루 몇 번 만들 수 있는지. 0 = 제한 없음
     'fit_fill_daily_limit' => (int) env('STARTTOO_FIT_FILL_DAILY_LIMIT', 1),
 ];
