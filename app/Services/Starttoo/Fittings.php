@@ -51,6 +51,11 @@ class Fittings
         '허벅지' => ['wearing black athletic bike shorts', 'wearing black athletic shorts'],
         '상완' => ['wearing a black sleeveless athletic top', 'wearing a black sleeveless athletic top'],
         '목' => ['wearing a black crew-neck t-shirt, hair tied up', 'wearing a black crew-neck t-shirt'],
+        // 아래 부위는 옷이 부위를 덮지 않게 명시(빠지면 긴소매 · 긴바지를 입혀 버린다)
+        '전완' => ['wearing a black sleeveless top, both arms completely bare from the shoulder to the fingertips', 'wearing a black sleeveless top, both arms completely bare from the shoulder to the fingertips'],
+        '손목·손등' => ['wearing a black sleeveless top, arms, wrists and hands completely bare, no watch, no bracelet, no sleeves', 'wearing a black sleeveless top, arms, wrists and hands completely bare, no watch, no bracelet, no sleeves'],
+        '종아리' => ['wearing short black athletic shorts, legs completely bare from the thigh down to the ankle, no socks', 'wearing short black athletic shorts, legs completely bare from the thigh down to the ankle, no socks'],
+        '발목·발등' => ['barefoot, wearing short black athletic shorts, no socks, no shoes', 'barefoot, wearing short black athletic shorts, no socks, no shoes'],
     ];
     /**
      * 부위 · 보이는 면별 카메라 · 자세. 「안쪽」이 반대 팔로, 「옆」이 정면으로, 종아리가 허벅지로
@@ -262,6 +267,8 @@ class Fittings
                 .'A %s\'s %s (%s), clearly %s body, %s skin tone, %s body build, %s, %s. '
                 .'The model is '.$wear.'. '
                 .'CAMERA AND POSE (must follow exactly): '.(self::POSES[$m->part][$m->face] ?? '').' '
+                // 옷은 다른 곳만 가린다: 문신 놓을 부위는 반드시 맨살(소매 · 끈 · 천이 덮으면 안 됨)
+                .'BARE SKIN: the '.$part['en'].' itself must be completely bare skin over its whole visible area — no sleeve, strap, fabric, bandage or accessory may cover any part of it. Clothing only covers other parts of the body. '
                 .'The skin on that area is clean with absolutely no tattoos, marks or jewelry. The %s fills most of the frame and is clearly visible for placing a tattoo. '
                 .'No face visible, plain dark neutral background, natural skin texture and pores. '
                 .'Nipples and private areas are always fully covered by clothing and never visible. '
