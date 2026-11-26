@@ -12,7 +12,8 @@ class GenerateStarttooFitModel implements ShouldQueue
 {
     use Queueable;
     public int $tries = 1;
-    public int $timeout = 75;
+    // 이미지 AI 응답을 최대 140초 기다린다(config gemini_image_timeout)
+    public int $timeout = 180;
 
     public function __construct(public int $modelId)
     {

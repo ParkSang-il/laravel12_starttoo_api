@@ -378,7 +378,8 @@ Artisan::command('starttoo:fit-models-import {dir=fit-models} {--off=}', functio
 // --one: 조건당 1장(정면 · 자연광)만. 기본 세트 예) --gender=female --tone=0 --build=보통 --one → 26장
 // --gender=female|male (기본 female)
 // --redo: 이미 있는 조건의 사진을 같은 자리에 다시 생성(예: --gender=female --part=등 --redo)
-Artisan::command('starttoo:fit-models {--gender=female} {--part=} {--face=} {--tone=} {--build=} {--one} {--redo} {--retry} {--dry}', function () {
+// --uploaded: --redo 할 때 운영자가 올린 사진(인터넷 사진 등)도 AI 사진으로 바꾼다(기본은 AI로 만든 사진만)
+Artisan::command('starttoo:fit-models {--gender=female} {--part=} {--face=} {--tone=} {--build=} {--one} {--redo} {--uploaded} {--retry} {--dry}', function () {
     $F = \App\Services\Starttoo\Fittings::class;
     $r = app(ProjectDatabase::class)->run('starttoo', function () use ($F) {
         $db = app(ProjectDatabase::class)->database();
@@ -404,11 +405,15 @@ Artisan::command('starttoo:fit-models {--gender=female} {--part=} {--face=} {--t
                         $q = compact('part', 'face', 'gender', 'tone', 'build');
                         if ($db->table('starttoo_fit_models')->where($q)->exists()) {
                             if (!$this->option('redo')) continue;
-                            $ids = $db->table('starttoo_fit_models')->where($q)->whereNull('source_hash')->pluck('id');
+                            $sel = $db->table('starttoo_fit_models')->where($q);
+                            if (!$this->option('uploaded')) $sel->whereNull('source_hash');
+                            $ids = $sel->pluck('id');
                             $combos++;
                             $queued += count($ids);
                             if (!$this->option('dry')) {
-                                $db->table('starttoo_fit_models')->whereIn('id', $ids)->update(['status' => 'pending', 'updated_at' => now()]);
+                                // 올린 사진을 AI로 바꾸면 「올린 사진」 표시를 지운다(같은 파일을 다시 올릴 수 있게)
+                                $db->table('starttoo_fit_models')->whereIn('id', $ids)->update(['status' => 'pending', 'updated_at' => now()]
+                                    + ($this->option('uploaded') ? ['source_hash' => null, 'source_name' => null] : []));
                                 foreach ($ids as $id) app($F)->dispatchModel((int) $id);
                             }
                             continue;

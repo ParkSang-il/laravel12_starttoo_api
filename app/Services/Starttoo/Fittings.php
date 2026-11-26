@@ -42,14 +42,71 @@ class Fittings
      */
     private const WEAR = [
         '어깨' => ['wearing a black athletic tank top', 'wearing a black athletic tank top'],
-        '쇄골·가슴' => ['wearing a black high-neck sports bra that fully covers the chest, only the collarbone and upper chest above it visible', 'wearing a black crew-neck t-shirt pulled down slightly at the collar, only the collarbone visible'],
+        // 남성: 티셔츠가 쇄골을 가려서 → 목둘레가 깊게 파인 민소매(쇄골 · 윗가슴 맨살, 유두는 가림)
+        '쇄골·가슴' => ['wearing a black high-neck sports bra that fully covers the chest, only the collarbone and upper chest above it visible', 'wearing a black athletic tank top with a deep wide scoop neckline, so both collarbones and the upper chest are bare skin while the tank top still covers the nipples'],
         // 여성 등: 브라 끈이 등을 가리지 않게 목 뒤로만 묶는 오픈백 홀터 상의(등 전체가 맨살), 로우라이즈 레깅스
         '등' => ['wearing a black open-back halter top tied only at the back of the neck, so the entire back from the shoulder blades down to the lower back is completely bare skin with no straps or fabric crossing it, and low-rise black leggings, photographed from behind, hair tied up', 'wearing black athletic shorts, photographed from behind, upper back bare'],
-        '옆구리' => ['wearing a black sports bra and black athletic leggings, arm raised to show the side ribs', 'wearing black athletic shorts and a black tank top lifted at the side to show the ribs'],
+        // 남성: 상의를 올리면 유두가 보여서 → 옆이 깊게 파인 민소매(옆구리만 맨살, 가슴 · 유두는 가림)
+        '옆구리' => ['wearing a black sports bra and black athletic leggings, arm raised to show the side ribs', 'wearing black athletic shorts and a black athletic tank top with very deep side cut-outs, so the side ribs are bare skin while the chest and nipples stay fully covered by the tank top'],
         '허벅지' => ['wearing black athletic bike shorts', 'wearing black athletic shorts'],
         '상완' => ['wearing a black sleeveless athletic top', 'wearing a black sleeveless athletic top'],
         '목' => ['wearing a black crew-neck t-shirt, hair tied up', 'wearing a black crew-neck t-shirt'],
     ];
+    /**
+     * 부위 · 보이는 면별 카메라 · 자세. 「안쪽」이 반대 팔로, 「옆」이 정면으로, 종아리가 허벅지로
+     * 나오던 문제를 막으려고 면마다 어디서 찍는지 · 화면에 무엇만 나오는지를 정확히 적는다.
+     */
+    private const POSES = [
+        '전완' => [
+            '안쪽' => 'ONE forearm turned palm-up so the INNER forearm (the soft underside with visible veins) faces the camera, from the elbow to the wrist. Only this one arm is in frame.',
+            '바깥쪽' => 'ONE forearm turned palm-down so the OUTER forearm (the top side) faces the camera, from the elbow to the wrist. Only this one arm is in frame.',
+        ],
+        '상완' => [
+            '바깥쪽' => 'Camera at the person\'s side. The OUTER upper arm (deltoid down to the elbow) faces the camera, arm relaxed and hanging down.',
+            '안쪽' => 'The person raises ONE arm and bends it with the hand resting behind the head, so the INNER upper arm (the pale soft inner side of the bicep between the armpit and the elbow, the side that normally touches the torso) faces the camera. Only this one raised arm and a little of the torso are in frame. Do NOT show the other arm and do NOT show the outer side of the arm.',
+        ],
+        '손목·손등' => [
+            '손등' => 'ONE hand with the BACK of the hand and the top of the wrist facing the camera, fingers relaxed. Only this one hand is in frame.',
+            '손목 안쪽' => 'ONE hand turned palm-up: the PALM and the INNER wrist (the underside of the wrist just below the palm, with visible tendons and veins) face the camera, the inner wrist is the center of the frame. Only this one hand and wrist are in frame, no second arm.',
+        ],
+        '어깨' => [
+            '앞' => 'Camera directly IN FRONT of the person. The FRONT of ONE shoulder (front deltoid, where the shoulder meets the chest) is the center of the frame, seen from the chest side.',
+            '옆' => 'Camera at the person\'s SIDE at 90 degrees (profile view). The OUTER side of ONE shoulder (the rounded side deltoid) is the center of the frame, arm hanging down. This must clearly be a side view, not a front or back view.',
+            '뒤' => 'Camera directly BEHIND the person. The BACK of ONE shoulder and the shoulder blade are the center of the frame.',
+        ],
+        '쇄골·가슴' => [
+            '정면' => 'Camera straight in front, wide symmetric framing: BOTH collarbones and the whole upper chest from shoulder to shoulder, from the base of the neck to just below the collarbones.',
+            '한쪽' => 'Body turned about 45 degrees away from the camera, close crop on ONE side only: one collarbone and the upper chest on that side, from the neck to that shoulder. The other collarbone is out of frame. This must look clearly different from a symmetric front view.',
+        ],
+        '등' => [
+            '전체' => 'Camera directly behind: the whole back from the shoulders down to the waist.',
+            '상단' => 'Camera directly behind: the upper back between and across the shoulder blades.',
+            '하단' => 'Camera directly behind: the lower back just above the waistband.',
+        ],
+        '옆구리' => [
+            '왼쪽' => 'Camera at the person\'s LEFT side. The person\'s LEFT arm is raised above the head to expose the LEFT side of the ribcage, which is the center of the frame. The person faces toward the RIGHT edge of the image.',
+            '오른쪽' => 'Camera at the person\'s RIGHT side. The person\'s RIGHT arm is raised above the head to expose the RIGHT side of the ribcage, which is the center of the frame. The person faces toward the LEFT edge of the image.',
+        ],
+        '허벅지' => [
+            '앞' => 'Camera directly in front: the FRONT of ONE thigh from the hip to the knee.',
+            '옆' => 'Camera at the person\'s SIDE at 90 degrees (profile view): the OUTER side of ONE thigh from the hip to the knee; the knee points toward the side edge of the image. This must clearly be a side view, not a front view.',
+            '뒤' => 'Camera directly behind: the BACK of ONE thigh (hamstring) from just below the buttock to the back of the knee.',
+        ],
+        '종아리' => [
+            '뒤' => 'LOWER LEG ONLY: camera directly behind, the BACK of the calf muscle from the back of the knee down to the ankle. The thigh is NOT in frame.',
+            '옆' => 'LOWER LEG ONLY: camera at the side, the OUTER side of the calf and shin from the knee down to the ankle. The thigh is NOT in frame.',
+        ],
+        '발목·발등' => [
+            '발등' => 'The TOP of ONE bare foot and the front of the ankle seen from above, toes included.',
+            '안쪽' => 'The INNER side of ONE bare ankle (the side facing the other foot, with the inner ankle bone) and the arch of the foot.',
+            '바깥쪽' => 'The OUTER side of ONE bare ankle (with the outer ankle bone) and the outer edge of the foot.',
+        ],
+        '목' => [
+            '뒷목' => 'Camera behind: the BACK of the neck from the hairline to the top of the shoulders, hair tied up.',
+            '옆목' => 'Camera at the side: the SIDE of the neck from below the ear to the shoulder, head turned slightly away.',
+        ],
+    ];
+
     /** 가상 모델 성별 → 프롬프트 */
     public const GENDERS = ['female' => 'young adult woman', 'male' => 'young adult man'];
     /** 조건 하나당 만드는 모델 사진(포즈 · 조명) */
@@ -190,7 +247,7 @@ class Fittings
 
     public function generateModel(int $id): void
     {
-        $lock = Cache::lock('starttoo:fit-model:'.$id, 90);
+        $lock = Cache::lock('starttoo:fit-model:'.$id, 200);
         if (!$lock->get()) return;
         try {
             $m = $this->db()->table('starttoo_fit_models')->where('id', $id)->first();
@@ -204,8 +261,10 @@ class Fittings
                 'A tasteful, non-sexual fitness catalog style photograph for a tattoo placement preview app. '
                 .'A %s\'s %s (%s), clearly %s body, %s skin tone, %s body build, %s, %s. '
                 .'The model is '.$wear.'. '
+                .'CAMERA AND POSE (must follow exactly): '.(self::POSES[$m->part][$m->face] ?? '').' '
                 .'The skin on that area is clean with absolutely no tattoos, marks or jewelry. The %s fills most of the frame and is clearly visible for placing a tattoo. '
                 .'No face visible, plain dark neutral background, natural skin texture and pores. '
+                .'Nipples and private areas are always fully covered by clothing and never visible. '
                 .'No text, no watermark, no logo. Vertical 3:4 portrait framing.',
                 self::GENDERS[$m->gender ?? 'male'] ?? 'person', $part['en'], $part['faces'][$m->face] ?? $m->face,
                 $female ? 'feminine, smooth, slender' : 'masculine', self::TONES[(int) $m->tone] ?? 'medium',
