@@ -306,7 +306,7 @@ class AdminController extends AdminBaseController
 
     // ================================================================ M-08 광고
 
-    private const SLOT_LABELS = ['community_top' => '커뮤니티 맨 위'];
+    private const SLOT_LABELS = ['community_top' => '커뮤니티 맨 위', 'feed_inline' => '홈 피드 · 2번째 게시물 뒤'];
 
     public function ads(Request $request): View
     {

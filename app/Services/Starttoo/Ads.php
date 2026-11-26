@@ -14,7 +14,9 @@ use Illuminate\Http\Exceptions\HttpResponseException;
  */
 class Ads
 {
-    public const SLOTS = ['community_top'];
+    /** community_top 커뮤니티 피드 맨 위 카드 · feed_inline 홈(추천) 피드 2번째 게시물 뒤(사진 카드라 이미지 필수) */
+    public const SLOTS = ['community_top', 'feed_inline'];
+    private const IMAGE_REQUIRED = ['feed_inline'];
 
     private function db() { return app(ProjectDatabase::class)->database(); }
 
@@ -27,15 +29,20 @@ class Ads
             ->where(fn ($q) => $q->whereNull('ends_at')->orWhere('ends_at', '>', now()))
             ->inRandomOrder()->limit(10)->get();
         foreach ($rows as $ad) {
+            $u = null;
             if ($ad->artist_id) {
                 // 광고주 작가가 탈퇴 · 숨김이거나 차단 관계면 보여 주지 않는다
-                $u = $this->db()->table('starttoo_users')->where('id', $ad->artist_id)->first(['status', 'moderation_hidden']);
+                $u = $this->db()->table('starttoo_users')->where('id', $ad->artist_id)->first(['status', 'moderation_hidden', 'avatar_path']);
                 if (!$u || $u->status !== 'active' || $u->moderation_hidden || app(Blocks::class)->between($viewer, (int) $ad->artist_id)) continue;
             }
+            // 이미지가 꼭 필요한 자리(홈 피드)인데 이미지가 없으면 건너뛴다
+            if (!$ad->image_path && in_array($slot, self::IMAGE_REQUIRED, true)) continue;
             $this->db()->table('starttoo_ads')->where('id', $ad->id)->increment('impressions');
             return ['ad' => [
                 'id' => (int) $ad->id, 'advertiser' => $ad->advertiser, 'title' => $ad->title,
                 'image_url' => app(MediaUrls::class)->url($ad->image_path, 1200),
+                // 홈 피드 카드의 동그란 프로필(작가 광고만)
+                'avatar_url' => $u ? app(MediaUrls::class)->url($u->avatar_path, 300) : null,
                 'artist_id' => $ad->artist_id === null ? null : (int) $ad->artist_id,
                 'link' => $ad->link,
             ]];
@@ -108,6 +115,9 @@ class Ads
             $path = app(ArtworkPhotos::class)->storeBytes((string) file_get_contents($in['image']));
         } elseif (($in['image_bytes'] ?? '') !== '') {
             $path = app(ArtworkPhotos::class)->storeBytes((string) $in['image_bytes']);
+        }
+        if ($path === null && in_array($slot, self::IMAGE_REQUIRED, true)) {
+            throw new \InvalidArgumentException('홈 피드 광고는 사진 카드라 이미지가 꼭 필요해요.');
         }
         return [
             'slot' => $slot, 'advertiser' => $advertiser, 'title' => $title, 'image_path' => $path,

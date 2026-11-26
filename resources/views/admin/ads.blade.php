@@ -80,7 +80,7 @@
             @endif
           </div>
           <div style="display: flex; gap: 8px; align-items: center">
-            <span style="flex: 1; font-size: 12px; color: #66625B; line-height: 1.5">작가 번호를 넣으면 링크는 쓰지 않아요. 등록하면 바로 노출되고(시작일이 있으면 그날부터), 목록의 스위치로 끌 수 있어요.</span>
+            <span style="flex: 1; font-size: 12px; color: #66625B; line-height: 1.5">작가 번호를 넣으면 링크는 쓰지 않아요. 「홈 피드」 광고는 사진 카드라 이미지가 꼭 필요해요. 등록하면 바로 노출되고(시작일이 있으면 그날부터), 목록의 스위치로 끌 수 있어요.</span>
             <button type="submit" style="height: 40px; padding: 0 20px; border-radius: 10px; font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; border: 0; background: #141413; color: #FFFFFF">{{ $form['save'] }}</button>
           </div>
         </form>
