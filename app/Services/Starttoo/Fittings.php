@@ -1229,7 +1229,14 @@ class Fittings
             '1. SKIN ONLY. Ink can exist only on bare skin. Where the sticker covers clothing, straps, fabric, hair, background or goes past the edge of the body, delete that part completely and show the original clothing/background there. Cut the design off cleanly at the skin boundary.',
             '2. SAME PLACE, SAME SIZE. Keep the tattoo at exactly the sticker\'s position and scale. Do not move, shrink, enlarge, re-center or re-frame it to make it "fit" — cropping at the skin edge is the only allowed change.',
             '2b. SAME ORIENTATION. Never rotate, flip, mirror or turn the design upright. If the sticker (and image 2) is upside down, sideways or mirrored, the tattoo must stay upside down, sideways or mirrored exactly like that — top stays top, left stays left as shown in image 1. Do not "correct" the orientation so that faces, animals or text look upright.',
-            '3. SAME DESIGN. Reproduce image 2 faithfully: same lines, details, shading and colors. Do not redesign, simplify, add or remove elements. Ignore the white/paper background of the design — only the ink goes on the skin.',
+            // 도안은 절대 바꾸지 않는다: 피부 경계에서 자르는 것만 허용(없는 부분 생성 · 있는 부분 삭제 금지)
+            '3. THE DESIGN IS FIXED — NEVER ALTER IT. Copy image 2 exactly, element by element: the same lines, shapes, proportions, details, shading, textures and colors, in the same positions. '
+                .'Every part of the design that lies on bare skin MUST appear in the result — do not erase, skip, fade out, simplify or merge any of it. '
+                .'Do NOT invent anything that is not in image 2: no new lines, shapes, patterns, shading, fill, extensions, frames, borders or "completion" of parts that look unfinished. '
+                .'Do not redesign, restyle, redraw, beautify, sharpen, smooth or re-interpret it. '
+                .'The ONLY allowed changes are: (a) cutting the design off where it leaves the bare skin, and (b) following the skin\'s curve, lighting and texture as described in rule 4 — without changing the drawing itself. '
+                .'IMPORTANT: the design\'s background is NOT part of the design — the transparent area, the white/paper background and any faint semi-transparent haze or box around the drawing must be removed completely (see rule 3b). '
+                .'"Every part must appear" applies only to the actual drawn ink (lines, shading, color), never to its background.',
             '3b. NO BACKGROUND RESIDUE. The sticker may leave a faint rectangle, a slightly darker/lighter box, a hazy tint, smudges or semi-transparent paper color around the artwork. Remove all of that completely: the skin around and between the ink lines must look like the original untouched skin, with no visible box, patch, veil or edge of the sticker. Only the actual drawn ink (lines, shading, color) remains.',
             '4. REALISTIC INK. Bend the ink around the curve of the arm/leg/body, follow the skin\'s lighting, shadows, pores and texture. The ink sits under the skin: no sticker edges, outlines, white halo, glow or shine.',
             '4b. '.$ink.' Keep this strength for the whole design; do not darken, boost contrast or re-ink it beyond this.',
@@ -1239,7 +1246,7 @@ class Fittings
             // 사진을 돌려 보낸 경우: 사진 방향을 바로잡지 말라고 알린다
             $turned ? '7. Image 1 may be rotated sideways, upside down or mirrored ON PURPOSE. Keep image 1 exactly in the orientation given: do not rotate, straighten or mirror the photo or the person.' : '',
             '',
-            'REMEMBER: tattoo on bare skin only, exactly where the sticker is, in exactly the sticker\'s orientation (never turned upright), and the rest of the photo untouched.',
+            'REMEMBER: tattoo on bare skin only, exactly where the sticker is, in exactly the sticker\'s orientation (never turned upright), the design itself copied exactly with nothing added and nothing removed (only cut at the skin edge), and the rest of the photo untouched.',
         ]);
         // 합성은 상위 모델(STARTTOO_GEMINI_BLEND_MODEL)이 있으면 그걸로
         $bytes = app(NanoBanana::class)->generate($prompt, [[$aiComposite, $this->mime($aiComposite)], [$aiStencil, $this->mime($aiStencil)]],
