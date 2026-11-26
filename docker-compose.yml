@@ -10,6 +10,8 @@ services:
       - /home/web/laravel12_starttoo_api:/var/www/html
       - starttoo_storage:/var/www/html/storage
       - starttoo_bootstrap_cache:/var/www/html/bootstrap/cache
+      # PHP 설정(업로드 40MB · 요청 64MB · 메모리 · 시간대). 없으면 기본 2MB 라 광고 · 작품 이미지 업로드가 실패한다
+      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/zz-starttoo.ini:ro
     networks:
       - starttoo_network
       - db_network
