@@ -32,7 +32,9 @@ class ContentLikers
     private function format(object $row): array
     {
         return ['id' => (int) $row->user_id, 'nickname' => $row->nickname ?? '',
-            'avatar_url' => app(MediaUrls::class)->url($row->avatar_path, 300)];
+            'avatar_url' => app(MediaUrls::class)->url($row->avatar_path, 300),
+            // 승인된 작가면 앱이 프로필을 거치지 않고 바로 상점을 연다
+            'is_artist' => ($row->artist_status ?? null) === 'approved'];
     }
 
     /** 콘텐츠별 최근 좋아요 회원 최대 3명. 피드 한 페이지를 한 번의 조회로 처리한다. */
@@ -41,7 +43,7 @@ class ContentLikers
         if (!$ids) return [];
         $column = self::SOURCES[$type]['column'];
         $ranked = $this->visible($type, $viewer)->whereIn("l.$column", $ids)
-            ->selectRaw("l.$column as content_id, l.user_id, lu.nickname, lu.avatar_path, ROW_NUMBER() OVER (PARTITION BY l.$column ORDER BY l.id DESC) as rn");
+            ->selectRaw("l.$column as content_id, l.user_id, lu.nickname, lu.avatar_path, lu.artist_status, ROW_NUMBER() OVER (PARTITION BY l.$column ORDER BY l.id DESC) as rn");
         $rows = app(ProjectDatabase::class)->database()->query()->fromSub($ranked, 'r')
             ->where('r.rn', '<=', $limit)->orderBy('r.content_id')->orderBy('r.rn')->get();
         $result = array_fill_keys($ids, []);
@@ -60,7 +62,7 @@ class ContentLikers
         $column = self::SOURCES[$type]['column'];
         $q = $this->visible($type, $viewer)->where("l.$column", $id);
         if (isset($input['cursor'])) $q->where('l.id', '<', (int) $input['cursor']);
-        $rows = $q->orderByDesc('l.id')->limit(21)->get(['l.id', 'l.user_id', 'lu.nickname', 'lu.avatar_path']);
+        $rows = $q->orderByDesc('l.id')->limit(21)->get(['l.id', 'l.user_id', 'lu.nickname', 'lu.avatar_path', 'lu.artist_status']);
         $page = $rows->take(20);
         $following = $viewer === null || $page->isEmpty() ? [] : app(ProjectDatabase::class)->database()
             ->table('starttoo_follows')->where('user_id', $viewer)->whereIn('target_user_id', $page->pluck('user_id'))

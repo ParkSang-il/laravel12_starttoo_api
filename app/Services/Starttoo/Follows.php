@@ -87,7 +87,7 @@ class Follows
         if ($search !== '') $query->where('u.nickname', 'like', '%'.addcslashes($search, '\\%_').'%');
         $backward = ($cursor['d'] ?? 'next') === 'previous';
         if ($cursor) $query->where('f.id', $backward ? '>' : '<', $cursor['id']);
-        $rows = $query->select('f.id as follow_id', 'u.id', 'u.nickname', 'u.bio', 'u.avatar_path')
+        $rows = $query->select('f.id as follow_id', 'u.id', 'u.nickname', 'u.bio', 'u.avatar_path', 'u.artist_status')
             ->orderBy('f.id', $backward ? 'asc' : 'desc')->limit(21)->get();
         $more = $rows->count() > 20;
         $page = $rows->take(20)->values();
@@ -98,7 +98,9 @@ class Follows
             'social' => $this->state($owner, $viewer),
             'items' => $page->map(fn ($u) => ['id' => (int) $u->id, 'nickname' => $u->nickname, 'bio' => $u->bio ?? '',
                 'avatar_url' => app(MediaUrls::class)->url($u->avatar_path, 300),
-                'following' => in_array((int) $u->id, $mine, true), 'is_me' => $viewer === (int) $u->id])->all(),
+                'following' => in_array((int) $u->id, $mine, true), 'is_me' => $viewer === (int) $u->id,
+                // 승인된 작가면 앱이 프로필을 거치지 않고 바로 상점을 연다
+                'is_artist' => ($u->artist_status ?? null) === 'approved'])->all(),
             'next_cursor' => ($backward || $more) ? $encode($page->last(), 'next') : null,
             'previous_cursor' => ($backward ? $more : $cursor !== null) ? $encode($page->first(), 'previous') : null];
     }
