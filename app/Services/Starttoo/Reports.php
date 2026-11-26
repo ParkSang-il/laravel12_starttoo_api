@@ -195,7 +195,9 @@ class Reports
             $before = (bool) ($target->moderation_hidden ?? false);
             $hidden = $action === 'dismiss' || $conversation ? $before : $action === 'hide';
             if ($action !== 'dismiss' && !$conversation) {
-                $values = ['moderation_hidden' => $hidden, 'updated_at' => now()];
+                $values = ['moderation_hidden' => $hidden];
+                // 채팅 메시지 등 수정 시각 칸이 없는 표가 있다(있는 표만 바꾼다)
+                if (property_exists($target, 'updated_at')) $values['updated_at'] = now();
                 if (in_array($record->target_type, ['artwork', 'post'], true)) $values['version'] = $target->version + 1;
                 $db->table($table)->where('id', $record->target_id)->update($values);
             }
