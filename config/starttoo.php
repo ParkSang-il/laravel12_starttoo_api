@@ -49,6 +49,8 @@ return [
     // 피부 영역 분할(마스크)용 텍스트 모델 — 하루 AI 횟수에 세지 않는다
     // gemini-flash-latest = Google 이 최신 flash 모델로 바꿔 주는 이름(특정 버전이 종료돼도 계속 동작)
     'gemini_text_model' => env('STARTTOO_GEMINI_TEXT_MODEL', 'gemini-flash-latest'),
+    // 피부 영역 분할 응답을 기다리는 시간(초). 넘으면 분할은 건너뛰고 이미지 마스크로 찾는다.
+    'gemini_segment_timeout' => (int) env('STARTTOO_GEMINI_SEGMENT_TIMEOUT', 25),
     // 가상 모델 사진: 기본은 운영자가 올린 사진만(starttoo:fit-models-import). true면 없는 조건을 나노바나나로 생성.
     'fit_model_ai' => (bool) env('STARTTOO_FIT_MODEL_AI', false),
     // 회원당 하루 AI 횟수(가상 피팅 · 도안 추출 · 필러 · 커버업 공통, 실패는 세지 않음). 0 = 제한 없음

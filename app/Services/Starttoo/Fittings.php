@@ -355,6 +355,25 @@ class Fittings
         return ['mask' => $path ? base64_encode($this->alphaMask((string) Storage::disk('starttoo')->get($path))) : null];
     }
 
+    /**
+     * 운영: 가상 모델 피부 영역을 미리 만들어 둔다(앱에서 처음 열 때 오래 기다리지 않게).
+     * 영역이 없는 사진만. [$redo]면 모두 다시 만든다. 결과: [만듦, 실패]
+     */
+    public function buildModelSkins(bool $redo = false, ?callable $progress = null): array
+    {
+        @ini_set('memory_limit', '512M');
+        $q = $this->db()->table('starttoo_fit_models')->where('status', 'ready')->where('is_active', true)->orderBy('id');
+        if (!$redo) $q->whereNull('skin_path');
+        $made = $failed = 0;
+        foreach ($q->get() as $m) {
+            if ($redo) $m->skin_path = null;
+            $path = $this->modelSkinPath($m);
+            $path ? $made++ : $failed++;
+            if ($progress) $progress($m, $path !== null);
+        }
+        return [$made, $failed];
+    }
+
     private function modelSkinPath(object $m): ?string
     {
         if ($m->skin_path) return $m->skin_path;

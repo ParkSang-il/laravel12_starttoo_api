@@ -338,6 +338,17 @@ Artisan::command('starttoo:ad {action=list} {id?} {--slot=community_top} {--adve
     }
 })->purpose('자체 광고 등록 · 목록 · 끄기');
 
+// 가상 피팅: 가상 모델 피부 영역 미리 만들기(앱에서 처음 열 때 기다리지 않게). --redo = 전부 다시
+// 예) php artisan starttoo:fit-model-skins
+Artisan::command('starttoo:fit-model-skins {--redo}', function () {
+    $r = app(ProjectDatabase::class)->run('starttoo', fn () => app(\App\Services\Starttoo\Fittings::class)
+        ->buildModelSkins((bool) $this->option('redo'), function ($m, bool $ok) {
+            $this->line(($ok ? '완료 ' : '실패 ')."{$m->id} · {$m->part} · {$m->face} · ".($m->gender ?? '-'));
+        }));
+    $this->info("피부 영역 만듦 {$r[0]}개 · 실패 {$r[1]}개 (실패는 로그 「Fit skin」 확인)");
+    return 0;
+})->purpose('가상 모델 피부 영역 미리 만들기');
+
 // 가상 피팅: 운영자가 올린 모델 사진 등록. 폴더 {dir}/{부위}/{면}/파일.jpg (파일 이름 규칙은 Fittings::importModels)
 // 예) php artisan starttoo:fit-models-import fit-models   ·   끄기: --off=파일이름일부 또는 번호
 Artisan::command('starttoo:fit-models-import {dir=fit-models} {--off=}', function () {

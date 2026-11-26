@@ -28,7 +28,8 @@ class NanoBanana
             .'Return at most 3 masks: merge touching areas into one mask instead of listing many small pieces. '
             .'Output a JSON list of segmentation masks where each entry contains the 2D bounding box in the key "box_2d", '
             .'the segmentation mask in key "mask", and the text label in the key "label". Keep labels short. Output only the JSON.';
-        $send = fn (array $config) => Http::connectTimeout(5)->timeout(100)->acceptJson()
+        // 분할은 실패해도 이미지 마스크로 넘어가니 오래 기다리지 않는다(100초 기다리면 화면 요청이 끊긴다)
+        $send = fn (array $config) => Http::connectTimeout(5)->timeout((int) config('starttoo.gemini_segment_timeout', 25))->acceptJson()
             ->withHeaders(['x-goog-api-key' => $key])
             ->post(sprintf(self::ENDPOINT, rawurlencode($model)), [
                 'contents' => [['role' => 'user', 'parts' => [
