@@ -20,8 +20,42 @@ class Ads
 
     private function db() { return app(ProjectDatabase::class)->database(); }
 
-    /** 앱: 이 자리에 보여 줄 광고 1건(없으면 null) */
-    public function pick(string $slot, int $viewer): array
+    /**
+     * 구글 광고(AdMob) 설정(운영 콘솔 「광고 · 프리미엄」): 전체 켜기 + 자리별 켜기 · 광고 단위 ID(Android · iOS)
+     * 자체 광고가 없을 때 그 자리에 쓸 광고 단위를 앱에 알려 준다. 앱 ID 는 앱 빌드에 들어 있어 여기서 바꾸지 않는다.
+     */
+    public const ADMOB_UNIT = '/^ca-app-pub-\d{16}\/\d{10}$/';
+
+    public function admobConfig(): array
+    {
+        $saved = app(Settings::class)->json('admob') ?? [];
+        $slots = [];
+        foreach (self::SLOTS as $slot) {
+            $s = $saved['slots'][$slot] ?? [];
+            $slots[$slot] = ['on' => (bool) ($s['on'] ?? false), 'android' => (string) ($s['android'] ?? ''), 'ios' => (string) ($s['ios'] ?? '')];
+        }
+        return ['enabled' => (bool) ($saved['enabled'] ?? false), 'slots' => $slots];
+    }
+
+    public function admobUnit(string $slot, ?string $platform): ?string
+    {
+        $platform = strtolower((string) $platform);
+        if (!in_array($platform, ['android', 'ios'], true)) return null;
+        $c = $this->admobConfig();
+        $s = $c['slots'][$slot] ?? null;
+        if (!$c['enabled'] || !$s || !$s['on']) return null;
+        return preg_match(self::ADMOB_UNIT, $s[$platform]) ? $s[$platform] : null;
+    }
+
+    /** 앱: 이 자리에 보여 줄 광고 1건(없으면 null) + 자체 광고가 없을 때 쓸 구글 광고 단위(admob_unit) */
+    public function pick(string $slot, int $viewer, ?string $platform = null): array
+    {
+        $result = $this->pickOwn($slot, $viewer);
+        $result['admob_unit'] = $result['ad'] === null ? $this->admobUnit($slot, $platform) : null;
+        return $result;
+    }
+
+    private function pickOwn(string $slot, int $viewer): array
     {
         if (!in_array($slot, self::SLOTS, true)) $this->fail(422, 'INVALID_AD', '광고 자리를 확인해주세요.');
         $rows = $this->db()->table('starttoo_ads')->where('slot', $slot)->where('active', true)

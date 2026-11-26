@@ -48,6 +48,37 @@
       </div>
     </section>
 
+    {{-- 구글 광고(AdMob): 자체 광고가 없을 때 같은 자리를 채운다 --}}
+    <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-size: 17px; font-weight: 700">구글 광고(AdMob)</h2>
+          <span style="font-size: 13px; color: #66625B">자체 광고가 없을 때 같은 자리를 구글 네이티브 광고로 채워요. 저장하면 앱이 다음에 광고를 받을 때부터 적용돼요.</span>
+        </div>
+        <span style="{{ \App\Support\AdminUi::pill($admobOn ? 'green' : 'gray') }}">{{ $admobOn ? '켜짐' : '꺼짐' }}</span>
+      </div>
+      <form method="POST" action="{{ $admobAction }}" style="display: flex; flex-direction: column; gap: 14px">
+        @csrf
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700"><input type="hidden" name="enabled" value="0"><input type="checkbox" name="enabled" value="1" @checked(old('enabled', $admobOn)) @disabled(! $canManage) style="width: 18px; height: 18px; margin: 0; accent-color: #141413">구글 광고 사용</label>
+        @foreach ($slotOptions as $slot => $label)
+          @php $s = $admob['slots'][$slot] ?? ['on' => false, 'android' => '', 'ios' => '']; @endphp
+          <div style="padding: 14px; border-radius: 12px; background: #F7F5F1; display: flex; flex-direction: column; gap: 10px">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700"><input type="hidden" name="slots[{{ $slot }}][on]" value="0"><input type="checkbox" name="slots[{{ $slot }}][on]" value="1" @checked(old("slots.$slot.on", $s['on'])) @disabled(! $canManage) style="width: 18px; height: 18px; margin: 0; accent-color: #141413">{{ $label }}</label>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px">
+              <label style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">Android 광고 단위 ID</span><input name="slots[{{ $slot }}][android]" value="{{ old("slots.$slot.android", $s['android']) }}" placeholder="ca-app-pub-0000000000000000/0000000000" @disabled(! $canManage) style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 13px; font-family: ui-monospace, Menlo, monospace; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+              <label style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">iOS 광고 단위 ID</span><input name="slots[{{ $slot }}][ios]" value="{{ old("slots.$slot.ios", $s['ios']) }}" placeholder="ca-app-pub-0000000000000000/0000000000" @disabled(! $canManage) style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 13px; font-family: ui-monospace, Menlo, monospace; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+            </div>
+          </div>
+        @endforeach
+        <div style="display: flex; gap: 8px; align-items: center">
+          <span style="flex: 1; font-size: 12px; color: #66625B; line-height: 1.5">광고 단위는 AdMob 사이트 「광고 단위 → 네이티브 고급형」에서 만들어요. 앱 ID(ca-app-pub-…~…)는 앱 설치 파일에 들어가서 여기서 바꿀 수 없어요. 노출 · 수익은 AdMob 사이트 「보고서」에서 봐요.</span>
+          @if ($canManage)
+            <button type="submit" style="height: 40px; padding: 0 20px; border-radius: 10px; font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; border: 0; background: #141413; color: #FFFFFF">저장</button>
+          @endif
+        </div>
+      </form>
+    </section>
+
     @if ($showForm)
       {{-- 광고 등록 · 수정(공지 편집 패널과 같은 모양) --}}
       <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">

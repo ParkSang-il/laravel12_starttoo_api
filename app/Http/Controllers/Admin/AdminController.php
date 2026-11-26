@@ -347,8 +347,13 @@ class AdminController extends AdminBaseController
         $isNew = $request->query('sel') === 'new';
         $edit = !$isNew && ctype_digit((string) $request->query('sel', '')) ? $rows->firstWhere('id', (int) $request->query('sel')) : null;
         $fmt = fn ($at) => $at ? Carbon::parse($at)->format('Y-m-d') : '';
+        $admob = app(Ads::class)->admobConfig();
         return view('admin.ads', [
             'slots' => $slots,
+            // 구글 광고(AdMob): 자체 광고가 없을 때 같은 자리를 채운다
+            'admob' => $admob, 'admobOn' => $admob['enabled'],
+            'admobTrack' => Ui::switchTrack($admob['enabled'], !$canManage), 'knob' => Ui::KNOB,
+            'admobAction' => route('admin.ads.admob'),
             'artists' => $this->db()->table('starttoo_users')->where('artist_status', 'approved')->where('status', 'active')->count(),
             'canManage' => $canManage,
             'showForm' => $canManage && ($isNew || $edit),
@@ -366,6 +371,30 @@ class AdminController extends AdminBaseController
                 'slot' => array_key_first(self::SLOT_LABELS), 'advertiser' => '', 'text' => '', 'artist' => '', 'link' => '', 'from' => '', 'until' => '', 'image' => null,
             ],
         ]);
+    }
+
+    /** 구글 광고(AdMob) 설정 저장: 전체 켜기 · 자리별 켜기 · 광고 단위 ID(Android · iOS) */
+    public function saveAdmob(Request $request): RedirectResponse
+    {
+        $this->need($request, 'ads.manage');
+        $rules = ['enabled' => ['nullable', 'boolean']];
+        foreach (Ads::SLOTS as $slot) {
+            $rules["slots.$slot.on"] = ['nullable', 'boolean'];
+            $rules["slots.$slot.android"] = ['nullable', 'string', 'regex:' . Ads::ADMOB_UNIT];
+            $rules["slots.$slot.ios"] = ['nullable', 'string', 'regex:' . Ads::ADMOB_UNIT];
+        }
+        $data = $request->validate($rules, ['*.regex' => '광고 단위 ID 모양을 확인해주세요(ca-app-pub-숫자16자리/숫자10자리).',
+            'slots.*.*.regex' => '광고 단위 ID 모양을 확인해주세요(ca-app-pub-숫자16자리/숫자10자리).']);
+        $before = app(Ads::class)->admobConfig();
+        $value = ['enabled' => (bool) ($data['enabled'] ?? false), 'slots' => []];
+        foreach (Ads::SLOTS as $slot) {
+            $s = $data['slots'][$slot] ?? [];
+            $value['slots'][$slot] = ['on' => (bool) ($s['on'] ?? false), 'android' => trim((string) ($s['android'] ?? '')), 'ios' => trim((string) ($s['ios'] ?? ''))];
+        }
+        app(\App\Services\Starttoo\Settings::class)->set('admob', $value, (int) $this->admin($request)->id);
+        $this->audit($request, '설정', '구글 광고 설정 저장', '광고 · 프리미엄 · ' . ($value['enabled'] ? '켜짐' : '꺼짐'), ['before' => $before, 'after' => $value]);
+
+        return back()->with('status', '구글 광고 설정을 저장했어요 · 앱이 다음에 광고를 받을 때부터 적용돼요');
     }
 
     private function adInput(Request $request): array

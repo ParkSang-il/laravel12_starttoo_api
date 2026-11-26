@@ -45,6 +45,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('ads', [AdminController::class, 'ads'])->name('ads');
         Route::post('ads/{id}/toggle', [AdminController::class, 'toggleAd'])->whereNumber('id')->name('ads.toggle');
         Route::post('ads', [AdminController::class, 'storeAd'])->name('ads.store');
+        Route::post('ads/admob', [AdminController::class, 'saveAdmob'])->name('ads.admob');
         Route::post('ads/{id}', [AdminController::class, 'updateAd'])->whereNumber('id')->name('ads.update');
 
         Route::get('settings', [AdminController::class, 'settings'])->name('settings');

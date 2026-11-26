@@ -12,7 +12,8 @@ class StarttooAdController extends Controller
 {
     public function show(Request $r, Ads $ads, AuthSessions $s, Artworks $a)
     {
-        return $this->json($ads->pick((string) $r->query('slot'), $this->viewer($r, $s, $a)));
+        // 앱이 보내는 X-App-Platform(ios · android)으로 구글 광고 단위를 고른다
+        return $this->json($ads->pick((string) $r->query('slot'), $this->viewer($r, $s, $a), $r->header('X-App-Platform')));
     }
 
     public function click(Request $r, int $ad, Ads $ads, AuthSessions $s, Artworks $a)
