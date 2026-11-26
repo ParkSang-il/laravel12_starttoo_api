@@ -49,6 +49,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('ads/admob', [AdminController::class, 'saveAdmob'])->name('ads.admob');
         // 작가가 앱에서 신청한 광고: 심사(승인 · 반려) · 상품 설정
         Route::post('ads/artist/products', [AdminArtistAdsController::class, 'products'])->name('ads.artist.products');
+        Route::post('ads/artist/guide', [AdminArtistAdsController::class, 'guide'])->name('ads.artist.guide');
         Route::post('ads/artist/{id}/approve', [AdminArtistAdsController::class, 'approve'])->whereNumber('id')->name('ads.artist.approve');
         Route::post('ads/artist/{id}/reject', [AdminArtistAdsController::class, 'reject'])->whereNumber('id')->name('ads.artist.reject');
         Route::post('ads/{id}', [AdminController::class, 'updateAd'])->whereNumber('id')->name('ads.update');

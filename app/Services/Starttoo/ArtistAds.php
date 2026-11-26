@@ -38,6 +38,52 @@ class ArtistAds
 
     private function db() { return app(ProjectDatabase::class)->database(); }
 
+    // ── 광고 안내 페이지(앱 「광고 안내」, 운영 콘솔에서 섹션별로 고친다) ─────────
+
+    public const GUIDE_MAX_SECTIONS = 20;
+    public const GUIDE_TITLE_MAX = 60;
+    public const GUIDE_BODY_MAX = 2000;
+
+    /** 저장된 안내가 없을 때의 기본 안내(지금 서버 동작과 같은 내용) */
+    private const GUIDE_DEFAULT = [
+        ['title' => '광고는 어디에 나오나요?', 'body' => "· 검색 결과 상단: 고른 키워드(최대 3개)를 검색하면 결과 맨 위에 내 작품 카드가 나와요.\n· 추천 피드 카드: 홈 추천 피드 게시물 사이에 작품 사진 카드로 나와요.\n· 지역 탐색 상단: 「발견 → 지역」에서 내 상점 지역을 고른 사람에게 목록 맨 위로 나와요.\n· 인기 작가 캐러셀: 발견 화면 「이번 주 인기 작가」 줄 첫 자리에 나와요(한 달 단위).\n모든 광고에는 ‘광고’ 표시가 붙어요."],
+        ['title' => '심사는 어떻게 하나요?', 'body' => "심사 요청 후 보통 영업일 하루 안에 결과를 알림으로 알려드려요.\n가격 할인, 시술 효과를 보장하는 표현(예: 통증 없는 시술), 내 작품이 아닌 사진, 외부 연락처는 반려돼요.\n반려되면 사유를 확인하고 문구를 고쳐 다시 요청할 수 있어요."],
+        ['title' => '언제부터 언제까지 나오나요?', 'body' => "· 하루 단위 상품: 승인되면 바로 노출되고, 고른 기간(7 · 14 · 30일)만큼 나와요.\n· 한 달 단위 상품: 승인한 다음 달 1일부터 말일까지 나와요.\n노출 중에는 「광고 노출」 스위치로 잠시 멈출 수 있고, 멈춘 기간만큼 종료일이 뒤로 밀려요.\n하루 단위 광고는 같은 조건으로 7 · 14일 기간을 늘릴 수 있어요. 종료한 광고는 다시 켤 수 없어요."],
+        ['title' => '문구 · 작품을 바꾸고 싶어요', 'body' => "광고 성과 화면의 「문구 · 작품 바꾸기」로 바꿀 수 있어요. 바꾼 내용은 다시 심사하고, 심사하는 동안에도 기존 광고는 계속 나와요."],
+        ['title' => '성과는 어떻게 세나요?', 'body' => "· 노출: 광고가 화면에 나온 횟수\n· 클릭: 광고를 누른 횟수\n· 상담 요청: 광고를 누른 회원이 7일 안에 나에게 새 상담을 요청한 수(한 상담에 한 번)\n광고 관리 화면에서 최근 7일 성과를, 광고 성과 화면에서 일별 클릭을 볼 수 있어요."],
+        ['title' => '광고비는 얼마인가요?', 'body' => "광고 만들기 화면에 상품별 단가와 예상 광고비(부가세 별도)를 안내해요.\n광고비 결제 방법은 결제 기능을 열 때 따로 안내해드려요."],
+    ];
+
+    /** 앱 「광고 안내」 · 콘솔 편집용 섹션 목록 */
+    public function guide(): array
+    {
+        $saved = app(Settings::class)->json('ad_guide');
+        $sections = is_array($saved['sections'] ?? null) ? $saved['sections'] : self::GUIDE_DEFAULT;
+        return ['sections' => array_values(array_map(fn ($s) => ['title' => (string) ($s['title'] ?? ''), 'body' => (string) ($s['body'] ?? '')], $sections)),
+            'updated_at' => $saved['updated_at'] ?? null];
+    }
+
+    /** 콘솔 저장: 제목 · 본문이 모두 빈 섹션은 버리고, order(작은 수가 위) 순으로 둔다 */
+    public function saveGuide(array $rows, int $adminId): array
+    {
+        $sections = [];
+        foreach ($rows as $i => $row) {
+            $title = trim((string) ($row['title'] ?? ''));
+            $body = trim(str_replace("\r\n", "\n", (string) ($row['body'] ?? '')));
+            if ($title === '' && $body === '') continue;
+            if ($title === '' || $body === '') throw new \InvalidArgumentException('섹션마다 제목과 본문을 모두 적어주세요.');
+            if (mb_strlen($title) > self::GUIDE_TITLE_MAX) throw new \InvalidArgumentException('제목은 '.self::GUIDE_TITLE_MAX.'자까지 적을 수 있어요.');
+            if (mb_strlen($body) > self::GUIDE_BODY_MAX) throw new \InvalidArgumentException('본문은 '.self::GUIDE_BODY_MAX.'자까지 적을 수 있어요.');
+            $sections[] = ['order' => (int) ($row['order'] ?? $i), 'i' => count($sections), 'title' => $title, 'body' => $body];
+        }
+        if (!$sections) throw new \InvalidArgumentException('안내 섹션을 1개 이상 적어주세요.');
+        if (count($sections) > self::GUIDE_MAX_SECTIONS) throw new \InvalidArgumentException('섹션은 '.self::GUIDE_MAX_SECTIONS.'개까지 둘 수 있어요.');
+        usort($sections, fn ($a, $b) => [$a['order'], $a['i']] <=> [$b['order'], $b['i']]);
+        $value = ['sections' => array_map(fn ($s) => ['title' => $s['title'], 'body' => $s['body']], $sections), 'updated_at' => now()->toIso8601String()];
+        app(Settings::class)->set('ad_guide', $value, $adminId);
+        return $value;
+    }
+
     // ── 상품(운영 콘솔에서 단가 · 자리 수 · 신청 받기를 바꾼다) ─────────
 
     /** 상품 설정: 저장값(starttoo_settings.ad_products)이 없으면 기본값 */
@@ -121,6 +167,7 @@ class ArtistAds
             'vat_rate' => self::VAT_RATE, 'works' => $this->works($artist), 'keywords' => $this->keywordOptions($artist),
             // 6-08 미리보기 카드: 광고에 나갈 상점 이름 · 평점 · 상담 가능
             'shop' => ['name' => $this->advertiser($artist), 'rating' => $reviews['average'], 'review_count' => $reviews['total'],
+                'avatar_url' => app(MediaUrls::class)->url($this->db()->table('starttoo_users')->where('id', $artist)->value('avatar_path'), 300),
                 'consult_open' => $consult === 'open']];
     }
 

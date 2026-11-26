@@ -28,7 +28,33 @@ class AdminArtistAdsController extends AdminBaseController
             'products' => $ads->config(),
             'productsAction' => route('admin.ads.artist.products'),
             'canReview' => $canManage,
+            // 앱 「광고 안내」 페이지 섹션(저장된 섹션 + 새로 쓸 빈 칸 2개)
+            'guide' => $ads->guide(),
+            'guideAction' => route('admin.ads.artist.guide'),
+            'guideLimits' => ['title' => ArtistAds::GUIDE_TITLE_MAX, 'body' => ArtistAds::GUIDE_BODY_MAX, 'sections' => ArtistAds::GUIDE_MAX_SECTIONS],
         ];
+    }
+
+    /** 앱 「광고 안내」 페이지 저장 */
+    public function guide(Request $request): RedirectResponse
+    {
+        $this->need($request, 'ads.manage');
+        $data = $request->validate([
+            'sections' => ['required', 'array', 'max:' . (ArtistAds::GUIDE_MAX_SECTIONS + 5)],
+            'sections.*.title' => ['nullable', 'string', 'max:' . ArtistAds::GUIDE_TITLE_MAX],
+            'sections.*.body' => ['nullable', 'string', 'max:' . ArtistAds::GUIDE_BODY_MAX],
+            'sections.*.order' => ['nullable', 'integer', 'min:0', 'max:999'],
+        ], ['sections.*.title.max' => '제목은 ' . ArtistAds::GUIDE_TITLE_MAX . '자까지 적을 수 있어요.',
+            'sections.*.body.max' => '본문은 ' . ArtistAds::GUIDE_BODY_MAX . '자까지 적을 수 있어요.']);
+        $before = app(ArtistAds::class)->guide();
+        try {
+            $after = app(ArtistAds::class)->saveGuide($data['sections'], (int) $this->admin($request)->id);
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['guide' => $e->getMessage()])->withInput();
+        }
+        $this->audit($request, '설정', '광고 안내 페이지 저장', '광고 · 프리미엄 · 섹션 ' . count($after['sections']) . '개',
+            ['before' => $before['sections'], 'after' => $after['sections']]);
+        return back()->with('status', '광고 안내를 저장했어요 · 앱에서 안내를 다시 열면 바로 보여요');
     }
 
     public function approve(Request $request, int $id): RedirectResponse

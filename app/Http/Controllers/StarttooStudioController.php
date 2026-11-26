@@ -23,6 +23,13 @@ class StarttooStudioController extends Controller
         return $this->json($ads->products($this->artist($request, $sessions, $studios)));
     }
 
+    /** 광고 안내 페이지(운영 콘솔에서 고친 섹션) */
+    public function adGuide(Request $request, Studios $studios, AuthSessions $sessions, ArtistAds $ads)
+    {
+        $this->artist($request, $sessions, $studios);
+        return $this->json($ads->guide());
+    }
+
     public function createAd(Request $request, Studios $studios, AuthSessions $sessions, ArtistAds $ads)
     {
         return $this->json($ads->create($this->artist($request, $sessions, $studios), $request->all()));

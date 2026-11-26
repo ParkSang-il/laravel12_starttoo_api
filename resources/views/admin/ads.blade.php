@@ -118,6 +118,41 @@
       </form>
     </section>
 
+    {{-- 앱 「광고 안내」 페이지: 광고 만들기 · 광고 관리에서 여는 안내. 섹션(제목 + 본문)별로 고친다 --}}
+    @php
+      $guideRows = old('sections', array_merge(
+        array_map(fn ($s, $i) => $s + ['order' => $i + 1], $guide['sections'], array_keys($guide['sections'])),
+        [['title' => '', 'body' => '', 'order' => count($guide['sections']) + 1], ['title' => '', 'body' => '', 'order' => count($guide['sections']) + 2]]
+      ));
+    @endphp
+    <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-size: 17px; font-weight: 700">광고 안내 페이지</h2>
+          <span style="font-size: 13px; color: #66625B">앱 「광고 만들기」 · 「광고 관리」의 광고 안내에 보이는 내용이에요. 제목과 본문을 모두 비우면 그 섹션은 빠지고, 순서 숫자가 작은 섹션이 위로 가요. 본문 줄바꿈은 그대로 보여요.</span>
+        </div>
+        <span style="font-size: 12px; color: #66625B">{{ $guide['updated_at'] ? '마지막 저장 ' . \App\Support\AdminUi::date($guide['updated_at'], 'Y.m.d H:i') : '기본 안내 사용 중' }}</span>
+      </div>
+      <form method="POST" action="{{ $guideAction }}" style="display: flex; flex-direction: column; gap: 10px">
+        @csrf
+        @foreach ($guideRows as $i => $row)
+          <div style="padding: 14px; border-radius: 12px; background: #F7F5F1; display: flex; flex-direction: column; gap: 8px">
+            <div style="display: flex; gap: 8px">
+              <label style="flex: 0 0 72px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">순서</span><input type="number" name="sections[{{ $i }}][order]" min="0" max="999" value="{{ $row['order'] ?? $i + 1 }}" @disabled(! $canReview) style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 10px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+              <label style="flex: 1; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">제목 <span style="font-weight: 400; color: #66625B">· {{ $guideLimits['title'] }}자까지</span></span><input name="sections[{{ $i }}][title]" maxlength="{{ $guideLimits['title'] }}" value="{{ $row['title'] ?? '' }}" placeholder="{{ ($row['title'] ?? '') === '' ? '새 섹션 제목(비우면 추가하지 않아요)' : '' }}" @disabled(! $canReview) style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; font-weight: 700; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+            </div>
+            <label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">본문 <span style="font-weight: 400; color: #66625B">· {{ number_format($guideLimits['body']) }}자까지</span></span><textarea name="sections[{{ $i }}][body]" maxlength="{{ $guideLimits['body'] }}" rows="5" @disabled(! $canReview) style="border-radius: 10px; border: 1px solid #D9D4CB; padding: 10px 12px; font-size: 14px; line-height: 1.6; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%; resize: vertical; font-family: inherit">{{ $row['body'] ?? '' }}</textarea></label>
+          </div>
+        @endforeach
+        @if ($canReview)
+          <div style="display: flex; gap: 8px; align-items: center">
+            <span style="flex: 1; font-size: 12px; color: #66625B; line-height: 1.5">섹션은 {{ $guideLimits['sections'] }}개까지예요. 더 추가하려면 저장한 뒤 다시 열면 빈 칸 2개가 새로 생겨요.</span>
+            <button type="submit" style="height: 40px; padding: 0 20px; border-radius: 10px; font-size: 14px; font-weight: 700; border: 0; background: #141413; color: #FFFFFF">저장</button>
+          </div>
+        @endif
+      </form>
+    </section>
+
     {{-- 구글 광고(AdMob): 자체 광고가 없을 때 같은 자리를 채운다 --}}
     <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
       <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px">
