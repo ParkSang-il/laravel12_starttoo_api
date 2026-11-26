@@ -1106,8 +1106,8 @@ class Fittings
     {
         // 사진 여러 장 · AI 응답(base64)을 함께 다뤄 기본 128MB로는 모자랄 수 있다
         @ini_set('memory_limit', '512M');
-        // 상위 모델은 오래 걸려(최대 140초) 잠금을 넉넉히 둔다
-        $lock = Cache::lock('starttoo:fit-result:'.$id, 200);
+        // 상위 모델은 오래 걸리고(최대 140초 × 2번 시도) 잠금을 넉넉히 둔다
+        $lock = Cache::lock('starttoo:fit-result:'.$id, 360);
         if (!$lock->get()) return;
         try {
             $r = $this->db()->table('starttoo_fit_results')->where('id', $id)->first();
@@ -1133,7 +1133,8 @@ class Fittings
                 }
                 $this->db()->table('starttoo_fit_results')->where('id', $id)->update($values + ['status' => 'ready', 'input_path' => null, 'stencil_path' => null, 'updated_at' => now()]);
             } catch (Throwable $e) {
-                $code = str_starts_with($e->getMessage(), 'FIT_AI_NO_IMAGE') ? 'blocked' : 'ai_failed';
+                $code = str_starts_with($e->getMessage(), 'FIT_AI_NO_IMAGE') ? 'blocked'
+                    : ($e->getMessage() === 'FIT_DESIGN_MOVED' ? 'moved' : 'ai_failed');
                 report(new \RuntimeException('Fit result failed: '.Str::limit($e->getMessage(), 80)));
                 $this->db()->table('starttoo_fit_results')->where('id', $id)->update(['status' => 'failed', 'error' => $code, 'input_path' => null, 'stencil_path' => null, 'updated_at' => now()]);
             }
@@ -1227,7 +1228,8 @@ class Fittings
             '',
             'RULES (all are mandatory)',
             '1. SKIN ONLY. Ink can exist only on bare skin. Where the sticker covers clothing, straps, fabric, hair, background or goes past the edge of the body, delete that part completely and show the original clothing/background there. Cut the design off cleanly at the skin boundary.',
-            '2. SAME PLACE, SAME SIZE. Keep the tattoo at exactly the sticker\'s position and scale. Do not move, shrink, enlarge, re-center or re-frame it to make it "fit" — cropping at the skin edge is the only allowed change.',
+            '2. SAME PLACE, SAME SIZE. Keep the tattoo at exactly the sticker\'s position and scale, with the same outline. Do not move, shrink, enlarge, stretch, re-center or re-frame it to make it "fit". '
+                .'Allowed: cropping at the skin edge, and only a slight local bending of the lines where the body curves (so the ink wraps around the arm, shoulder or ribs) — the overall position, size and outline stay the same.',
             '2b. SAME ORIENTATION. Never rotate, flip, mirror or turn the design upright. If the sticker (and image 2) is upside down, sideways or mirrored, the tattoo must stay upside down, sideways or mirrored exactly like that — top stays top, left stays left as shown in image 1. Do not "correct" the orientation so that faces, animals or text look upright.',
             // 도안은 절대 바꾸지 않는다: 피부 경계에서 자르는 것만 허용(없는 부분 생성 · 있는 부분 삭제 금지)
             '3. THE DESIGN IS FIXED — NEVER ALTER IT. Copy image 2 exactly, element by element: the same lines, shapes, proportions, details, shading, textures and colors, in the same positions. '
@@ -1241,6 +1243,8 @@ class Fittings
             '4. REALISTIC INK. Bend the ink around the curve of the arm/leg/body, follow the skin\'s lighting, shadows, pores and texture. The ink sits under the skin: no sticker edges, outlines, white halo, glow or shine.',
             '4b. '.$ink.' Keep this strength for the whole design; do not darken, boost contrast or re-ink it beyond this.',
             '5. NOTHING ELSE CHANGES. The person, face, body shape, muscles, skin tone, hair, clothing, background, lighting, camera angle, framing and image size stay exactly as in image 1.',
+            '5a. THE BODY IS FIXED — NEVER ALTER IT. Do not add, enlarge, reshape or re-shade breasts, chest, nipples, muscles, abs, fat, bones or any body contour, not even under the tattoo. '
+                .'Under and around the ink, the body must keep exactly the same shape, curves and shading as in image 1 — the tattoo is only ink on top of the existing skin.',
             '5b. DO NOT DRAW ANY BODY. Never add, redraw or invent arms, hands, legs or any body part, and never copy the body or skin from image 2 into the photo. The only body in the result is the one already in image 1.',
             '6. No text, no watermark, no logo, no extra tattoos.',
             // 사진을 돌려 보낸 경우: 사진 방향을 바로잡지 말라고 알린다
@@ -1248,17 +1252,34 @@ class Fittings
             '',
             'REMEMBER: tattoo on bare skin only, exactly where the sticker is, in exactly the sticker\'s orientation (never turned upright), the design itself copied exactly with nothing added and nothing removed (only cut at the skin edge), and the rest of the photo untouched.',
         ]);
-        // 합성은 상위 모델(STARTTOO_GEMINI_BLEND_MODEL)이 있으면 그걸로
-        $bytes = app(NanoBanana::class)->generate($prompt, [[$aiComposite, $this->mime($aiComposite)], [$aiStencil, $this->mime($aiStencil)]],
-            $this->aspectOf($aiComposite), config('starttoo.gemini_blend_model') ?: null);
-        // 돌려 보낸 사진이면 결과를 원래 방향으로 되돌린다(AI 결과 크기를 돌린 입력에 맞춘 뒤 되돌림)
-        if ($turned) $bytes = $this->orient($this->matchSize($bytes, $aiComposite), $quarter, $flip, true);
-        // 전후 비교가 맞도록 결과를 입력 사진과 같은 크기로 맞춘다(AI는 정해진 비율로만 돌려줌)
-        $bytes = $this->matchSize($bytes, $composite);
+        $original = '';
+        try { $original = $r->before_path ? (string) Storage::disk('starttoo')->get($r->before_path) : ''; } catch (Throwable $e) {}
+        // 합성(상위 모델 STARTTOO_GEMINI_BLEND_MODEL이 있으면 그걸로).
+        // 도안 위치 · 크기는 사용자가 놓은 그대로여야 한다(피부 굴곡을 따라 조금 휘는 것만 허용).
+        // AI 잉크가 놓은 자리와 겹치는 정도를 재서, 크게 어긋나면(옮김 · 키움 · 줄임) 한 번 더 시도하고
+        // 그래도 어긋나면 실패로 끝낸다(횟수 차감 없음). 엉뚱한 자리의 결과를 보여 주지 않는다.
+        $bytes = null;
+        for ($attempt = 0; $attempt < 2 && $bytes === null; $attempt++) {
+            $try = app(NanoBanana::class)->generate($prompt, [[$aiComposite, $this->mime($aiComposite)], [$aiStencil, $this->mime($aiStencil)]],
+                $this->aspectOf($aiComposite), config('starttoo.gemini_blend_model') ?: null);
+            // 돌려 보낸 사진이면 결과를 원래 방향으로 되돌린다(AI 결과 크기를 돌린 입력에 맞춘 뒤 되돌림)
+            if ($turned) $try = $this->orient($this->matchSize($try, $aiComposite), $quarter, $flip, true);
+            // 전후 비교가 맞도록 결과를 입력 사진과 같은 크기로 맞춘다(AI는 정해진 비율로만 돌려줌)
+            $try = $this->matchSize($try, $composite);
+            $fit = $original === '' ? 1.0 : $this->inkOverlap($original, $composite, $try);
+            if ($fit >= 0.6) {
+                $bytes = $try;
+            } else {
+                report(new \RuntimeException('Fit blend moved the design: overlap '.round($fit, 2).' (attempt '.($attempt + 1).')'));
+            }
+        }
+        if ($bytes === null) throw new \RuntimeException('FIT_DESIGN_MOVED');
         // 모델 · 사진 변조 방지: 도안을 올린 자리 밖은 원본 사진 픽셀로 되돌린다
         $bytes = $this->protectOriginal($r->before_path, $composite, $bytes);
         // 피부 밖(옷 · 끈 · 머리카락 · 배경)에 그려진 잉크는 원본으로 되돌린다
         $bytes = $this->clipToSkin($r, $bytes);
+        // 몸 변형 막기: 잉크 자리 안에서도 원본보다 밝아진 곳(새로 생긴 가슴 · 근육 등)은 원본으로
+        $bytes = $this->darkenOnly($r->before_path, $bytes);
         if ($r->source === 'virtual') $bytes = $this->labelVirtual($bytes);
         return ['result_path' => app(ArtworkPhotos::class)->storeBytes($bytes)];
     }
@@ -1376,9 +1397,10 @@ class Fittings
                 }
             }
             if (!$any) return null;
-            // 넓히기(흐리게 → 조금이라도 밝으면 흰색) 두 번 + 경계 부드럽게
-            for ($k = 0; $k < 2; $k++) {
-                for ($i = 0; $i < 6; $i++) imagefilter($m, IMG_FILTER_GAUSSIAN_BLUR);
+            // 조금만 넓히기(잉크 번짐 정도) + 경계 부드럽게.
+            // 예전엔 크게 넓혀서 그 안에서 AI가 몸 모양(가슴 등)을 바꿔도 남았다 → 잉크 둘레만 허용한다.
+            for ($k = 0; $k < 1; $k++) {
+                for ($i = 0; $i < 3; $i++) imagefilter($m, IMG_FILTER_GAUSSIAN_BLUR);
                 for ($y = 0; $y < $h; $y++) {
                     for ($x = 0; $x < $w; $x++) {
                         if ((imagecolorat($m, $x, $y) & 0xFF) > 8) imagesetpixel($m, $x, $y, $white);
@@ -1530,6 +1552,109 @@ class Fittings
     // ── 이미지 처리(GD) ──────────────────────────
 
     /** AI 결과에서 마스크(흰색) 밖은 원본 사진 픽셀로 되돌린다. 경계는 살짝 부드럽게. */
+    /**
+     * 도안이 놓은 자리 그대로인지(0~1). 원본 대비 달라진 곳 = 잉크.
+     *  - 놓은 잉크 중 AI 결과에도 근처에 잉크가 있는 비율(빠지거나 옮겨지지 않았나)
+     *  - AI 잉크 중 놓은 자리 근처에 있는 비율(다른 데로 옮기거나 키우지 않았나)
+     * 둘 중 작은 값. 「근처」는 몇 픽셀 여유를 둬서 피부 굴곡을 따라 휜 정도는 통과한다.
+     */
+    private function inkOverlap(string $original, string $composite, string $generated): float
+    {
+        $w = 240;
+        $load = function (string $bytes) use ($w) {
+            $img = @imagecreatefromstring($bytes);
+            if (!$img) return null;
+            $h = (int) max(1, round(imagesy($img) * $w / imagesx($img)));
+            $s = imagecreatetruecolor($w, $h);
+            imagecopyresampled($s, $img, 0, 0, 0, 0, $w, $h, imagesx($img), imagesy($img));
+            imagedestroy($img);
+            return $s;
+        };
+        $o = $load($original);
+        $c = $load($composite);
+        $g = $load($generated);
+        if (!$o || !$c || !$g || imagesy($o) !== imagesy($c) || imagesy($o) !== imagesy($g)) return 1.0;
+        $h = imagesy($o);
+        $ink = function (\GdImage $x) use ($o, $w, $h): array {
+            $m = [];
+            for ($y = 0; $y < $h; $y++) {
+                for ($i = 0; $i < $w; $i++) {
+                    $a = imagecolorat($o, $i, $y);
+                    $b = imagecolorat($x, $i, $y);
+                    $d = abs((($a >> 16) & 0xFF) - (($b >> 16) & 0xFF)) + abs((($a >> 8) & 0xFF) - (($b >> 8) & 0xFF)) + abs(($a & 0xFF) - ($b & 0xFF));
+                    if ($d > 45) $m[$y * $w + $i] = true;
+                }
+            }
+            return $m;
+        };
+        $placed = $ink($c);
+        $drawn = $ink($g);
+        imagedestroy($o);
+        imagedestroy($c);
+        imagedestroy($g);
+        if (count($placed) < 30) return 1.0; // 잉크가 거의 없으면(아주 연한 도안) 판단하지 않는다
+        if (!$drawn) return 0.0;
+        $near = function (array $set, int $p) use ($w, $h): bool {
+            $y = intdiv($p, $w);
+            $x = $p % $w;
+            $r = 4; // 약 1.7% — 굴곡을 따라 휜 정도
+            for ($dy = -$r; $dy <= $r; $dy++) {
+                for ($dx = -$r; $dx <= $r; $dx++) {
+                    $yy = $y + $dy;
+                    $xx = $x + $dx;
+                    if ($yy >= 0 && $yy < $h && $xx >= 0 && $xx < $w && isset($set[$yy * $w + $xx])) return true;
+                }
+            }
+            return false;
+        };
+        $kept = 0;
+        foreach (array_keys($placed) as $p) if ($near($drawn, $p)) $kept++;
+        $inPlace = 0;
+        foreach (array_keys($drawn) as $p) if ($near($placed, $p)) $inPlace++;
+        return min($kept / count($placed), $inPlace / count($drawn));
+    }
+
+    /**
+     * 몸 변형 막기: 문신 잉크는 피부를 「어둡게만」 한다. AI 결과가 원본보다 밝아진 곳(새로 생긴 가슴 ·
+     * 근육 하이라이트, 피부 부풀림 등)은 원본 밝기로 되돌린다(채널마다 원본과 결과 중 어두운 쪽).
+     * 흰 잉크 하이라이트는 표현이 약해질 수 있다.
+     */
+    private function darkenOnly(?string $originalPath, string $generated): string
+    {
+        try {
+            $original = $originalPath ? (string) Storage::disk('starttoo')->get($originalPath) : '';
+            if ($original === '') return $generated;
+            $g = @imagecreatefromstring($generated);
+            if (!$g) return $generated;
+            $w = imagesx($g);
+            $h = imagesy($g);
+            $o = $this->resizedTo($original, $w, $h);
+            if (!$o) {
+                imagedestroy($g);
+                return $generated;
+            }
+            for ($y = 0; $y < $h; $y++) {
+                for ($x = 0; $x < $w; $x++) {
+                    $n = imagecolorat($g, $x, $y);
+                    $s = imagecolorat($o, $x, $y);
+                    $r = min(($n >> 16) & 0xFF, ($s >> 16) & 0xFF);
+                    $gg = min(($n >> 8) & 0xFF, ($s >> 8) & 0xFF);
+                    $b = min($n & 0xFF, $s & 0xFF);
+                    $v = ($r << 16) | ($gg << 8) | $b;
+                    if ($v !== ($n & 0xFFFFFF)) imagesetpixel($g, $x, $y, $v);
+                }
+            }
+            imagedestroy($o);
+            ob_start();
+            imagejpeg($g, null, 92);
+            imagedestroy($g);
+            return (string) ob_get_clean();
+        } catch (Throwable $e) {
+            report($e);
+            return $generated;
+        }
+    }
+
     private function keepOutsideMask(string $original, string $generated, string $mask): string
     {
         // 큰 사진 여러 장을 한꺼번에 올리면 메모리가 모자라므로 한 장씩 만들고 바로 지운다.
@@ -1695,8 +1820,8 @@ class Fittings
     {
         $r = $this->own($viewer, $id);
         // 큐가 늦거나 멈췄으면 조회 요청이 직접 처리한다.
-        // (상위 모델은 큐에서 1~2분 걸릴 수 있어 3분이 지나도 그대로일 때만)
-        if ($r->status === 'processing' && Carbon::parse($r->updated_at)->lt(now()->subSeconds(180))) {
+        // (상위 모델 · 다시 시도로 큐에서 몇 분 걸릴 수 있어 6분이 지나도 그대로일 때만)
+        if ($r->status === 'processing' && Carbon::parse($r->updated_at)->lt(now()->subSeconds(360))) {
             $this->process($id);
             $r = $this->own($viewer, $id);
         }
