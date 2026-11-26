@@ -26,6 +26,26 @@ class Settings
         return $value === null ? $this->default($key) : (bool) $value;
     }
 
+    /** 숫자 값(AI 하루 한도 등). 저장된 값이 없으면 .env 기본값 */
+    public function int(string $key): int
+    {
+        $value = $this->stored()[$key] ?? null;
+        if ($value !== null) return (int) $value;
+        return match ($key) {
+            'fit_daily_limit' => (int) config('starttoo.fit_daily_limit', 3),
+            // 아티스트 한도를 따로 정하지 않았으면 일반 회원과 같다
+            'fit_artist_daily_limit' => $this->int('fit_daily_limit'),
+            default => 0,
+        };
+    }
+
+    /** 묶음 값(앱 버전 정책 등). 저장된 값이 없으면 null */
+    public function json(string $key): ?array
+    {
+        $value = $this->stored()[$key] ?? null;
+        return is_array($value) ? $value : null;
+    }
+
     public function set(string $key, mixed $value, ?int $adminId): void
     {
         $this->db()->table('starttoo_settings')->updateOrInsert(['key' => $key],
@@ -38,6 +58,7 @@ class Settings
         return match ($key) {
             'guest_browsing' => (bool) config('starttoo.guest_browsing_enabled'),
             'report_auto_hide' => false,
+            'ai_budget_block' => false,
             default => false,
         };
     }

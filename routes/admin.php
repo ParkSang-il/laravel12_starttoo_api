@@ -1,6 +1,9 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminAiController;
+use App\Http\Controllers\Admin\AdminAppVersionController;
 use App\Http\Controllers\Admin\AdminAuthController;
+use App\Http\Controllers\Admin\AdminCommsController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\AdminModerationController;
 use Illuminate\Support\Facades\Route;
@@ -45,5 +48,30 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('settings', [AdminController::class, 'settings'])->name('settings');
         Route::get('settings/logs/export', [AdminController::class, 'exportLogs'])->name('settings.logs.export');
         Route::post('settings/policies/{id}', [AdminController::class, 'togglePolicy'])->name('settings.policy');
+
+        // M-10 ~ M-13 AI 서비스
+        Route::get('ai/usage', [AdminAiController::class, 'usage'])->name('ai-usage');
+        Route::post('ai/usage/limit/{key}/{dir}', [AdminAiController::class, 'stepLimit'])->name('ai-usage.limit');
+        Route::post('ai/usage/guard/{id}', [AdminAiController::class, 'toggleGuard'])->name('ai-usage.guard');
+        Route::get('ai/jobs', [AdminAiController::class, 'jobs'])->name('ai-jobs');
+        Route::post('ai/jobs/{id}/restore', [AdminAiController::class, 'restoreQuota'])->name('ai-jobs.restore');
+        Route::get('virtual-models', [AdminAiController::class, 'virtualModels'])->name('virtual-models');
+        Route::post('virtual-models/{id}/toggle', [AdminAiController::class, 'toggleModel'])->whereNumber('id')->name('virtual-models.toggle');
+        Route::post('virtual-models/{id}/redo', [AdminAiController::class, 'regenerateModel'])->whereNumber('id')->name('virtual-models.redo');
+
+        // M-16 · M-17 소통
+        Route::get('push', [AdminCommsController::class, 'push'])->name('push');
+        Route::post('push/send', [AdminCommsController::class, 'sendPush'])->middleware('throttle:10,1,admin-push')->name('push.send');
+        Route::post('push/{id}/cancel', [AdminCommsController::class, 'cancelPush'])->whereUuid('id')->name('push.cancel');
+        Route::get('notices', [AdminCommsController::class, 'notices'])->name('notices');
+        Route::post('notices', [AdminCommsController::class, 'storeNotice'])->name('notices.store');
+        Route::post('notices/{id}', [AdminCommsController::class, 'saveNotice'])->whereNumber('id')->name('notices.save');
+        Route::post('notices/{id}/toggle', [AdminCommsController::class, 'toggleNotice'])->whereNumber('id')->name('notices.toggle');
+
+        // M-19 앱 버전
+        Route::get('app-version', [AdminAppVersionController::class, 'show'])->name('app-version');
+        Route::post('app-version/{pf}/step/{key}/{dir}', [AdminAppVersionController::class, 'step'])->name('app-version.step');
+        Route::post('app-version/{pf}/option/{id}', [AdminAppVersionController::class, 'option'])->name('app-version.option');
+        Route::post('app-version/{pf}/save', [AdminAppVersionController::class, 'save'])->name('app-version.save');
     });
 });

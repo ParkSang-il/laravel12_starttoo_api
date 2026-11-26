@@ -144,14 +144,37 @@ class Fittings
         }
     }
 
+    /** 하루 한도: 운영 콘솔(AI 사용량)에서 일반 회원 · 아티스트를 따로 정한다(없으면 .env STARTTOO_FIT_DAILY_LIMIT, 0 = 제한 없음) */
+    public function dailyLimit(int $viewer): int
+    {
+        $artist = $this->db()->table('starttoo_users')->where('id', $viewer)->value('artist_status') === 'approved';
+        return app(Settings::class)->int($artist ? 'fit_artist_daily_limit' : 'fit_daily_limit');
+    }
+
     public function remaining(int $viewer): int
     {
         // 피팅 · 추출 · 필러 · 커버업 공통 하루 횟수. 실패와 기기에서 만든 결과(cost_units 0)는 세지 않는다.
-        $limit = (int) config('starttoo.fit_daily_limit', 3);
-        if ($limit <= 0) return 999; // 제한 없음(.env 0)
+        $limit = $this->dailyLimit($viewer);
+        if ($limit <= 0) return 999; // 제한 없음(0)
         $used = (int) $this->db()->table('starttoo_fit_results')->where('user_id', $viewer)
             ->where('created_at', '>=', today())->where('status', '<>', 'failed')->sum('cost_units');
         return max(0, $limit - $used);
+    }
+
+    /** 이번 달 AI 추정 비용(원) = 차감된 횟수 × 1회 단가(.env STARTTOO_AI_UNIT_COST). 필러는 3안이라 단가 3배 */
+    public function monthCost(): int
+    {
+        $unit = (int) config('starttoo.ai_unit_cost', 0);
+        if ($unit <= 0) return 0;
+        $rows = $this->db()->table('starttoo_fit_results')->where('created_at', '>=', now()->startOfMonth())->where('status', '<>', 'failed')
+            ->selectRaw("SUM(CASE WHEN type = 'fill' THEN cost_units * 3 ELSE cost_units END) as units")->value('units');
+        return (int) $rows * $unit;
+    }
+
+    public function overBudget(): bool
+    {
+        $budget = (int) config('starttoo.ai_monthly_budget', 0);
+        return $budget > 0 && $this->monthCost() >= $budget;
     }
 
     /** 필러는 3안(AI 3번)을 1회로 세는 대신 하루 횟수를 따로 둔다(STARTTOO_FIT_FILL_DAILY_LIMIT, 0 = 제한 없음) */
@@ -168,7 +191,7 @@ class Fittings
     {
         return [
             'enabled' => (bool) config('starttoo.fit_enabled', true) && app(NanoBanana::class)->configured(),
-            'daily_limit' => (int) config('starttoo.fit_daily_limit', 3), // 0 = 제한 없음
+            'daily_limit' => $this->dailyLimit($viewer), // 0 = 제한 없음
             'fill_daily_limit' => (int) config('starttoo.fit_fill_daily_limit', 1),
             'remaining' => $this->remaining($viewer),
             'fill_used' => $this->fillUsedToday($viewer),
@@ -1029,6 +1052,10 @@ class Fittings
             }
             if ($this->remaining($viewer) <= 0) {
                 $this->fail(429, 'FIT_DAILY_LIMIT', '오늘 AI 횟수를 모두 사용했어요. 내일 다시 이용해주세요.');
+            }
+            // 운영 콘솔 「예산 초과 시 신규 생성 중단」(이번 달 추정 비용 ≥ 월 예산)
+            if (app(Settings::class)->bool('ai_budget_block') && $this->overBudget()) {
+                $this->fail(503, 'FIT_UNAVAILABLE', '가상 피팅을 잠시 이용할 수 없어요. 잠시 후 다시 시도해주세요.');
             }
         }
 

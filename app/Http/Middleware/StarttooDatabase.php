@@ -24,6 +24,12 @@ class StarttooDatabase
         return app(ProjectDatabase::class)->run('starttoo', function () use ($request, $next) {
             // 운영 콘솔 「비회원 피드 공개」 스위치(저장된 값이 없으면 .env 값 그대로)
             config(['starttoo.guest_browsing_enabled' => app(\App\Services\Starttoo\Settings::class)->bool('guest_browsing')]);
+            // 운영 콘솔 「앱 버전」: 점검 503 · 최소 지원 미만 + API 차단 426(헤더가 없는 요청은 통과)
+            if ($block = app(\App\Services\Starttoo\AppVersions::class)->blockFor($request->header('X-App-Platform'), $request->header('X-App-Version'))) {
+                [$status, $body] = $block;
+                $response = response()->json($body, $status);
+                return $status === 503 ? $response->header('Retry-After', '600') : $response;
+            }
             return $next($request);
         });
     }

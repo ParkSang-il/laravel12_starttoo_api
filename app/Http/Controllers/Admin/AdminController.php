@@ -38,6 +38,7 @@ class AdminController extends AdminBaseController
             ['label' => '미처리 신고', 'count' => $badges['reports'] . '건', 'pill' => Ui::pill('red'), 'href' => route('admin.reports')],
             ['label' => '예약 변경 요청', 'count' => $data['changeRequests'] . '건', 'pill' => Ui::pill('amber'), 'href' => route('admin.payments', ['tab' => '변경 요청'])],
             ['label' => '숨김 처리 콘텐츠 재검토', 'count' => $data['hidden'] . '건', 'pill' => Ui::pill('gray'), 'href' => route('admin.contents', ['state' => '숨김'])],
+            ['label' => '오늘 AI 생성 실패', 'count' => ($badges['aiJobs'] ?? 0) . '건', 'pill' => Ui::pill('red'), 'href' => route('admin.ai-jobs', ['tab' => '실패'])],
         ];
 
         $logs = app(AdminAudit::class)->query(null)->limit(4)->get()->map(fn ($l) => app(AdminAudit::class)->row($l))->all();

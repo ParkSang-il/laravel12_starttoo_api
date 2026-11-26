@@ -62,6 +62,48 @@ final class AdminUi
         return $base . ($on ? 'background: #141413; justify-content: flex-end' : 'background: #D9D4CB; justify-content: flex-start');
     }
 
+    public const KNOB = 'width: 20px; height: 20px; border-radius: 50%; background: #FFFFFF; display: block';
+
+    public static function chip(bool $on): string
+    {
+        return 'height: 30px; padding: 0 12px; border-radius: 15px; font-size: 12px; font-weight: 700; '
+            . ($on ? 'background: #141413; color: #FFFFFF; border: 1px solid #141413'
+                   : 'background: #FFFFFF; color: #55524C; border: 1px solid #E4E0D8');
+    }
+
+    /** 칩 목록: [label, href, style] — 쿼리 $key 를 바꾸는 링크. $labels 는 [값 => 표시] 도 된다 */
+    public static function chips(array $labels, string $current, string $key, array $reset = []): array
+    {
+        $out = [];
+        $isList = array_is_list($labels);
+        foreach ($labels as $value => $label) {
+            // 그냥 목록이면 표시 글자가 값, [값 => 표시] 면 키가 값(숫자 키 '0' 도 문자열로)
+            $value = $isList ? $label : (string) $value;
+            $out[] = ['label' => $label, 'href' => self::url([$key => $value] + array_fill_keys($reset, null)), 'style' => self::chip((string) $value === $current)];
+        }
+        return $out;
+    }
+
+    public static function rowBg(bool $on): string
+    {
+        return $on ? 'background: #F4F2EE' : 'background: #FFFFFF';
+    }
+
+    public static function pillColors(string $kind): string
+    {
+        return self::PILL[$kind] ?? self::PILL['gray'];
+    }
+
+    /** KPI 보조 문구 스타일: up(초록) · down(빨강) · muted(회색) */
+    public static function sub(string $tone): string
+    {
+        return match ($tone) {
+            'up' => 'font-size: 12px; font-weight: 700; color: #1D6B3A',
+            'down' => 'font-size: 12px; font-weight: 700; color: #A3301A',
+            default => 'font-size: 12px; font-weight: 500; color: #66625B',
+        };
+    }
+
     /** 디자인 페이지 버튼(‹ 1 2 3 ›): 현재 페이지 주변 5개 */
     public static function pages(int $page, bool $hasMore, int $lastPage): array
     {
@@ -86,6 +128,8 @@ final class AdminUi
             return [
                 'artistReview' => $db->table('starttoo_artist_applications')->whereIn('status', ['submitted', 'reviewing'])->count(),
                 'reports' => $db->table('starttoo_reports')->where('status', 'pending')->count(),
+                // 오늘 실패한 AI 생성(원인 확인용)
+                'aiJobs' => $db->table('starttoo_fit_results')->where('status', 'failed')->where('cost_units', '>', 0)->where('created_at', '>=', today())->count(),
             ];
         });
     }

@@ -2,52 +2,33 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\ProjectDatabase;
+use App\Services\Starttoo\AppVersions;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * 앱 업데이트 안내. 로그인 없이 앱 시작할 때 부른다.
- * .env STARTTOO_APP_MIN_VERSION(이보다 낮으면 강제) · STARTTOO_APP_LATEST_VERSION(이보다 낮으면 권장).
- * STARTTOO_APP_MAINTENANCE_MESSAGE 가 있으면 모든 버전을 점검 화면으로 막는다.
- * 앱이 version 을 보내면 서버가 판단한 update 값(none · recommended · required)과
- * 앱 화면용 status(ok · soft · force · maintenance)를 같이 준다.
+ * 앱 업데이트 안내. 로그인 없이 앱 시작 · 앞으로 올 때 부른다.
+ * GET /api/v1/projects/starttoo/app/version?platform=ios&version=1.2.0
+ * 정책은 운영 콘솔 「앱 버전 · 강제 업데이트」에서 정한다(저장 전에는 .env STARTTOO_APP_MIN_VERSION 등).
+ * 응답: status(ok · soft · force · maintenance) · update(none · recommended · required, 이전 빌드 호환)
+ *       · current_version · min_version · recommended_version · latest_version · store_url · message · soft_snooze_days
  */
 class StarttooAppController extends Controller
 {
     public function version(Request $request): JsonResponse
     {
-        $min = trim((string) config('starttoo.app_min_version'));
-        $latest = trim((string) config('starttoo.app_latest_version'));
         $platform = $request->query('platform') === 'ios' ? 'ios' : 'android';
-        $current = (string) $request->query('version', '');
-        $valid = fn (string $v) => (bool) preg_match('/^\d+(\.\d+){0,3}$/', $v);
+        $version = (string) $request->query('version', '');
 
-        $update = 'none';
-        if ($valid($current)) {
-            if ($valid($min) && version_compare($current, $min, '<')) $update = 'required';
-            elseif ($valid($latest) && version_compare($current, $latest, '<')) $update = 'recommended';
-        }
-        $maintenance = trim((string) config('starttoo.app_maintenance_message'));
-        $message = trim((string) config('starttoo.app_update_message'));
-        $status = $maintenance !== '' ? 'maintenance' : match ($update) {
-            'required' => 'force',
-            'recommended' => 'soft',
-            default => 'ok',
-        };
+        $result = app(ProjectDatabase::class)->run('starttoo', function () use ($platform, $version) {
+            $versions = app(AppVersions::class);
+            // 버전 분포 집계가 실패해도 안내는 그대로 준다
+            try { $versions->record($platform, $version); } catch (\Throwable $e) { report($e); }
+            return $versions->evaluate($platform, $version);
+        });
 
-        return response()->json([
-            'status' => $status,
-            'current_version' => $valid($current) ? $current : null,
-            'min_version' => $valid($min) ? $min : null,
-            'latest_version' => $valid($latest) ? $latest : null,
-            'update' => $update,
-            'store_url' => (string) config($platform === 'ios' ? 'starttoo.app_store_url' : 'starttoo.play_store_url') ?: null,
-            'message' => match ($status) {
-                'maintenance' => $maintenance,
-                'force', 'soft' => $message !== '' ? $message : null,
-                default => null,
-            },
-            'soft_snooze_days' => max(1, (int) config('starttoo.app_soft_snooze_days', 7)),
-        ])->header('Cache-Control', 'public, max-age=60');
+        // 점검 · 강제는 바로 반영되게 캐시하지 않는다
+        return response()->json($result)->header('Cache-Control', 'no-store');
     }
 }

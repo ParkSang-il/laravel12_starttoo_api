@@ -38,7 +38,9 @@ return [
     // 업데이트 화면 안내 문구(비우면 앱 기본 문구) · 권장 안내 「나중에」 후 다시 띄우지 않는 일수
     'app_update_message' => env('STARTTOO_APP_UPDATE_MESSAGE', ''),
     'app_soft_snooze_days' => (int) env('STARTTOO_APP_SOFT_SNOOZE_DAYS', 7),
-    // 점검 모드: 문구를 넣으면 모든 앱이 점검 화면으로 막힌다(비우면 해제)
+    // 운영 콘솔 「앱 버전」 스텝퍼에서 고를 배포 버전(쉼표, 낮은 순). 실제로 접속한 버전은 자동으로 더해진다
+    'app_releases' => env('STARTTOO_APP_RELEASES', '1.0.0'),
+    // 점검 모드: 문구를 넣으면 모든 앱이 점검 화면으로 막힌다(비우면 해제). 운영 콘솔에서 저장하면 콘솔 값이 우선
     'app_maintenance_message' => env('STARTTOO_APP_MAINTENANCE_MESSAGE', ''),
     // 운영 콘솔(/admin): 접속 허용 IP(쉼표로 여러 개, CIDR 가능, 비우면 제한 없음) · 미사용 자동 로그아웃(분)
     'admin_allowed_ips' => env('STARTTOO_ADMIN_ALLOWED_IPS', ''),
@@ -76,4 +78,7 @@ return [
     'fit_skin_daily_limit' => (int) env('STARTTOO_FIT_SKIN_DAILY_LIMIT', 3),
     // 타투 필러(3안 = 1회 차감)를 하루 몇 번 만들 수 있는지. 0 = 제한 없음
     'fit_fill_daily_limit' => (int) env('STARTTOO_FIT_FILL_DAILY_LIMIT', 1),
+    // 운영 콘솔 AI 사용량: AI 이미지 1회 추정 단가(원) · 월 예산(원). 0 이면 비용 · 예산 칸을 「미설정」으로 보여 준다
+    'ai_unit_cost' => (int) env('STARTTOO_AI_UNIT_COST', 0),
+    'ai_monthly_budget' => (int) env('STARTTOO_AI_MONTHLY_BUDGET', 0),
 ];
