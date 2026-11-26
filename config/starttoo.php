@@ -42,8 +42,7 @@ return [
     'app_maintenance_message' => env('STARTTOO_APP_MAINTENANCE_MESSAGE', ''),
     // 운영 콘솔(/admin): 접속 허용 IP(쉼표로 여러 개, CIDR 가능, 비우면 제한 없음) · 미사용 자동 로그아웃(분)
     'admin_allowed_ips' => env('STARTTOO_ADMIN_ALLOWED_IPS', ''),
-    'admin_idle_minutes' => (int) env('STARTTOO_ADMIN_IDLE_MINUTES', 60),
-    // 개발용 초안은 별도 설정을 켠 환경에서만 노출하고 정식 문안 발행 시 버전을 올린다.
+    'admin_idle_minutes' => (int) env('STARTTOO_ADMIN_IDLE_MINUTES', 60),    // 개발용 초안은 별도 설정을 켠 환경에서만 노출하고 정식 문안 발행 시 버전을 올린다.
     'draft_terms_enabled' => env('STARTTOO_DRAFT_TERMS_ENABLED', false),
     'terms_version' => '2026-11-17-draft',
     // 공개 소셜의 운영 선행 조건을 검토하기 전에는 익명 조회를 열지 않는다.
