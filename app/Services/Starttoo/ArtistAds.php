@@ -23,6 +23,9 @@ class ArtistAds
             'unit' => 'day', 'price' => 10000, 'capacity' => 0, 'keywords' => true, 'badge' => null],
         'feed' => ['slot' => 'feed_inline', 'name' => '추천 피드 카드', 'desc' => '홈 추천 피드 게시물 사이에 작품 카드로 나와요',
             'unit' => 'day', 'price' => 15000, 'capacity' => 0, 'keywords' => false, 'badge' => '추천'],
+        // 커뮤니티 피드 맨 위 카드 자리(운영자 광고 · 구글 광고와 섞여 나온다)
+        'community' => ['slot' => 'community_top', 'name' => '커뮤니티 상단', 'desc' => '커뮤니티 피드 맨 위 카드 자리에 작품 사진과 문구로 나와요',
+            'unit' => 'day', 'price' => 8000, 'capacity' => 0, 'keywords' => false, 'badge' => null],
         'region' => ['slot' => 'region_top', 'name' => '지역 탐색 상단', 'desc' => '내 상점 지역을 찾는 사람에게 먼저 보여요',
             'unit' => 'day', 'price' => 6000, 'capacity' => 0, 'keywords' => false, 'badge' => null],
         'carousel' => ['slot' => 'popular_carousel', 'name' => '인기 작가 캐러셀', 'desc' => '발견 화면 인기 작가 줄 첫 자리 · 한 달 단위',
@@ -46,7 +49,7 @@ class ArtistAds
 
     /** 저장된 안내가 없을 때의 기본 안내(지금 서버 동작과 같은 내용) */
     private const GUIDE_DEFAULT = [
-        ['title' => '광고는 어디에 나오나요?', 'body' => "· 검색 결과 상단: 고른 키워드(최대 3개)를 검색하면 결과 맨 위에 내 작품 카드가 나와요.\n· 추천 피드 카드: 홈 추천 피드 게시물 사이에 작품 사진 카드로 나와요.\n· 지역 탐색 상단: 「발견 → 지역」에서 내 상점 지역을 고른 사람에게 목록 맨 위로 나와요.\n· 인기 작가 캐러셀: 발견 화면 「이번 주 인기 작가」 줄 첫 자리에 나와요(한 달 단위).\n모든 광고에는 ‘광고’ 표시가 붙어요."],
+        ['title' => '광고는 어디에 나오나요?', 'body' => "· 검색 결과 상단: 고른 키워드(최대 3개)를 검색하면 결과 맨 위에 내 작품 카드가 나와요.\n· 추천 피드 카드: 홈 추천 피드 게시물 사이에 작품 사진 카드로 나와요.\n· 커뮤니티 상단: 커뮤니티 피드 맨 위 카드 자리에 작품 사진과 문구로 나와요.\n· 지역 탐색 상단: 「발견 → 지역」에서 내 상점 지역을 고른 사람에게 목록 맨 위로 나와요. 단가는 상점 지역마다 달라요.\n· 인기 작가 캐러셀: 발견 화면 「이번 주 인기 작가」 줄 첫 자리에 나와요(한 달 단위).\n모든 광고에는 ‘광고’ 표시가 붙어요."],
         ['title' => '심사는 어떻게 하나요?', 'body' => "심사 요청 후 보통 영업일 하루 안에 결과를 알림으로 알려드려요.\n가격 할인, 시술 효과를 보장하는 표현(예: 통증 없는 시술), 내 작품이 아닌 사진, 외부 연락처는 반려돼요.\n반려되면 사유를 확인하고 문구를 고쳐 다시 요청할 수 있어요."],
         ['title' => '언제부터 언제까지 나오나요?', 'body' => "· 하루 단위 상품: 승인되면 바로 노출되고, 고른 기간(7 · 14 · 30일)만큼 나와요.\n· 한 달 단위 상품: 승인한 다음 달 1일부터 말일까지 나와요.\n노출 중에는 「광고 노출」 스위치로 잠시 멈출 수 있고, 멈춘 기간만큼 종료일이 뒤로 밀려요.\n하루 단위 광고는 같은 조건으로 7 · 14일 기간을 늘릴 수 있어요. 종료한 광고는 다시 켤 수 없어요."],
         ['title' => '문구 · 작품을 바꾸고 싶어요', 'body' => "광고 성과 화면의 「문구 · 작품 바꾸기」로 바꿀 수 있어요. 바꾼 내용은 다시 심사하고, 심사하는 동안에도 기존 광고는 계속 나와요."],
@@ -98,20 +101,56 @@ class ArtistAds
             ];
             $out[$id]['price'] = max(0, (int) ($s['price'] ?? $p['price']));
             $out[$id]['capacity'] = max(0, (int) ($s['capacity'] ?? $p['capacity']));
+            // 지역별 단가(지역 탐색 상단만): 지역 코드 → 단가. 없는 지역은 기본 단가
+            $out[$id]['region_prices'] = $id === self::REGION_PRICED
+                ? array_map('intval', array_filter((array) ($s['region_prices'] ?? []), fn ($v) => is_numeric($v) && $v >= 0))
+                : [];
         }
         return $out;
     }
 
+    /** 지역마다 단가를 따로 정하는 상품(작가 상점 지역 기준) */
+    public const REGION_PRICED = 'region';
+
     public function saveConfig(array $in, int $adminId): array
     {
+        $regions = array_column(app(Profiles::class)->options()['regions'], 'id');
         $value = [];
         foreach (self::PRODUCTS as $id => $p) {
             $s = $in[$id] ?? [];
             $value[$id] = ['on' => (bool) ($s['on'] ?? false), 'price' => max(0, (int) ($s['price'] ?? $p['price'])),
                 'capacity' => max(0, (int) ($s['capacity'] ?? $p['capacity']))];
+            if ($id === self::REGION_PRICED) {
+                $prices = [];
+                foreach ((array) ($s['region_prices'] ?? []) as $region => $price) {
+                    // 비운 칸은 기본 단가를 쓴다
+                    if (!in_array($region, $regions, true) || $region === 'all' || $price === null || $price === '') continue;
+                    $prices[$region] = max(0, (int) $price);
+                }
+                $value[$id]['region_prices'] = $prices;
+            }
         }
         app(Settings::class)->set('ad_products', $value, $adminId);
         return $value;
+    }
+
+    /** 이 작가에게 적용할 단가: 지역별 단가가 있으면 작가 상점 지역 단가, 없으면 기본 단가 */
+    public function price(string $id, int $artist, ?array $config = null): int
+    {
+        $p = ($config ?? $this->config())[$id] ?? null;
+        if (!$p) return 0;
+        if ($p['region_prices']) {
+            $region = $this->db()->table('starttoo_shops')->where('user_id', $artist)->value('region');
+            if ($region !== null && isset($p['region_prices'][$region])) return (int) $p['region_prices'][$region];
+        }
+        return (int) $p['price'];
+    }
+
+    /** 상점 지역 이름(「서울 마포」) */
+    private function regionLabel(int $artist): ?string
+    {
+        $region = $this->db()->table('starttoo_shops')->where('user_id', $artist)->value('region');
+        return $region ? (collect(app(Profiles::class)->options()['regions'])->pluck('label', 'id')[$region] ?? null) : null;
     }
 
     /** 한 달 상품이 노출되는 달: 승인한 날의 다음 달 1일 ~ 말일 */
@@ -149,12 +188,16 @@ class ArtistAds
     public function products(int $artist): array
     {
         $items = [];
-        foreach ($this->config() as $id => $p) {
+        $config = $this->config();
+        $regionLabel = $this->regionLabel($artist);
+        foreach ($config as $id => $p) {
             $reach = $this->averageReach($p['slot']);
             $sold = $this->soldOut($id, $p);
             [$monthStart] = $this->nextMonth();
             $items[] = [
-                'id' => $id, 'name' => $p['name'], 'desc' => $p['desc'], 'unit' => $p['unit'], 'unit_price' => $p['price'],
+                'id' => $id, 'name' => $p['name'], 'desc' => $p['desc'], 'unit' => $p['unit'], 'unit_price' => $this->price($id, $artist, $config),
+                // 지역별 단가 상품: 어느 지역 기준 단가인지(「서울 마포 기준」)
+                'price_note' => $p['region_prices'] && $regionLabel ? $regionLabel.' 기준' : null,
                 'uses_keywords' => $p['keywords'], 'badge' => $p['badge'], 'sold_out' => $sold,
                 // 기록이 있을 때만 실제 평균을 보여 준다(예상치를 지어내지 않는다)
                 'reach' => $reach !== null ? '최근 하루 평균 노출 '.number_format($reach) : null,
@@ -279,7 +322,7 @@ class ArtistAds
         }
         $p = $this->config()[$ad->product] ?? null;
         return ['ad' => $this->card($ad, $images), 'daily' => $days, 'extend_days' => ($p['unit'] ?? '') === 'day' ? self::EXTEND_DAYS : [],
-            'unit_price' => $p['price'] ?? 0];
+            'unit_price' => $p ? $this->price($ad->product, $artist) : 0];
     }
 
     private function mine(int $artist, int $id): object
@@ -305,10 +348,11 @@ class ArtistAds
                 ->where(fn ($e) => $e->whereNull('ends_at')->orWhere('ends_at', '>', now()))))->exists();
         if ($exists) $this->fail(409, 'AD_EXISTS', '이 위치에 심사 중이거나 노출 중인 광고가 있어요.');
         $days = $p['unit'] === 'day' ? $this->days($input['days'] ?? null) : null;
+        $price = $this->price($id, $artist, $config);
         $adId = $this->db()->table('starttoo_ads')->insertGetId($values + [
             'slot' => $p['slot'], 'product' => $id, 'status' => 'reviewing', 'advertiser' => $this->advertiser($artist),
             'artist_id' => $artist, 'link' => null, 'image_path' => null, 'active' => false,
-            'days' => $days, 'amount' => $p['unit'] === 'day' ? $p['price'] * $days : $p['price'],
+            'days' => $days, 'amount' => $p['unit'] === 'day' ? $price * $days : $price,
             'requested_at' => now(), 'created_at' => now(), 'updated_at' => now(),
         ]);
         return $this->detail($artist, $adId);
@@ -323,8 +367,9 @@ class ArtistAds
         $state = $this->state($ad);
         if ($state === 'rejected') {
             $days = $p['unit'] === 'day' ? $this->days($input['days'] ?? $ad->days) : null;
+            $price = $this->price($ad->product, $artist);
             $this->db()->table('starttoo_ads')->where('id', $id)->update($values + ['status' => 'reviewing', 'reject_reason' => null,
-                'days' => $days, 'amount' => $p['unit'] === 'day' ? $p['price'] * $days : $p['price'],
+                'days' => $days, 'amount' => $p['unit'] === 'day' ? $price * $days : $price,
                 'requested_at' => now(), 'updated_at' => now()]);
         } elseif (in_array($state, ['running', 'paused', 'scheduled'], true)) {
             $this->db()->table('starttoo_ads')->where('id', $id)->update(['pending' => json_encode([
@@ -397,7 +442,7 @@ class ArtistAds
         if (!in_array((int) $days, self::EXTEND_DAYS, true)) $this->fail(422, 'INVALID_AD', '늘릴 기간을 골라주세요.');
         $this->db()->table('starttoo_ads')->where('id', $id)->update([
             'ends_at' => Carbon::parse($ad->ends_at)->addDays((int) $days), 'days' => (int) $ad->days + (int) $days,
-            'amount' => (int) $ad->amount + $p['price'] * (int) $days, 'updated_at' => now(),
+            'amount' => (int) $ad->amount + $this->price($ad->product, $artist) * (int) $days, 'updated_at' => now(),
         ]);
         return $this->detail($artist, $id);
     }

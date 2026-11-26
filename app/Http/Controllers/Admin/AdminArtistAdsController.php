@@ -27,6 +27,9 @@ class AdminArtistAdsController extends AdminBaseController
             ], $ads->queue()),
             'products' => $ads->config(),
             'productsAction' => route('admin.ads.artist.products'),
+            // 지역별 단가 입력 칸(「전국」 제외)
+            'regionOptions' => array_values(array_filter(app(\App\Services\Starttoo\Profiles::class)->options()['regions'], fn ($r) => $r['id'] !== 'all')),
+            'regionPriced' => ArtistAds::REGION_PRICED,
             'canReview' => $canManage,
             // 앱 「광고 안내」 페이지 섹션(저장된 섹션 + 새로 쓸 빈 칸 2개)
             'guide' => $ads->guide(),
@@ -91,11 +94,14 @@ class AdminArtistAdsController extends AdminBaseController
             $rules["products.$id.price"] = ['required', 'integer', 'min:0', 'max:100000000'];
             $rules["products.$id.capacity"] = ['required', 'integer', 'min:0', 'max:1000'];
         }
+        // 지역별 단가(비우면 기본 단가)
+        $rules['products.' . ArtistAds::REGION_PRICED . '.region_prices'] = ['nullable', 'array'];
+        $rules['products.' . ArtistAds::REGION_PRICED . '.region_prices.*'] = ['nullable', 'integer', 'min:0', 'max:100000000'];
         $data = $request->validate($rules, ['*.required' => '단가 · 자리 수를 모두 적어주세요.']);
         $before = app(ArtistAds::class)->config();
         $after = app(ArtistAds::class)->saveConfig($data['products'] ?? [], (int) $this->admin($request)->id);
         $this->audit($request, '설정', '작가 광고 상품 저장', '광고 · 프리미엄', [
-            'before' => array_map(fn ($p) => ['on' => $p['on'], 'price' => $p['price'], 'capacity' => $p['capacity']], $before),
+            'before' => array_map(fn ($p) => ['on' => $p['on'], 'price' => $p['price'], 'capacity' => $p['capacity'], 'region_prices' => $p['region_prices']], $before),
             'after' => $after,
         ]);
         return back()->with('status', '작가 광고 상품을 저장했어요 · 앱의 광고 만들기 화면에 바로 반영돼요');

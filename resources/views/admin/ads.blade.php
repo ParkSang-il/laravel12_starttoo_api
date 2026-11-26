@@ -110,6 +110,17 @@
             <label style="flex: 1 1 200px; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; min-height: 40px"><input type="hidden" name="products[{{ $id }}][on]" value="0"><input type="checkbox" name="products[{{ $id }}][on]" value="1" @checked(old("products.$id.on", $p['on'])) @disabled(! $canReview) style="width: 18px; height: 18px; margin: 0; accent-color: #141413">{{ $p['name'] }} <span style="font-weight: 400; color: #66625B">· {{ $p['unit'] === 'month' ? '한 달' : '하루' }} 단위</span></label>
             <label style="flex: 0 1 160px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">{{ $p['unit'] === 'month' ? '한 달' : '하루' }} 단가(원)</span><input type="number" name="products[{{ $id }}][price]" min="0" max="100000000" step="1000" value="{{ old("products.$id.price", $p['price']) }}" @disabled(! $canReview) style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
             <label style="flex: 0 1 120px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">자리 수</span><input type="number" name="products[{{ $id }}][capacity]" min="0" max="1000" value="{{ old("products.$id.capacity", $p['capacity']) }}" @disabled(! $canReview) style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+            @if ($id === $regionPriced)
+              {{-- 지역별 단가: 작가 상점 지역 기준. 비우면 위의 기본 단가 --}}
+              <details style="flex: 1 1 100%" @if (count($p['region_prices'])) open @endif>
+                <summary style="cursor: pointer; font-size: 13px; font-weight: 700; color: #3A3731">지역별 단가 <span style="font-weight: 400; color: #66625B">· 작가 상점 지역 기준, 비우면 기본 단가 · 설정 {{ count($p['region_prices']) }}곳</span></summary>
+                <div style="margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px">
+                  @foreach ($regionOptions as $r)
+                    <label style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #3A3731">{{ $r['label'] }}</span><input type="number" name="products[{{ $id }}][region_prices][{{ $r['id'] }}]" min="0" max="100000000" step="1000" value="{{ old("products.$id.region_prices.{$r['id']}", $p['region_prices'][$r['id']] ?? '') }}" placeholder="{{ number_format($p['price']) }}" @disabled(! $canReview) style="height: 36px; border-radius: 8px; border: 1px solid #D9D4CB; padding: 0 10px; font-size: 13px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+                  @endforeach
+                </div>
+              </details>
+            @endif
           </div>
         @endforeach
         @if ($canReview)
