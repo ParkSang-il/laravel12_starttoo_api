@@ -419,13 +419,11 @@ class Fittings
             report(new \RuntimeException('Fit skin mask (retry) failed: ratio '.round($ratio, 2)));
             return null;
         }
-        // 땀구멍 · 하이라이트 같은 작은 구멍을 메우고 경계를 부드럽게
-        imagefilter($out, IMG_FILTER_GAUSSIAN_BLUR);
-        imagefilter($out, IMG_FILTER_GAUSSIAN_BLUR);
         ob_start();
         imagepng($out);
         imagedestroy($out);
-        return (string) ob_get_clean();
+        // 그림자 진 피부 · 피부 안쪽 구멍을 형태로 메우고 경계를 부드럽게
+        return $this->refineSkinMask((string) ob_get_clean(), $jpeg);
     }
 
     /** 흑백 마스크 PNG → 사진 크기 GD 이미지(없으면 null) */
@@ -450,7 +448,164 @@ class Fittings
         $jpeg = (string) ob_get_clean();
         imagedestroy($src);
         // 텍스트 모델이 영역을 주지 않으면(새 모델은 마스크를 안 줌) 이미지 모델에게 마스크 그림을 받는다
-        return $this->skinMaskBySegment($jpeg, $w, $h) ?? $this->skinMaskByImage($jpeg, $w, $h);
+        $bw = $this->skinMaskBySegment($jpeg, $w, $h) ?? $this->skinMaskByImage($jpeg, $w, $h);
+        // 그림자 진 피부 · 피부 안쪽 구멍을 형태로 메운다
+        return $bw ? $this->refineSkinMask($bw, $jpeg) : null;
+    }
+
+    /**
+     * 피부 마스크 다듬기(색만이 아니라 형태로): AI가 그림자 진 피부를 빼먹는 경우를 메운다.
+     *  ① 찾은 피부의 색 성분(Cb · Cr)을 배운다. 그림자는 밝기만 바뀌고 색 성분은 거의 그대로다.
+     *  ② 피부 경계에서 바깥으로 넓혀 가며, 색 성분이 피부와 같으면(어두워도) 피부로 넣는다.
+     *     멀리까지 번지지 않게 경계에서 짧은 거리(사진 긴 변의 6%)까지만 넓힌다.
+     *     흰 옷 · 회색 옷처럼 색 성분이 다른 곳은 넘어가지 않는다.
+     *  ③ 피부로 둘러싸인 작은 구멍(그림자 · 하이라이트 · 문신 자리)은 피부로 채운다.
+     *  ④ 경계를 부드럽게 한다.
+     * 실패하면 받은 마스크를 그대로 돌려준다.
+     */
+    private function refineSkinMask(string $bw, string $jpeg): string
+    {
+        try {
+            $src = @imagecreatefromstring($jpeg);
+            if (!$src) return $bw;
+            $w = imagesx($src);
+            $h = imagesy($src);
+            $mask = $this->resizedTo($bw, $w, $h);
+            if (!$mask) {
+                imagedestroy($src);
+                return $bw;
+            }
+            $n = $w * $h;
+            // 칸마다 피부 여부 · 색 성분을 바이트 문자열로(메모리 절약)
+            $skin = str_repeat("\0", $n);
+            $cbS = str_repeat("\0", $n);
+            $crS = str_repeat("\0", $n);
+            $yS = str_repeat("\0", $n);
+            $count = 0;
+            $sumCb = $sumCr = $sumY = $sqCb = $sqCr = 0.0;
+            for ($y = 0, $i = 0; $y < $h; $y++) {
+                for ($x = 0; $x < $w; $x++, $i++) {
+                    $o = imagecolorat($src, $x, $y);
+                    $r = ($o >> 16) & 0xFF;
+                    $g = ($o >> 8) & 0xFF;
+                    $b = $o & 0xFF;
+                    $yy = (int) round(0.299 * $r + 0.587 * $g + 0.114 * $b);
+                    $cb = (int) round(128 - 0.168736 * $r - 0.331264 * $g + 0.5 * $b);
+                    $cr = (int) round(128 + 0.5 * $r - 0.418688 * $g - 0.081312 * $b);
+                    $yS[$i] = chr(max(0, min(255, $yy)));
+                    $cbS[$i] = chr(max(0, min(255, $cb)));
+                    $crS[$i] = chr(max(0, min(255, $cr)));
+                    if ((imagecolorat($mask, $x, $y) & 0xFF) > 127) {
+                        $skin[$i] = "\1";
+                        $count++;
+                        $sumCb += $cb;
+                        $sumCr += $cr;
+                        $sumY += $yy;
+                        $sqCb += $cb * $cb;
+                        $sqCr += $cr * $cr;
+                    }
+                }
+            }
+            imagedestroy($src);
+            imagedestroy($mask);
+            if ($count < $n * 0.005) return $bw;
+            $mCb = $sumCb / $count;
+            $mCr = $sumCr / $count;
+            $mY = max(1.0, $sumY / $count);
+            $tCb = max(6.0, 2.5 * sqrt(max(0.0, $sqCb / $count - $mCb * $mCb)));
+            $tCr = max(6.0, 2.5 * sqrt(max(0.0, $sqCr / $count - $mCr * $mCr)));
+
+            // ② 경계에서 넓히기(너비 우선, 거리 제한)
+            $limit = max(4, (int) round(max($w, $h) * 0.06));
+            $queue = [];
+            $depth = [];
+            for ($i = 0; $i < $n; $i++) {
+                if ($skin[$i] !== "\1") continue;
+                $x = $i % $w;
+                if (($x > 0 && $skin[$i - 1] === "\0") || ($x < $w - 1 && $skin[$i + 1] === "\0")
+                    || ($i >= $w && $skin[$i - $w] === "\0") || ($i + $w < $n && $skin[$i + $w] === "\0")) {
+                    $queue[] = $i;
+                    $depth[] = 0;
+                }
+            }
+            for ($head = 0; $head < count($queue); $head++) {
+                $i = $queue[$head];
+                $d = $depth[$head] + 1;
+                if ($d > $limit) continue;
+                $x = $i % $w;
+                foreach ([$x > 0 ? $i - 1 : -1, $x < $w - 1 ? $i + 1 : -1, $i - $w, $i + $w] as $j) {
+                    if ($j < 0 || $j >= $n || $skin[$j] !== "\0") continue;
+                    $yy = ord($yS[$j]);
+                    if ($yy < 12 || $yy > 250) continue;   // 아주 검거나 하얗게 날아간 곳은 판단하지 않는다
+                    // 어두운 곳은 색 성분이 회색 쪽으로 줄어드니 허용 폭을 그만큼 넓힌다
+                    $k = 1 + max(0.0, ($mY - $yy) / $mY);
+                    if (abs(ord($cbS[$j]) - $mCb) <= $tCb * $k && abs(ord($crS[$j]) - $mCr) <= $tCr * $k
+                        && ord($crS[$j]) > 128) {          // 붉은 기는 있어야 피부(회색 · 푸른 옷 제외)
+                        $skin[$j] = "\2";                  // 넓혀서 넣은 칸
+                        $queue[] = $j;
+                        $depth[] = $d;
+                    }
+                }
+            }
+            unset($queue, $depth, $cbS, $crS, $yS);
+
+            // ③ 피부로 둘러싸인 작은 구멍 채우기: 바깥 테두리와 이어진 비피부는 진짜 바깥
+            $outside = str_repeat("\0", $n);
+            $stack = [];
+            for ($x = 0; $x < $w; $x++) {
+                $stack[] = $x;
+                $stack[] = $n - $w + $x;
+            }
+            for ($y = 0; $y < $h; $y++) {
+                $stack[] = $y * $w;
+                $stack[] = $y * $w + $w - 1;
+            }
+            while ($stack) {
+                $i = array_pop($stack);
+                if ($i < 0 || $i >= $n || $skin[$i] !== "\0" || $outside[$i] === "\1") continue;
+                $outside[$i] = "\1";
+                $x = $i % $w;
+                if ($x > 0) $stack[] = $i - 1;
+                if ($x < $w - 1) $stack[] = $i + 1;
+                $stack[] = $i - $w;
+                $stack[] = $i + $w;
+            }
+            $holeMax = (int) ($n * 0.03);   // 큰 구멍(겨드랑이 사이 옷 등)은 채우지 않는다
+            for ($s = 0; $s < $n; $s++) {
+                if ($skin[$s] !== "\0" || $outside[$s] === "\1") continue;
+                // 구멍 하나를 모아 크기를 잰다
+                $part = [];
+                $stack = [$s];
+                $outside[$s] = "\1";
+                while ($stack) {
+                    $i = array_pop($stack);
+                    $part[] = $i;
+                    $x = $i % $w;
+                    foreach ([$x > 0 ? $i - 1 : -1, $x < $w - 1 ? $i + 1 : -1, $i - $w, $i + $w] as $j) {
+                        if ($j < 0 || $j >= $n || $skin[$j] !== "\0" || $outside[$j] === "\1") continue;
+                        $outside[$j] = "\1";
+                        $stack[] = $j;
+                    }
+                }
+                if (count($part) <= $holeMax) foreach ($part as $i) $skin[$i] = "\3";
+            }
+            unset($outside, $stack, $part);
+
+            // ④ 흑백 마스크로 + 경계 부드럽게
+            $out = imagecreatetruecolor($w, $h);
+            $white = imagecolorallocate($out, 255, 255, 255);
+            for ($i = 0; $i < $n; $i++) {
+                if ($skin[$i] !== "\0") imagesetpixel($out, $i % $w, intdiv($i, $w), $white);
+            }
+            imagefilter($out, IMG_FILTER_GAUSSIAN_BLUR);
+            ob_start();
+            imagepng($out);
+            imagedestroy($out);
+            return (string) ob_get_clean();
+        } catch (Throwable $e) {
+            report(new \RuntimeException('Fit skin refine failed: '.Str::limit($e->getMessage(), 80)));
+            return $bw;
+        }
     }
 
     /** Gemini 분할(텍스트 모델)로 피부 흑백 마스크. 영역이 없거나 실패하면 null. */
