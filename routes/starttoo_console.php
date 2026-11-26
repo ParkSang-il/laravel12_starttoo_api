@@ -303,6 +303,47 @@ Artisan::command('starttoo:bookings-sweep', function () {
 })->purpose('예약 자동 완료·만료 · 리마인더');
 \Illuminate\Support\Facades\Schedule::command('starttoo:bookings-sweep')->hourly()->withoutOverlapping();
 
+// MY 「공지사항」 관리
+// 목록) php artisan starttoo:announce
+// 등록) php artisan starttoo:announce add --title="서비스 점검 안내" --body="12월 1일 02:00~04:00 점검이 있어요.\n이용에 참고해주세요." --category=notice --pin
+//       (--category = notice 공지 · update 업데이트 · event 이벤트, --pin = 맨 위 고정, --at="2026-12-01 09:00" = 예약 게시, 본문 줄바꿈은 \n)
+// 고정 · 해제) starttoo:announce pin 3 · unpin 3   내리기 · 다시 올리기) off 3 · on 3
+// 고치기) php artisan starttoo:announce edit 3 --title="새 제목" --body="새 본문"
+Artisan::command('starttoo:announce {action=list} {id?} {--title=} {--body=} {--category=notice} {--pin} {--at=}', function () {
+    $a = app(\App\Services\Starttoo\Announcements::class);
+    $action = (string) $this->argument('action');
+    $id = (int) $this->argument('id');
+    try {
+        return app(ProjectDatabase::class)->run('starttoo', function () use ($a, $action, $id) {
+            if ($action === 'add') {
+                $this->info('공지 '.$a->add(['title' => $this->option('title'), 'body' => $this->option('body'),
+                    'category' => $this->option('category'), 'pin' => $this->option('pin'), 'at' => $this->option('at')]).'번을 올렸어요.');
+                return 0;
+            }
+            $change = match ($action) {
+                'pin' => ['pinned' => true], 'unpin' => ['pinned' => false],
+                'on' => ['active' => true], 'off' => ['active' => false],
+                'edit' => array_filter(['title' => $this->option('title'), 'body' => $this->option('body')], fn ($v) => $v !== null && $v !== ''),
+                default => null,
+            };
+            if ($change !== null) {
+                if (!$change) { $this->error('바꿀 내용(--title · --body)을 넣어주세요.'); return 1; }
+                $ok = $a->update($id, $change);
+                $ok ? $this->info("공지 {$id}번을 바꿨어요.") : $this->error('그 번호의 공지가 없어요.');
+                return $ok ? 0 : 1;
+            }
+            $this->table(['번호', '분류', '제목', '고정', '상태', '게시'], array_map(fn ($r) => [
+                $r->id, $r->category, mb_strimwidth($r->title, 0, 40, '…'), $r->pinned ? '고정' : '', $r->active ? '게시' : '내림',
+                substr((string) $r->published_at, 0, 16),
+            ], $a->all()));
+            return 0;
+        });
+    } catch (\InvalidArgumentException $e) {
+        $this->error($e->getMessage());
+        return 1;
+    }
+})->purpose('공지사항 등록 · 목록 · 고정 · 내리기');
+
 // 자체 광고 관리. 자리(slot): community_top = 커뮤니티 피드 맨 위 카드
 // 목록) php artisan starttoo:ad
 // 등록) php artisan starttoo:ad add --slot=community_top --advertiser="잉크하우스" --title="12월 예약 오픈" --artist=12 --image=ads/a.jpg --from=2026-12-01 --until=2026-12-31
