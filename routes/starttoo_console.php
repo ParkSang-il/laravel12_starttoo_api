@@ -418,6 +418,8 @@ Artisan::command('starttoo:fit-models {--gender=female} {--part=} {--face=} {--t
                             }
                             continue;
                         }
+                        // --redo는 있는 사진만 다시 만든다. 없는 조건(다른 톤 · 체형)을 새로 만들지 않는다.
+                        if ($this->option('redo')) continue;
                         $combos++;
                         $n = $this->option('one') ? 1 : count($F::VARIANTS);
                         $queued += $this->option('dry') ? $n : app($F)->queueModels($q, $n);
