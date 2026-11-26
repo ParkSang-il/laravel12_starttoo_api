@@ -177,7 +177,8 @@ class Bookings
                 'status' => 'pending', 'subject' => $quote->subject, 'total' => $quote->total, 'deposit' => $quote->deposit,
                 'duration' => $quote->duration, 'created_at' => now(), 'updated_at' => now(),
             ]);
-            $this->consult()->systemMessage((int) $room->id, $viewer, '예약을 요청했어요 · '.$this->label($at), ['booking_id' => $id, 'event' => 'requested']);
+            $this->consult()->systemMessage((int) $room->id, $viewer, '예약을 요청했어요 · '.$this->label($at), ['booking_id' => $id, 'event' => 'requested',
+                'when' => $this->label($at), 'summary' => $this->summary($quote->subject, $quote->duration, (int) $room->current_case_id)]);
             return $id;
         }, 3);
         return $this->format($this->find($id), $viewer);
@@ -200,7 +201,8 @@ class Bookings
             if ($at->equalTo(Carbon::parse($b->starts_at))) $this->fail(422, 'INVALID_BOOKING', '지금 예약과 다른 시간을 골라주세요.');
             $this->assertSlot((int) $b->artist_id, $at, (int) $b->id);
             $this->update($b, ['status' => 'change_requested', 'change_starts_at' => $at, 'change_by' => 'customer']);
-            $this->message($b, $viewer, '예약 일정 변경을 요청했어요 · '.$this->label(Carbon::parse($b->starts_at)).' → '.$this->label($at), 'change_requested');
+            $this->message($b, $viewer, '예약 일정 변경을 요청했어요 · '.$this->label(Carbon::parse($b->starts_at)).' → '.$this->label($at), 'change_requested', null,
+                $this->whenPayload($b, $at, true));
         });
     }
 
@@ -236,7 +238,7 @@ class Bookings
     {
         $this->assertHoldFree($b, $at);
         $this->update($b, ['status' => 'confirmed', 'starts_at' => $at, 'confirmed_at' => now(), 'change_starts_at' => null, 'change_by' => null]);
-        $this->message($b, $actor, $body, 'confirmed', 'booked');
+        $this->message($b, $actor, $body, 'confirmed', 'booked', $this->whenPayload($b, $at));
         foreach ($this->db()->table('starttoo_bookings')->where('artist_id', $b->artist_id)->where('status', 'pending')->where('starts_at', $at)
             ->where('id', '<>', $b->id)->lockForUpdate()->get() as $other) {
             $this->update($other, ['status' => 'rejected', 'reject_reason' => 'slot_taken', 'cancelled_at' => now(), 'change_starts_at' => null, 'change_by' => null]);
@@ -257,7 +259,8 @@ class Bookings
             if ($at->equalTo(Carbon::parse($b->starts_at))) $this->fail(422, 'INVALID_BOOKING', '지금 예약과 다른 시간을 골라주세요.');
             $this->assertSlot((int) $b->artist_id, $at, (int) $b->id);
             $this->update($b, ['status' => $b->status === 'confirmed' ? 'change_requested' : 'pending', 'change_starts_at' => $at, 'change_by' => 'artist']);
-            $this->message($b, $viewer, '작가가 다른 시간을 제안했어요 · '.$this->label(Carbon::parse($b->starts_at)).' → '.$this->label($at), 'change_proposed');
+            $this->message($b, $viewer, '작가가 다른 시간을 제안했어요 · '.$this->label(Carbon::parse($b->starts_at)).' → '.$this->label($at), 'change_proposed', null,
+                $this->whenPayload($b, $at, true));
         });
     }
 
@@ -287,7 +290,7 @@ class Bookings
             $this->update($b, ['status' => 'confirmed', 'starts_at' => $at, 'change_starts_at' => null, 'change_by' => null,
                 // 고객 변경 요청만 변경 횟수에 센다
                 'change_count' => (int) $b->change_count + ($byCustomer ? 1 : 0)]);
-            $this->message($b, $viewer, '예약 일정이 변경됐어요 · '.$this->label($at), 'change_accepted');
+            $this->message($b, $viewer, '예약 일정이 변경됐어요 · '.$this->label($at), 'change_accepted', null, $this->whenPayload($b, $at));
         });
     }
 
@@ -507,9 +510,31 @@ class Bookings
         $this->db()->table('starttoo_bookings')->where('id', $b->id)->update($values + ['updated_at' => now()]);
     }
 
-    private function message(object $b, int $actor, string $body, string $event, ?string $caseStatus = null): void
+    /** 채팅 예약 카드(3-03B)용: 일정 · (변경 전 일정) · 작업 요약 */
+    private function whenPayload(object $b, Carbon $at, bool $withPrevious = false): array
     {
-        $this->consult()->systemMessage((int) $b->consultation_id, $actor, $body, ['booking_id' => (int) $b->id, 'event' => $event],
+        return array_filter([
+            'when' => $this->label($at),
+            'previous_when' => $withPrevious ? $this->label(Carbon::parse($b->starts_at)) : null,
+            'summary' => $this->summary($b->subject, $b->duration, (int) $b->case_id),
+        ], fn ($v) => $v !== null && $v !== '');
+    }
+
+    /** 「블랙워크 뱀 · 팔뚝 · M · 약 5시간」(작업 대상 · 요청서 부위 · 크기 · 예상 소요) */
+    private function summary(?string $subject, ?string $duration, int $caseId): ?string
+    {
+        $request = $this->db()->table('starttoo_consultation_requests')->where('case_id', $caseId)->orderBy('id')->first(['body_part', 'size']);
+        $part = null;
+        if ($request && $request->body_part) {
+            $part = collect(app(Artworks::class)->options()['body_parts'])->pluck('label', 'id')[$request->body_part] ?? null;
+        }
+        $parts = array_values(array_filter([$subject, $part, $request->size ?? null, $duration], fn ($v) => is_string($v) && trim($v) !== ''));
+        return $parts ? implode(' · ', array_map('trim', $parts)) : null;
+    }
+
+    private function message(object $b, int $actor, string $body, string $event, ?string $caseStatus = null, array $extra = []): void
+    {
+        $this->consult()->systemMessage((int) $b->consultation_id, $actor, $body, ['booking_id' => (int) $b->id, 'event' => $event] + $extra,
             (int) $b->case_id, $caseStatus);
         // 알림함 「예약 · 상담」에 남긴다(상대에게). 푸시는 위 채팅 메시지 푸시가 이미 가서 보내지 않는다.
         $customer = (int) $b->customer_id;

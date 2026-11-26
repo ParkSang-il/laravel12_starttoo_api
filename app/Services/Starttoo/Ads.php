@@ -52,8 +52,33 @@ class Ads
 
     // ── 운영 명령 ────────────────────────────────
 
-    /** 등록. image = 서버에 올려 둔 이미지 파일 경로(선택) */
+    /**
+     * 등록(서버 명령 · 운영 콘솔).
+     * image = 서버에 올려 둔 이미지 파일 경로(명령) · image_bytes = 올린 이미지 내용(콘솔), 둘 다 선택
+     */
     public function add(array $in): int
+    {
+        return (int) $this->db()->table('starttoo_ads')->insertGetId($this->values($in, null) + [
+            'active' => true, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+    }
+
+    /** 수정(운영 콘솔). 이미지를 새로 올리지 않으면 지금 이미지를 그대로 둔다(remove_image 면 지운다) */
+    public function update(int $id, array $in): bool
+    {
+        $ad = $this->db()->table('starttoo_ads')->where('id', $id)->first();
+        if (!$ad) throw new \InvalidArgumentException('광고를 찾을 수 없어요.');
+        $values = $this->values($in, $ad);
+        $this->db()->table('starttoo_ads')->where('id', $id)->update($values + ['updated_at' => now()]);
+        // 바뀐 이미지의 예전 파일은 지운다(실패해도 수정은 그대로)
+        if ($ad->image_path && $ad->image_path !== $values['image_path']) {
+            try { app(ArtworkPhotos::class)->delete([$ad->image_path]); } catch (\Throwable $e) { report($e); }
+        }
+        return true;
+    }
+
+    /** 입력 검사 → 저장할 값. $current = 수정할 광고(이미지 유지용) */
+    private function values(array $in, ?object $current): array
     {
         $slot = (string) ($in['slot'] ?? '');
         $advertiser = trim((string) ($in['advertiser'] ?? ''));
@@ -72,19 +97,23 @@ class Ads
         if ($link !== null && ((!$inApp && !$web) || mb_strlen($link) > 200)) {
             throw new \InvalidArgumentException('link는 앱 안 주소(/community/post?id=3)나 https:// 웹 주소여야 해요(200자까지).');
         }
-        if (!$artist && $link === null) throw new \InvalidArgumentException('--artist 또는 --link 중 하나는 꼭 넣어주세요.');
-        $path = null;
+        if (!$artist && $link === null) throw new \InvalidArgumentException('이동할 작가 회원 번호나 링크 중 하나는 꼭 넣어주세요.');
+        $from = ($in['from'] ?? null) ? Carbon::parse($in['from'])->startOfDay() : null;
+        $until = ($in['until'] ?? null) ? Carbon::parse($in['until'])->endOfDay() : null;
+        if ($from && $until && $until->lt($from)) throw new \InvalidArgumentException('종료일이 시작일보다 빨라요.');
+        $path = $current?->image_path;
+        if (!empty($in['remove_image'])) $path = null;
         if ($in['image'] ?? null) {
             if (!is_file($in['image'])) throw new \InvalidArgumentException('이미지 파일이 없어요: '.$in['image']);
             $path = app(ArtworkPhotos::class)->storeBytes((string) file_get_contents($in['image']));
+        } elseif (($in['image_bytes'] ?? '') !== '') {
+            $path = app(ArtworkPhotos::class)->storeBytes((string) $in['image_bytes']);
         }
-        return (int) $this->db()->table('starttoo_ads')->insertGetId([
+        return [
             'slot' => $slot, 'advertiser' => $advertiser, 'title' => $title, 'image_path' => $path,
             'artist_id' => $artist, 'link' => $artist ? null : $link,
-            'starts_at' => ($in['from'] ?? null) ? Carbon::parse($in['from']) : null,
-            'ends_at' => ($in['until'] ?? null) ? Carbon::parse($in['until'])->endOfDay() : null,
-            'active' => true, 'created_at' => now(), 'updated_at' => now(),
-        ]);
+            'starts_at' => $from, 'ends_at' => $until,
+        ];
     }
 
     public function setActive(int $id, bool $active): bool

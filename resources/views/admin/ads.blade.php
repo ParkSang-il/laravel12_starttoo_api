@@ -15,14 +15,17 @@
           <h2 style="margin: 0; font-size: 17px; font-weight: 700">스폰서 노출 슬롯</h2>
           <span style="font-size: 13px; color: #66625B">모든 광고 노출에는 앱에서 ‘광고’ 표시가 붙어요.</span>
         </div>
+        @if ($canManage)
+          <a href="{{ $newHref }}" class="btn-a" style="height: 40px; padding: 0 16px; border-radius: 10px; font-size: 14px; font-weight: 700; gap: 6px; border: 0; background: #141413; color: #FFFFFF">새 광고</a>
+        @endif
       </div>
       <div style="overflow-x: auto">
         <table style="width: 100%; min-width: 900px; border-collapse: collapse">
           <thead><tr><th style="text-align: left; padding: 12px 16px; font-size: 12px; color: #66625B; border-bottom: 1px solid #E4E0D8; white-space: nowrap">노출 위치</th><th style="text-align: left; padding: 12px 16px; font-size: 12px; color: #66625B; border-bottom: 1px solid #E4E0D8; white-space: nowrap">광고 작가 · 상점</th><th style="text-align: left; padding: 12px 16px; font-size: 12px; color: #66625B; border-bottom: 1px solid #E4E0D8; white-space: nowrap">기간</th><th style="text-align: left; padding: 12px 16px; font-size: 12px; color: #66625B; border-bottom: 1px solid #E4E0D8; white-space: nowrap">노출</th><th style="text-align: left; padding: 12px 16px; font-size: 12px; color: #66625B; border-bottom: 1px solid #E4E0D8; white-space: nowrap">클릭</th><th style="text-align: left; padding: 12px 16px; font-size: 12px; color: #66625B; border-bottom: 1px solid #E4E0D8; white-space: nowrap">상태</th><th style="text-align: left; padding: 12px 16px; font-size: 12px; color: #66625B; border-bottom: 1px solid #E4E0D8; white-space: nowrap">노출</th></tr></thead>
           <tbody>
             @forelse ($slots as $s)
-              <tr>
-                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-weight: 700">{{ $s['where'] }}<span style="display: block; font-size: 12px; font-weight: 400; color: #66625B">{{ $s['title'] }}</span></td>
+              <tr style="{{ $s['rowStyle'] }}">
+                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-weight: 700">{{ $s['where'] }}<span style="display: block; font-size: 12px; font-weight: 400; color: #66625B">{{ $s['title'] }}@if ($s['editHref']) · <a href="{{ $s['editHref'] }}" style="color: #1F4F99; font-weight: 700">수정</a>@endif</span></td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">@if ($s['whoHref'])<a href="{{ $s['whoHref'] }}" target="_blank" rel="noopener" title="상점 공개 페이지" style="color: #141413; text-decoration: underline; text-underline-offset: 3px">{{ $s['who'] }}</a>@else{{ $s['who'] }}@endif</td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; color: #66625B">{{ $s['period'] }}</td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-variant-numeric: tabular-nums">{{ $s['imp'] }}</td>
@@ -37,12 +40,52 @@
                 </td>
               </tr>
             @empty
-              <tr><td colspan="7" style="padding: 32px 16px; font-size: 14px; color: #66625B; text-align: center">등록된 광고가 없어요. 등록은 서버 명령 starttoo:ad add 로 해요.</td></tr>
+              <tr><td colspan="7" style="padding: 32px 16px; font-size: 14px; color: #66625B; text-align: center">등록된 광고가 없어요. 「새 광고」로 등록해요.</td></tr>
             @endforelse
           </tbody>
         </table>
       </div>
     </section>
+
+    @if ($showForm)
+      {{-- 광고 등록 · 수정(공지 편집 패널과 같은 모양) --}}
+      <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; justify-content: space-between; align-items: center"><h2 style="margin: 0; font-size: 17px; font-weight: 700">{{ $form['title'] }}</h2><a href="{{ $closeHref }}" style="font-size: 13px; color: #66625B">닫기</a></div>
+        <form method="POST" action="{{ $form['action'] }}" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 14px">
+          @csrf
+          <div style="display: flex; flex-wrap: wrap; gap: 14px">
+            <label style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">노출 위치</span>
+              <select name="slot" style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%">
+                @foreach ($slotOptions as $value => $label)<option value="{{ $value }}" @selected(old('slot', $form['slot']) === $value)>{{ $label }}</option>@endforeach
+              </select>
+            </label>
+            <label style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">광고주</span><input name="advertiser" required maxlength="60" value="{{ old('advertiser', $form['advertiser']) }}" placeholder="예: 잉크하우스" style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+          </div>
+          <label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">광고 문구</span><input name="title" required maxlength="80" value="{{ old('title', $form['text']) }}" placeholder="예: 12월 예약 오픈 · 첫 방문 10% 할인" style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+          <div style="display: flex; flex-wrap: wrap; gap: 14px">
+            <label style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">누르면 이동 · 작가 회원 번호</span><input name="artist" maxlength="14" value="{{ old('artist', $form['artist']) }}" placeholder="예: U-12 → 그 작가 상점" style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+            <label style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">또는 링크</span><input name="link" maxlength="200" value="{{ old('link', $form['link']) }}" placeholder="/community/post?id=3 또는 https://" style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 14px">
+            <label style="flex: 1 1 160px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">시작일 <span style="font-weight: 400; color: #66625B">· 비우면 바로</span></span><input type="date" name="from" value="{{ old('from', $form['from']) }}" style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+            <label style="flex: 1 1 160px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">종료일 <span style="font-weight: 400; color: #66625B">· 비우면 계속</span></span><input type="date" name="until" value="{{ old('until', $form['until']) }}" style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end">
+            @if ($form['image'])
+              <img src="{{ $form['image'] }}" alt="지금 광고 이미지" style="width: 200px; border-radius: 10px; border: 1px solid #E4E0D8">
+            @endif
+            <label style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">광고 이미지 <span style="font-weight: 400; color: #66625B">· JPG · PNG · WEBP, 8MB까지, 가로로 긴 사진(1200px 정도)</span></span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" style="font-size: 13px"></label>
+            @if ($form['image'])
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700"><input type="hidden" name="remove_image" value="0"><input type="checkbox" name="remove_image" value="1" style="width: 18px; height: 18px; margin: 0; accent-color: #141413">이미지 빼기</label>
+            @endif
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center">
+            <span style="flex: 1; font-size: 12px; color: #66625B; line-height: 1.5">작가 번호를 넣으면 링크는 쓰지 않아요. 등록하면 바로 노출되고(시작일이 있으면 그날부터), 목록의 스위치로 끌 수 있어요.</span>
+            <button type="submit" style="height: 40px; padding: 0 20px; border-radius: 10px; font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; border: 0; background: #141413; color: #FFFFFF">{{ $form['save'] }}</button>
+          </div>
+        </form>
+      </section>
+    @endif
 
     <section style="display: flex; flex-direction: column; gap: 14px">
       <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px">

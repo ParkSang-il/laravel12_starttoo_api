@@ -861,7 +861,16 @@ class Consultations
         if (!empty($payload['images'])) $item['images'] = array_map(fn ($p) => app(MediaUrls::class)->url($p, 1080), $payload['images']);
         if (!empty($payload['artwork_id'])) $item['artwork'] = $this->artworkCard($payload['artwork_id'], $viewer);
         // 예약 안내 메시지: 누르면 예약 상세로
-        if (!empty($payload['booking_id'])) $item['booking_id'] = (int) $payload['booking_id'];
+        if (!empty($payload['booking_id'])) {
+            $item['booking_id'] = (int) $payload['booking_id'];
+            // 3-03B 예약 상태 카드: 이벤트 · 일정(「11.26 (목) 14:00」) · 이전 일정 · 작업 요약
+            $item['booking_event'] = array_filter([
+                'event' => $payload['event'] ?? null,
+                'when' => $payload['when'] ?? null,
+                'previous_when' => $payload['previous_when'] ?? null,
+                'summary' => $payload['summary'] ?? null,
+            ], fn ($v) => $v !== null && $v !== '');
+        }
         if (!empty($payload['quote_id'])) {
             $quote = $this->db()->table('starttoo_quotes')->where('id', $payload['quote_id'])->first();
             if ($quote) $item['quote'] = $this->quoteView($quote);

@@ -332,16 +332,97 @@ class AdminController extends AdminBaseController
                 'on' => (bool) $ad->active, 'state' => $state, 'pill' => Ui::pill($kind),
                 'aria' => "{$where} · {$ad->title} 노출", 'canToggle' => $canManage,
                 'action' => route('admin.ads.toggle', $ad->id),
+                'editHref' => $canManage ? Ui::url(['sel' => $ad->id]) : null,
+                'rowStyle' => Ui::rowBg((string) request()->query('sel') === (string) $ad->id),
                 'track' => Ui::switchTrack((bool) $ad->active, !$canManage),
                 'knob' => 'width: 20px; height: 20px; border-radius: 50%; background: #FFFFFF; display: block',
                 'live' => $live,
             ];
         })->all();
 
+        // 등록 · 수정 패널: ?sel=광고번호 · ?sel=new
+        $isNew = $request->query('sel') === 'new';
+        $edit = !$isNew && ctype_digit((string) $request->query('sel', '')) ? $rows->firstWhere('id', (int) $request->query('sel')) : null;
+        $fmt = fn ($at) => $at ? Carbon::parse($at)->format('Y-m-d') : '';
         return view('admin.ads', [
             'slots' => $slots,
             'artists' => $this->db()->table('starttoo_users')->where('artist_status', 'approved')->where('status', 'active')->count(),
+            'canManage' => $canManage,
+            'showForm' => $canManage && ($isNew || $edit),
+            'newHref' => Ui::url(['sel' => 'new']),
+            'closeHref' => Ui::url(['sel' => null]),
+            'slotOptions' => self::SLOT_LABELS,
+            'form' => $edit ? [
+                'title' => "광고 #{$edit->id} 수정", 'action' => route('admin.ads.update', $edit->id), 'save' => '저장',
+                'slot' => $edit->slot, 'advertiser' => $edit->advertiser, 'text' => $edit->title,
+                'artist' => $edit->artist_id ? (string) $edit->artist_id : '', 'link' => (string) $edit->link,
+                'from' => $fmt($edit->starts_at), 'until' => $fmt($edit->ends_at),
+                'image' => $edit->image_path ? app(\App\Services\Starttoo\MediaUrls::class)->url($edit->image_path, 600) : null,
+            ] : [
+                'title' => '새 광고', 'action' => route('admin.ads.store'), 'save' => '등록',
+                'slot' => array_key_first(self::SLOT_LABELS), 'advertiser' => '', 'text' => '', 'artist' => '', 'link' => '', 'from' => '', 'until' => '', 'image' => null,
+            ],
         ]);
+    }
+
+    private function adInput(Request $request): array
+    {
+        $data = $request->validate([
+            'slot' => ['required', 'in:' . implode(',', array_keys(self::SLOT_LABELS))],
+            'advertiser' => ['required', 'string', 'max:60'],
+            'title' => ['required', 'string', 'max:80'],
+            'artist' => ['nullable', 'string', 'regex:/^(U-?)?\d{1,12}$/i'],
+            'link' => ['nullable', 'string', 'max:200'],
+            'from' => ['nullable', 'date'],
+            'until' => ['nullable', 'date'],
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
+            'remove_image' => ['nullable', 'boolean'],
+        ], ['artist.regex' => '작가 회원 번호를 확인해주세요(예: 12 또는 U-12).', 'image.max' => '이미지는 8MB까지 올릴 수 있어요.']);
+        return [
+            'slot' => $data['slot'], 'advertiser' => $data['advertiser'], 'title' => $data['title'],
+            'artist' => ($data['artist'] ?? '') !== '' ? (int) preg_replace('/\D/', '', $data['artist']) : null,
+            'link' => ($data['link'] ?? '') !== '' ? $data['link'] : null,
+            'from' => $data['from'] ?? null, 'until' => $data['until'] ?? null,
+            'image_bytes' => $request->hasFile('image') ? (string) file_get_contents($request->file('image')->getRealPath()) : '',
+            'remove_image' => (bool) ($data['remove_image'] ?? false),
+        ];
+    }
+
+    public function storeAd(Request $request): RedirectResponse
+    {
+        $this->need($request, 'ads.manage');
+        $in = $this->adInput($request);
+        try {
+            $id = app(Ads::class)->add($in);
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['ad' => $e->getMessage()])->withInput();
+        } catch (\Throwable $e) {
+            report($e);
+            return back()->withErrors(['ad' => '이미지를 처리하지 못했어요. 다른 이미지로 다시 시도해주세요.'])->withInput();
+        }
+        $this->audit($request, '설정', '광고 등록', "광고 #{$id} · {$in['advertiser']} · {$in['title']}");
+
+        return redirect(route('admin.ads', ['sel' => $id]))->with('status', '광고를 등록했어요 · 바로 노출돼요');
+    }
+
+    public function updateAd(Request $request, int $id): RedirectResponse
+    {
+        $this->need($request, 'ads.manage');
+        $in = $this->adInput($request);
+        $before = $this->db()->table('starttoo_ads')->where('id', $id)->first();
+        abort_unless($before, 404);
+        try {
+            app(Ads::class)->update($id, $in);
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['ad' => $e->getMessage()])->withInput();
+        } catch (\Throwable $e) {
+            report($e);
+            return back()->withErrors(['ad' => '이미지를 처리하지 못했어요. 다른 이미지로 다시 시도해주세요.'])->withInput();
+        }
+        $this->audit($request, '설정', '광고 수정', "광고 #{$id} · {$in['advertiser']} · {$in['title']}",
+            ['title' => [$before->title, $in['title']], 'artist' => [$before->artist_id, $in['artist']], 'link' => [$before->link, $in['link']]]);
+
+        return back()->with('status', '광고를 저장했어요');
     }
 
     public function toggleAd(Request $request, int $id): RedirectResponse
