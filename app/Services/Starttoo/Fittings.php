@@ -26,7 +26,7 @@ class Fittings
         '상완' => ['en' => 'upper arm', 'faces' => ['바깥쪽' => 'outer side', '안쪽' => 'inner side']],
         '손목·손등' => ['en' => 'wrist and back of the hand', 'faces' => ['손등' => 'back of the hand', '손목 안쪽' => 'inner wrist']],
         '어깨' => ['en' => 'shoulder', 'faces' => ['앞' => 'front', '옆' => 'side', '뒤' => 'back']],
-        '쇄골·가슴' => ['en' => 'collarbone and chest', 'faces' => ['정면' => 'front view', '한쪽' => 'one side']],
+        '쇄골·가슴' => ['en' => 'collarbone and chest', 'faces' => ['정면' => 'front view', '한쪽' => 'one side', '가슴 위' => 'upper chest above the breasts', '가슴 아래' => 'area just below the breasts (underbust and sternum)']],
         '등' => ['en' => 'back', 'faces' => ['전체' => 'full back', '상단' => 'upper back', '하단' => 'lower back']],
         '옆구리' => ['en' => 'side ribs', 'faces' => ['왼쪽' => 'left side', '오른쪽' => 'right side']],
         '허벅지' => ['en' => 'thigh', 'faces' => ['앞' => 'front', '옆' => 'outer side', '뒤' => 'back']],
@@ -41,9 +41,11 @@ class Fittings
      * [여성, 남성]
      */
     private const WEAR = [
-        '어깨' => ['wearing a black athletic tank top', 'wearing a black athletic tank top'],
+        // 여성: 탱크톱 끈이 어깨를 덮어서 → 가슴만 가리는 끈 없는 밴드 상의(어깨 · 팔 · 윗등 맨살)
+        '어깨' => ['wearing a black strapless bandeau top that covers only the breasts, so both shoulders, the upper arms, the collarbones and the upper back are completely bare skin with no straps at all', 'wearing a black athletic tank top with very narrow straps set close to the neck, so the rounded shoulder caps and deltoids are completely bare skin'],
         // 남성: 티셔츠가 쇄골을 가려서 → 목둘레가 깊게 파인 민소매(쇄골 · 윗가슴 맨살, 유두는 가림)
-        '쇄골·가슴' => ['wearing a black high-neck sports bra that fully covers the chest, only the collarbone and upper chest above it visible', 'wearing a black athletic tank top with a deep wide scoop neckline, so both collarbones and the upper chest are bare skin while the tank top still covers the nipples'],
+        // 여성: 하이넥 브라가 쇄골을 덮어서 → 가슴만 낮게 가리는 끈 없는 밴드 상의(쇄골 · 윗가슴 · 어깨 맨살)
+        '쇄골·가슴' => ['wearing a black strapless bandeau top worn low that covers only the breasts, so the neck, both collarbones, the upper chest above the breasts and the shoulders are completely bare skin with no straps or neckline crossing them','wearing a black athletic tank top with a deep wide scoop neckline, so both collarbones and the upper chest are bare skin while the tank top still covers the nipples'],
         // 여성 등: 브라 끈이 등을 가리지 않게 목 뒤로만 묶는 오픈백 홀터 상의(등 전체가 맨살), 로우라이즈 레깅스
         '등' => ['wearing a black open-back halter top tied only at the back of the neck, so the entire back from the shoulder blades down to the lower back is completely bare skin with no straps or fabric crossing it, and low-rise black leggings, photographed from behind, hair tied up', 'wearing black athletic shorts, photographed from behind, upper back bare'],
         // 남성: 상의를 올리면 유두가 보여서 → 옆이 깊게 파인 민소매(옆구리만 맨살, 가슴 · 유두는 가림)
@@ -57,6 +59,16 @@ class Fittings
         '종아리' => ['wearing short black athletic shorts, legs completely bare from the thigh down to the ankle, no socks', 'wearing short black athletic shorts, legs completely bare from the thigh down to the ankle, no socks'],
         '발목·발등' => ['barefoot, wearing short black athletic shorts, no socks, no shoes', 'barefoot, wearing short black athletic shorts, no socks, no shoes'],
     ];
+    /** 보이는 면에 따라 옷차림이 달라야 하는 경우(WEAR보다 우선). [여성, 남성] */
+    private const WEAR_FACE = [
+        '쇄골·가슴' => [
+            '가슴 아래' => [
+                'wearing a black sports bra that covers the breasts and black leggings, with the entire area below the bra — underbust, lower sternum, front ribs and stomach — completely bare skin',
+                'wearing only black athletic shorts; the framing starts just below the nipples so the nipples are out of frame, and the lower chest, sternum, ribs and stomach are bare skin',
+            ],
+        ],
+    ];
+
     /**
      * 부위 · 보이는 면별 카메라 · 자세. 「안쪽」이 반대 팔로, 「옆」이 정면으로, 종아리가 허벅지로
      * 나오던 문제를 막으려고 면마다 어디서 찍는지 · 화면에 무엇만 나오는지를 정확히 적는다.
@@ -82,6 +94,8 @@ class Fittings
         '쇄골·가슴' => [
             '정면' => 'Camera straight in front, wide symmetric framing: BOTH collarbones and the whole upper chest from shoulder to shoulder, from the base of the neck to just below the collarbones.',
             '한쪽' => 'Body turned about 45 degrees away from the camera, close crop on ONE side only: one collarbone and the upper chest on that side, from the neck to that shoulder. The other collarbone is out of frame. This must look clearly different from a symmetric front view.',
+            '가슴 위' => 'Camera straight in front, close crop of the UPPER CHEST: the bare skin between the collarbones and the top of the breasts (the upper sternum area) is the center of the frame, from the collarbones down to where the top fabric begins.',
+            '가슴 아래' => 'Camera straight in front, close crop of the area JUST BELOW the chest: the bare skin of the underbust, the lower sternum (solar plexus) and the front ribs is the center of the frame, from the bottom edge of the top down to the upper stomach.',
         ],
         '등' => [
             '전체' => 'Camera directly behind: the whole back from the shoulders down to the waist.',
@@ -261,7 +275,9 @@ class Fittings
             $part = self::PARTS[$m->part] ?? null;
             if (!$part) return;
             $female = ($m->gender ?? 'male') === 'female';
-            $wear = self::WEAR[$m->part][$female ? 0 : 1] ?? 'wearing simple black clothing that does not cover the area';
+            $wear = self::WEAR_FACE[$m->part][$m->face][$female ? 0 : 1]
+                ?? self::WEAR[$m->part][$female ? 0 : 1]
+                ?? 'wearing simple black clothing that does not cover the area';
             $prompt = sprintf(
                 'A tasteful, non-sexual fitness catalog style photograph for a tattoo placement preview app. '
                 .'A %s\'s %s (%s), clearly %s body, %s skin tone, %s body build, %s, %s. '
