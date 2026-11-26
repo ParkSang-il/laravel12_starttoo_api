@@ -12,16 +12,25 @@ class Notifications
     private function db() { return app(ProjectDatabase::class)->database(); }
 
     /** 호출부의 회원 잠금과 트랜잭션 안에서만 호출한다. 저장은 알림을 만들지 않는다. */
-    public function emit(int $recipient, int $actor, string $kind, string $type, string $target, ?int $comment = null, ?string $occurredAt = null): void
+    /**
+     * [$variant] 알림 세부(예약 이벤트 종류 등). 같은 대상에 여러 번 쌓여야 하면 variant를 다르게 준다
+     * (중복 방지 키에 들어간다). [$push] false면 알림함에만 남긴다(예약 이벤트는 채팅 푸시가 이미 간다).
+     */
+    public function emit(int $recipient, int $actor, string $kind, string $type, string $target, ?int $comment = null, ?string $occurredAt = null,
+        ?string $variant = null, bool $push = true, ?string $keyExtra = null): void
     {
         if ($recipient === $actor || app(Blocks::class)->between($recipient, $actor)) return;
-        $eventKey = hash('sha256', json_encode([$recipient, $actor, $kind, $type, $target, $comment], JSON_THROW_ON_ERROR));
+        $parts = [$recipient, $actor, $kind, $type, $target, $comment];
+        if ($variant !== null) $parts[] = $variant; // 예전 알림 키는 그대로 유지
+        // 같은 대상 · 같은 종류라도 매번 따로 쌓아야 하면(예약 이벤트) 구분 값을 키에 더한다
+        if ($keyExtra !== null) $parts[] = $keyExtra;
+        $eventKey = hash('sha256', json_encode($parts, JSON_THROW_ON_ERROR));
         $inserted = $this->db()->table('starttoo_notifications')->insertOrIgnore([
             'user_id' => $recipient, 'actor_id' => $actor, 'kind' => $kind, 'target_type' => $type, 'target_id' => $target,
-            'comment_id' => $comment, 'event_key' => $eventKey,
+            'comment_id' => $comment, 'variant' => $variant, 'event_key' => $eventKey,
             'created_at' => $occurredAt ?? now(),
         ]);
-        if ($inserted && config('starttoo.push_enabled') && app(UserPreferences::class)->pushAllowed($recipient, $kind)) {
+        if ($inserted && $push && config('starttoo.push_enabled') && app(UserPreferences::class)->pushAllowed($recipient, $kind)) {
             $id = $this->db()->table('starttoo_notifications')->where('event_key', $eventKey)->value('id');
             $this->db()->table('starttoo_push_outbox')->insertOrIgnore(['notification_id' => $id, 'created_at' => now()]);
             $outboxId = (int) $this->db()->table('starttoo_push_outbox')->where('notification_id', $id)->value('id');
@@ -36,10 +45,22 @@ class Notifications
 
     /** 안내 알림(심사 결과 등)의 종류. 보낸 회원이 없어 actor는 받는 회원 자신으로 기록한다. */
     /** fit_result: AI 피팅 · 타투 도구 결과(variant = 종류:상태). 목록에는 notices=2 를 보낸 앱에만 준다. */
-    public const NOTICE_KINDS = ['artist_review', 'fit_result'];
+    /** report_result: 내가 낸 신고의 처리 결과(variant = resolved · dismissed, 대상 = 신고 번호) */
+    public const NOTICE_KINDS = ['artist_review', 'fit_result', 'report_result'];
+
+    /**
+     * 예약 알림(알림함 「예약 · 상담」 탭, 예약 알림 설정을 따른다). 대상 = 예약 번호.
+     * booking_event: 예약 요청 · 확정 · 변경 · 취소 · 완료(variant = 이벤트). 채팅 푸시가 이미 가서 알림함에만 남긴다.
+     * booking_remind: 시술 24시간 전 리마인더(variant = 시작 시각, 시각이 바뀌면 다시 알림). 푸시를 보낸다.
+     */
+    public const BOOKING_KINDS = ['booking_event', 'booking_remind'];
+
+    /** notices=4 를 보낸 앱에만 목록에 주는 종류(예약 · 신고 결과) */
+    public const LEVEL4_KINDS = ['booking_event', 'booking_remind', 'report_result'];
 
     /** 이전 버전 앱이 모르는 알림 종류(notices=1을 보낸 앱에만 목록에 준다). */
-    public const NEW_KINDS = ['artist_review', 'shop_news', 'fit_result', 'review_new', 'review_reply', 'comm_comment', 'comm_like', 'comm_reply'];
+    public const NEW_KINDS = ['artist_review', 'shop_news', 'fit_result', 'review_new', 'review_reply', 'comm_comment', 'comm_like', 'comm_reply',
+        'booking_event', 'booking_remind', 'report_result'];
 
     /**
      * Phase 5 알림(소셜 알림 설정을 따른다). 목록에는 notices=3 을 보낸 앱에만 준다.
@@ -94,6 +115,12 @@ class Notifications
             $targets->orWhere(function ($follow) use ($viewer) {
                 $follow->where('n.kind', 'follow')->where('n.target_type', 'user')->where('n.target_id', (string) $viewer)
                     ->whereExists(fn ($f) => $f->selectRaw('1')->from('starttoo_follows as f')->whereColumn('f.user_id', 'n.actor_id')->where('f.target_user_id', $viewer));
+            });
+            // 예약: 내가 고객이거나 작가인 예약의 이벤트 · 리마인더(상대가 보낸 것)
+            $targets->orWhere(function ($booking) use ($viewer) {
+                $booking->whereIn('n.kind', self::BOOKING_KINDS)->where('n.target_type', 'booking')
+                    ->whereExists(fn ($b) => $b->selectRaw('1')->from('starttoo_bookings as nb')->whereRaw('nb.id = CAST(n.target_id AS UNSIGNED)')
+                        ->where(fn ($who) => $who->where('nb.customer_id', $viewer)->orWhere('nb.artist_id', $viewer)));
             });
             // 리뷰: 새 리뷰(작가에게) · 작가 답변(리뷰 쓴 고객에게). 숨긴 리뷰 · 지운 답변은 안 보인다.
             $targets->orWhere(function ($review) use ($viewer) {
@@ -208,7 +235,7 @@ class Notifications
     public function listing(int $viewer, array $input): array
     {
         if (Validator::make($input, ['filter' => ['nullable', 'in:all,reservation,social,notice'], 'cursor' => ['nullable', 'string', 'max:512'],
-            'notices' => ['nullable', 'in:0,1,2,3']])->fails()) $this->fail(422, 'INVALID_NOTIFICATIONS', '알림 조회 조건을 확인해주세요.');
+            'notices' => ['nullable', 'in:0,1,2,3,4']])->fails()) $this->fail(422, 'INVALID_NOTIFICATIONS', '알림 조회 조건을 확인해주세요.');
         $filter = $input['filter'] ?? 'all';
         // 안내 알림을 모르는 이전 앱은 목록 전체를 버리므로 notices=1을 보낸 앱에만 준다.
         // AI 결과 알림(fit_result)은 notices=2 를 보낸 앱에만 준다.
@@ -218,9 +245,11 @@ class Notifications
         $q = $this->visible($viewer);
         if ($level < 2) $q->where('n.kind', '<>', 'fit_result');
         if ($level < 3) $q->whereNotIn('n.kind', self::PHASE5_KINDS);
-        if ($filter === 'reservation') $q->whereRaw('1 = 0');
+        // 예약 · 신고 결과 알림은 notices=4 를 보낸 앱에만 준다.
+        if ($level < 4) $q->whereNotIn('n.kind', self::LEVEL4_KINDS);
+        if ($filter === 'reservation') $q->whereIn('n.kind', self::BOOKING_KINDS);
         elseif ($filter === 'notice') $notices ? $q->whereIn('n.kind', self::NOTICE_KINDS) : $q->whereRaw('1 = 0');
-        elseif ($filter === 'social') $q->whereNotIn('n.kind', $notices ? self::NOTICE_KINDS : self::NEW_KINDS);
+        elseif ($filter === 'social') $q->whereNotIn('n.kind', $notices ? [...self::NOTICE_KINDS, ...self::BOOKING_KINDS] : self::NEW_KINDS);
         elseif (!$notices) $q->whereNotIn('n.kind', self::NEW_KINDS);
         if (!empty($input['cursor'])) {
             try { $c = json_decode(base64_decode(strtr($input['cursor'], '-_', '+/'), true) ?: '', true, 8, JSON_THROW_ON_ERROR); }

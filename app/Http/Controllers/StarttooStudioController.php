@@ -41,6 +41,18 @@ class StarttooStudioController extends Controller
         return $this->json($studios->updateArtwork($this->artist($request, $sessions, $studios), $artwork, $request->all()));
     }
 
+    /** 스튜디오 「고객 관리」 */
+    public function customers(Request $request, Studios $studios, AuthSessions $sessions, \App\Services\Starttoo\StudioInsights $insights)
+    {
+        return $this->json($insights->customers($this->artist($request, $sessions, $studios), $request->query()));
+    }
+
+    /** 스튜디오 「매출 · 통계」(견적 기준) */
+    public function stats(Request $request, Studios $studios, AuthSessions $sessions, \App\Services\Starttoo\StudioInsights $insights)
+    {
+        return $this->json($insights->stats($this->artist($request, $sessions, $studios)));
+    }
+
     private function artist(Request $request, AuthSessions $sessions, Studios $studios): int
     {
         $userId = (int) $sessions->authenticate((string) $request->bearerToken(), true)['account']['id'];

@@ -511,6 +511,42 @@ class Bookings
     {
         $this->consult()->systemMessage((int) $b->consultation_id, $actor, $body, ['booking_id' => (int) $b->id, 'event' => $event],
             (int) $b->case_id, $caseStatus);
+        // 알림함 「예약 · 상담」에 남긴다(상대에게). 푸시는 위 채팅 메시지 푸시가 이미 가서 보내지 않는다.
+        $customer = (int) $b->customer_id;
+        $artist = (int) $b->artist_id;
+        $pairs = $actor === $customer ? [[$artist, $customer]] : ($actor === $artist ? [[$customer, $artist]] : [[$customer, $artist], [$artist, $customer]]);
+        foreach ($pairs as [$to, $from]) {
+            try {
+                // variant = 이벤트(최대 16자), 같은 이벤트가 또 와도 따로 쌓이게 시각을 키에 더한다
+                app(Notifications::class)->emit($to, $from, 'booking_event', 'booking', (string) $b->id, null, null,
+                    mb_substr($event, 0, 20), false, now()->format('YmdHisu'));
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+    }
+
+    /**
+     * 시술 24시간 안으로 다가온 확정 예약에 리마인더(고객 · 작가 둘 다). 매시간 실행.
+     * 같은 시작 시각에는 한 번만(variant = 시작 시각). 예약 시각이 바뀌면 다시 보낸다.
+     */
+    public function remind(): int
+    {
+        $sent = 0;
+        $rows = $this->db()->table('starttoo_bookings')->where('status', 'confirmed')
+            ->whereBetween('starts_at', [now(), now()->addDay()])->get();
+        foreach ($rows as $b) {
+            $at = Carbon::parse($b->starts_at)->format('Y-m-d H:i');
+            foreach ([[(int) $b->customer_id, (int) $b->artist_id], [(int) $b->artist_id, (int) $b->customer_id]] as [$to, $from]) {
+                try {
+                    app(Notifications::class)->emit($to, $from, 'booking_remind', 'booking', (string) $b->id, null, null, $at);
+                    $sent++;
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+        }
+        return $sent;
     }
 
     private function find(int $id): ?object

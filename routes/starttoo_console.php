@@ -296,9 +296,11 @@ Artisan::command('starttoo:cases-check {--fix} {--user=}', function () {
 // Phase 4: 시술일 지난 확정 예약 → 자동 완료, 시간 지난 확정 대기 → 만료
 Artisan::command('starttoo:bookings-sweep', function () {
     $r = app(ProjectDatabase::class)->run('starttoo', fn () => app(\App\Services\Starttoo\Bookings::class)->sweep());
-    $this->info("자동 완료 {$r['done']}건 · 만료 {$r['expired']}건");
+    // 24시간 안으로 다가온 확정 예약 리마인더(고객 · 작가)
+    $sent = app(ProjectDatabase::class)->run('starttoo', fn () => app(\App\Services\Starttoo\Bookings::class)->remind());
+    $this->info("자동 완료 {$r['done']}건 · 만료 {$r['expired']}건 · 리마인더 {$sent}건");
     return 0;
-})->purpose('예약 자동 완료·만료');
+})->purpose('예약 자동 완료·만료 · 리마인더');
 \Illuminate\Support\Facades\Schedule::command('starttoo:bookings-sweep')->hourly()->withoutOverlapping();
 
 // 자체 광고 관리. 자리(slot): community_top = 커뮤니티 피드 맨 위 카드

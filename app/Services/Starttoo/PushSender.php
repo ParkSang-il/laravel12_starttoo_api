@@ -122,6 +122,9 @@ class PushSender
                     'comm_comment' => '회원님의 커뮤니티 글에 새 댓글이 있어요.',
                     'comm_like' => '회원님의 커뮤니티 글에 새 좋아요가 있어요.',
                     'comm_reply' => '회원님의 댓글에 새 답글이 있어요.',
+                    'booking_remind' => '다가오는 시술 예약이 있어요.',
+                    'booking_event' => '예약 소식이 있어요.',
+                    'report_result' => '신고 처리 결과가 나왔어요.',
                     default => '새 알림이 있어요.',
                 };
                 // 이력에는 본문 원문 대신 안내 문구만 남긴다.
@@ -332,6 +335,12 @@ class PushSender
     /** 아티스트 심사 단계별 안내 문구. */
     private function noticeText(object $n): array
     {
+        // 신고 처리 결과(상대 정보 · 처리 내용은 담지 않는다)
+        if ($n->kind === 'report_result') {
+            return $n->variant === 'resolved'
+                ? ['🛡️ 신고가 처리됐어요', '운영팀이 확인하고 조치했어요. 신고 내역에서 확인할 수 있어요.']
+                : ['신고 검토가 끝났어요', '운영 정책 위반이 확인되지 않아 조치 없이 종료됐어요.'];
+        }
         // AI 결과(variant = 종류:상태)
         if ($n->kind === 'fit_result') {
             [$type, $status] = array_pad(explode(':', (string) $n->variant), 2, '');
@@ -368,6 +377,15 @@ class PushSender
             $text = $this->multiline((string) ($row->content ?? ''));
             return $text === '' ? '' : Str::limit($text, 80, '…');
         };
+        // 예약 리마인더: 「내일 오후 2:00 · ○○님과 시술 예약」
+        if ($n->kind === 'booking_remind') {
+            $at = $db->table('starttoo_bookings')->where('id', $n->target_id)->value('starts_at');
+            if (!$at) return ['⏰ 다가오는 예약', "{$name}님과 시술 예약이 있어요."];
+            $at = \Illuminate\Support\Carbon::parse($at);
+            $day = $at->isToday() ? '오늘' : ($at->isTomorrow() ? '내일' : $at->format('n월 j일'));
+            $time = ($at->hour < 12 ? '오전 ' : '오후 ').(($at->hour % 12) ?: 12).$at->format(':i');
+            return ['⏰ 다가오는 예약', "{$day} {$time} · {$name}님과 시술 예약이 있어요."];
+        }
         // Phase 5: 리뷰 · 커뮤니티 댓글
         if ($n->kind === 'review_new') {
             $review = $db->table('starttoo_reviews')->where('id', $n->target_id)->first(['rating', 'content']);

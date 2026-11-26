@@ -28,6 +28,8 @@ class UserPreferences
     public function pushAllowed(int $user, string $kind): bool
     {
         $values = $this->get($user)['values'];
+        // 예약 알림(이벤트 · 리마인더)은 「예약 알림」 설정을 따른다
+        if (str_starts_with($kind, 'booking_')) return $values['booking'];
         return $kind === 'shop_news' ? $values['shopNews'] : $values['social'];
     }
 

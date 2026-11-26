@@ -206,6 +206,10 @@ class Reports
             $db->table('starttoo_safety_audits')->insert(['actor_type' => 'operator', 'operator' => $operator, 'report_id' => $id,
                 'target_type' => $record->target_type, 'target_id' => $record->target_id, 'action' => $action, 'reason' => trim($reason),
                 'changes' => json_encode(['moderation_hidden' => [$before, $hidden], 'status' => [$report->status, $status]], JSON_THROW_ON_ERROR)]);
+            // 신고한 회원에게 처리 결과 알림(검토 중 → 처리 완료 · 검토 완료로 처음 바뀔 때 한 번). 상대 정보는 담지 않는다.
+            if ($report->status === 'pending') {
+                app(Notifications::class)->notice((int) $report->reporter_id, 'report_result', 'report', (string) $id, $status);
+            }
             return ['report_id' => $id, 'status' => $status, 'moderation_hidden' => $hidden];
         }, 3);
     }

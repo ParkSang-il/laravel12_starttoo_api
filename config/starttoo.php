@@ -25,6 +25,12 @@ return [
     'apple_team_id' => env('STARTTOO_APPLE_TEAM_ID', 'T42QXLMFA4'),
     'apple_key_id' => env('STARTTOO_APPLE_KEY_ID'),
     'apple_private_key' => env('STARTTOO_APPLE_PRIVATE_KEY', '/run/secrets/starttoo/apple_signin.p8'),
+    // 공유 링크 → 앱 열기(Android App Links). 앱 서명 인증서 SHA-256 지문(공개 값). 쉼표로 여러 개(디버그 · 배포 · Play 서명).
+    'android_package' => env('STARTTOO_ANDROID_PACKAGE', 'com.pju2251.starttoo'),
+    'android_cert_sha256' => env('STARTTOO_ANDROID_CERT_SHA256', ''),
+    // 공유 링크 미리보기 페이지의 앱 받기 버튼(출시 후 채운다)
+    'app_store_url' => env('STARTTOO_APP_STORE_URL', ''),
+    'play_store_url' => env('STARTTOO_PLAY_STORE_URL', ''),
     // 개발용 초안은 별도 설정을 켠 환경에서만 노출하고 정식 문안 발행 시 버전을 올린다.
     'draft_terms_enabled' => env('STARTTOO_DRAFT_TERMS_ENABLED', false),
     'terms_version' => '2026-11-17-draft',
@@ -56,7 +62,7 @@ return [
     // 회원당 하루 AI 횟수(가상 피팅 · 도안 추출 · 필러 · 커버업 공통, 실패는 세지 않음). 0 = 제한 없음
     'fit_daily_limit' => (int) env('STARTTOO_FIT_DAILY_LIMIT', 3),
     // 내 사진의 피부 영역 찾기(배치 화면을 열 때마다 1번, 이미지 1장 비용)를 회원당 하루 몇 번. 0 = 제한 없음
-    'fit_skin_daily_limit' => (int) env('STARTTOO_FIT_SKIN_DAILY_LIMIT', 10),
+    'fit_skin_daily_limit' => (int) env('STARTTOO_FIT_SKIN_DAILY_LIMIT', 3),
     // 타투 필러(3안 = 1회 차감)를 하루 몇 번 만들 수 있는지. 0 = 제한 없음
     'fit_fill_daily_limit' => (int) env('STARTTOO_FIT_FILL_DAILY_LIMIT', 1),
 ];

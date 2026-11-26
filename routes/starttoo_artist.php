@@ -19,6 +19,8 @@ Route::prefix('v1/projects/starttoo/studio')->middleware([StarttooDatabase::clas
     Route::post('shop', [StarttooStudioController::class, 'updateShop'])->middleware('throttle:30,1');
     Route::get('address-search', [StarttooStudioController::class, 'addressSearch'])->middleware('throttle:30,1');
     Route::get('artworks', [StarttooStudioController::class, 'artworks']);
+    Route::get('customers', [StarttooStudioController::class, 'customers'])->middleware('throttle:60,1,studio-customers');
+    Route::get('stats', [StarttooStudioController::class, 'stats'])->middleware('throttle:60,1,studio-stats');
     Route::post('artworks/{artwork}', [StarttooStudioController::class, 'updateArtwork'])->whereUuid('artwork')->middleware('throttle:60,1');
     Route::get('news', [StarttooShopController::class, 'myNews']);
     Route::post('news', [StarttooShopController::class, 'createNews'])->middleware('throttle:20,1');
