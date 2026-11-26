@@ -358,7 +358,10 @@ class Fittings
     {
         if ($m->skin_path) return $m->skin_path;
         $this->assertEnabled();
-        $bw = $this->buildSkinMask((string) Storage::disk('starttoo')->get($m->image_path));
+        // 가상 모델은 한 번 만들어 모두가 쓰니 처음부터 꼼꼼한 방식(세 판정 다수결)으로 만든다.
+        // 분할만 쓰면 영역 상자 경계에서 일자로 잘리는 일이 있다(등 · 어깨).
+        @ini_set('memory_limit', '512M');
+        $bw = $this->buildSkinMaskStrict((string) Storage::disk('starttoo')->get($m->image_path));
         if (!$bw) return null;
         $path = $this->storePng($bw);
         $this->db()->table('starttoo_fit_models')->where('id', $m->id)->update(['skin_path' => $path]);
@@ -849,6 +852,14 @@ class Fittings
         if ($type === 'blend' && isset($input['opacity']) && is_numeric($input['opacity'])) {
             $options['opacity'] = round(max(0.2, min(1.0, (float) $input['opacity'])), 2);
         }
+        // 가상 피팅: 도안을 돌리거나 뒤집은 정도. AI는 도안을 똑바로 세우려 하므로,
+        // 합성 때 사진을 돌려 도안이 바로 선 상태로 보내고 결과를 다시 돌려놓는다.
+        if ($type === 'blend' && isset($input['rotation']) && is_numeric($input['rotation'])) {
+            $options['rotation'] = round(fmod((float) $input['rotation'], 2 * M_PI), 4);
+        }
+        if ($type === 'blend' && filter_var($input['flip_x'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            $options['flip_x'] = true;
+        }
         // 커버업 진단(기기 계산): 숫자 · 짧은 문자만
         $meta = [];
         foreach (['size_ratio', 'dark_ratio', 'covered_ratio'] as $k) {
@@ -1064,8 +1075,18 @@ class Fittings
         $composite = $this->read($r->input_path);
         $stencilBytes = $r->stencil_path ? $this->read($r->stencil_path) : $this->artworkImage($r->artwork_id);
         if ($stencilBytes === '') throw new \RuntimeException('FIT_INPUT_MISSING');
+        $opts = json_decode((string) ($r->options ?? ''), true) ?: [];
+        // 도안을 돌리거나 뒤집어 놓았으면, AI가 「똑바로 세우지」 못하게 사진째 돌려서
+        // 도안이 바로 선 상태로 보내고, 받은 결과를 다시 원래 방향으로 돌려놓는다.
+        // (90° 단위로 가장 가까운 만큼 + 좌우 반전. 남는 작은 기울기는 그대로)
+        $quarter = (int) round(((float) ($opts['rotation'] ?? 0)) / (M_PI / 2));
+        $quarter = (($quarter % 4) + 4) % 4;
+        $flip = (bool) ($opts['flip_x'] ?? false);
+        $turned = $quarter !== 0 || $flip;
+        $aiComposite = $turned ? $this->orient($composite, $quarter, $flip, false) : $composite;
+        $aiStencil = $turned ? $this->orient($stencilBytes, $quarter, $flip, false) : $stencilBytes;
         // 농도(배치 화면 슬라이더) → 잉크 진하기 지시. 값이 없으면(이전 앱) 스티커 진하기를 따르라고만 한다.
-        $opacity = (json_decode((string) ($r->options ?? ''), true) ?: [])['opacity'] ?? null;
+        $opacity = $opts['opacity'] ?? null;
         $ink = match (true) {
             $opacity === null => 'Match the darkness of the sticker in image 1.',
             $opacity >= 0.85 => 'INK DARKNESS: about '.round($opacity * 100).'% — solid, fully saturated ink, like a fresh bold tattoo that has healed well.',
@@ -1094,10 +1115,14 @@ class Fittings
             '5. NOTHING ELSE CHANGES. The person, face, body shape, muscles, skin tone, hair, clothing, background, lighting, camera angle, framing and image size stay exactly as in image 1.',
             '5b. DO NOT DRAW ANY BODY. Never add, redraw or invent arms, hands, legs or any body part, and never copy the body or skin from image 2 into the photo. The only body in the result is the one already in image 1.',
             '6. No text, no watermark, no logo, no extra tattoos.',
+            // 사진을 돌려 보낸 경우: 사진 방향을 바로잡지 말라고 알린다
+            $turned ? '7. Image 1 may be rotated sideways, upside down or mirrored ON PURPOSE. Keep image 1 exactly in the orientation given: do not rotate, straighten or mirror the photo or the person.' : '',
             '',
             'REMEMBER: tattoo on bare skin only, exactly where the sticker is, in exactly the sticker\'s orientation (never turned upright), and the rest of the photo untouched.',
         ]);
-        $bytes = app(NanoBanana::class)->generate($prompt, [[$composite, $this->mime($composite)], [$stencilBytes, $this->mime($stencilBytes)]], $this->aspectOf($composite));
+        $bytes = app(NanoBanana::class)->generate($prompt, [[$aiComposite, $this->mime($aiComposite)], [$aiStencil, $this->mime($aiStencil)]], $this->aspectOf($aiComposite));
+        // 돌려 보낸 사진이면 결과를 원래 방향으로 되돌린다(AI 결과 크기를 돌린 입력에 맞춘 뒤 되돌림)
+        if ($turned) $bytes = $this->orient($this->matchSize($bytes, $aiComposite), $quarter, $flip, true);
         // 전후 비교가 맞도록 결과를 입력 사진과 같은 크기로 맞춘다(AI는 정해진 비율로만 돌려줌)
         $bytes = $this->matchSize($bytes, $composite);
         // 모델 · 사진 변조 방지: 도안을 올린 자리 밖은 원본 사진 픽셀로 되돌린다
@@ -1106,6 +1131,48 @@ class Fittings
         $bytes = $this->clipToSkin($r, $bytes);
         if ($r->source === 'virtual') $bytes = $this->labelVirtual($bytes);
         return ['result_path' => app(ArtworkPhotos::class)->storeBytes($bytes)];
+    }
+
+    /**
+     * 사진 방향 바꾸기(AI가 도안을 똑바로 세우지 못하게).
+     * 앱은 도안을 「좌우 반전 → 시계 방향 회전」 순서로 그린다. 그래서
+     *  - 보낼 때(inverse=false): 반시계로 quarter×90° 되돌린 뒤 좌우 반전 → 도안이 바로 선다.
+     *  - 받을 때(inverse=true): 좌우 반전 뒤 시계로 quarter×90° → 원래 방향.
+     * 실패하면 받은 그대로 돌려준다.
+     */
+    private function orient(string $bytes, int $quarter, bool $flip, bool $inverse): string
+    {
+        $img = @imagecreatefromstring($bytes);
+        if (!$img) return $bytes;
+        $png = $this->mime($bytes) === 'image/png';
+        if ($png) {
+            imagealphablending($img, false);
+            imagesavealpha($img, true);
+        }
+        $rotate = function (\GdImage $src, int $degrees) use ($png): \GdImage {
+            if ($degrees % 360 === 0) return $src;
+            // GD: 양수 각도 = 반시계
+            $bg = $png ? imagecolorallocatealpha($src, 0, 0, 0, 127) : 0;
+            $out = imagerotate($src, $degrees, $bg);
+            if (!$out) return $src;
+            if ($png) {
+                imagealphablending($out, false);
+                imagesavealpha($out, true);
+            }
+            imagedestroy($src);
+            return $out;
+        };
+        if (!$inverse) {
+            $img = $rotate($img, 90 * $quarter);
+            if ($flip) imageflip($img, IMG_FLIP_HORIZONTAL);
+        } else {
+            if ($flip) imageflip($img, IMG_FLIP_HORIZONTAL);
+            $img = $rotate($img, (360 - 90 * $quarter) % 360);
+        }
+        ob_start();
+        $png ? imagepng($img) : imagejpeg($img, null, 92);
+        imagedestroy($img);
+        return (string) ob_get_clean();
     }
 
     /**
