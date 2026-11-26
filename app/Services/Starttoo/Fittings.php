@@ -369,9 +369,10 @@ class Fittings
     }
 
     /**
-     * 다시 찾기용 꼼꼼한 피부 마스크. 세 가지 판정을 칸마다 다수결(2개 이상 피부면 피부)로 합친다.
-     *  ① Gemini 분할(텍스트 모델) ② 나노바나나 마스크 그림(이미지 모델) ③ 원본 색(피부색 범위)
-     * 한 판정이 틀려도(옷을 피부로 · 얼굴 빠짐) 나머지 둘이 바로잡는다.
+     * 다시 찾기 · 가상 모델용 꼼꼼한 피부 마스크. 두 AI 판정을 칸마다 합친다.
+     *  ① Gemini 분할(텍스트 모델) ② 나노바나나 마스크 그림(이미지 모델)
+     * 둘 다 피부면 피부, 하나만 피부라고 하면 「확실히 피부가 아닌 색」(흰 · 회색 옷, 푸른 옷)이 아닐 때만 피부.
+     * (색으로 「피부 같은지」를 묻지 않는다 — 그늘진 피부가 빠진다)
      * 사진도 더 크게(1024px) 보내 경계를 정확히 잡는다. 둘 다 실패하면 null(자르지 않음).
      */
     private function buildSkinMaskStrict(string $photo): ?string
@@ -399,15 +400,12 @@ class Fittings
                 $r = ($o >> 16) & 0xFF;
                 $g = ($o >> 8) & 0xFF;
                 $b = $o & 0xFF;
-                // ③ 피부색(YCbCr 범위 · 밝기 하한): 피부 톤 전반을 넓게 받는다
-                $cb = 128 - 0.168736 * $r - 0.331264 * $g + 0.5 * $b;
-                $cr = 128 + 0.5 * $r - 0.418688 * $g - 0.081312 * $b;
-                $yy = 0.299 * $r + 0.587 * $g + 0.114 * $b;
-                $votes = ($cb >= 77 && $cb <= 135 && $cr >= 130 && $cr <= 180 && $yy >= 35) ? 1 : 0;
-                if ($seg && (imagecolorat($seg, $x, $y) & 0xFF) > 127) $votes++;
-                if ($img && (imagecolorat($img, $x, $y) & 0xFF) > 127) $votes++;
-                // 판정이 하나만 있으면 그 판정 + 피부색 둘 다 맞아야(= 2표) 피부
-                if ($votes >= 2) {
+                // AI 두 판정: 둘 다 피부면 피부. 하나만 피부라고 하면 「확실히 피부가 아닌 색」(흰 · 회색 옷,
+                // 푸른 옷)이 아닐 때만 피부. 그늘진 피부는 색이 옅고 어두워 「피부색 범위」 검사로는 빠지므로
+                // 색은 걸러내는 데(거부)만 쓴다.
+                $a = $seg && (imagecolorat($seg, $x, $y) & 0xFF) > 127;
+                $c = $img && (imagecolorat($img, $x, $y) & 0xFF) > 127;
+                if (($a && $c) || (($a || $c) && !$this->clearlyNotSkin($r, $g, $b))) {
                     imagesetpixel($out, $x, $y, $white);
                     $count++;
                 }
@@ -427,6 +425,19 @@ class Fittings
         imagedestroy($out);
         // 그림자 진 피부 · 피부 안쪽 구멍을 형태로 메우고 경계를 부드럽게
         return $this->refineSkinMask((string) ob_get_clean(), $jpeg);
+    }
+
+    /**
+     * 확실히 피부가 아닌 색: 밝은 무채색(흰 · 밝은 회색 옷, 흰 배경) 또는 푸른 기가 붉은 기보다 뚜렷한 색.
+     * 그늘진 피부(어둡고 색이 옅음)는 여기에 걸리지 않는다.
+     */
+    private function clearlyNotSkin(int $r, int $g, int $b): bool
+    {
+        $max = max($r, $g, $b);
+        $min = min($r, $g, $b);
+        $brightNeutral = $max >= 150 && ($max - $min) < 14;
+        $bluish = $b > $r + 12;
+        return $brightNeutral || $bluish;
     }
 
     /** 흑백 마스크 PNG → 사진 크기 GD 이미지(없으면 null) */
@@ -707,12 +718,9 @@ class Fittings
                     $r = ($o >> 16) & 0xFF;
                     $g = ($o >> 8) & 0xFF;
                     $b = $o & 0xFF;
-                    $max = max($r, $g, $b);
-                    $min = min($r, $g, $b);
-                    // (다시 찾기에서는 색 판정을 따로 하므로 여기선 AI 판단 그대로 둔다)
-                    $skinLike = !$colorCheck || (($max - $min) >= 14   // 색기가 있다(무채색 아님)
-                        && $r >= $b + 8                  // 붉은기 > 푸른기
-                        && $max >= 45);                  // 너무 어둡지 않다
+                    // 「확실히 피부가 아닌 색」만 뺀다(밝은 흰 · 회색 옷, 푸른 옷).
+                    // 그늘진 피부는 색이 옅고 어두워서 「피부 같은 색」 검사로는 빠져 버린다.
+                    $skinLike = !$colorCheck || !$this->clearlyNotSkin($r, $g, $b);
                     if ($skinLike) {
                         imagesetpixel($out, $x, $y, $white);
                         $kept++;
