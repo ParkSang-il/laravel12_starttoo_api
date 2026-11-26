@@ -202,10 +202,16 @@ class ArtworkComments
     {
         $deleted = $row->deleted_at !== null;
         $mentions = $deleted ? [] : json_decode($row->mentions, true, 512, JSON_THROW_ON_ERROR);
-        $mentions = array_values(array_filter($mentions, function ($mention) use ($viewer) {
-            return !app(Blocks::class)->between($viewer, (int) $mention['user_id'])
-                && $this->db()->table('starttoo_users')->where('id', $mention['user_id'])->where('status', 'active')->where('moderation_hidden', false)->exists();
-        }));
+        // 보이는 회원만 남기고, 승인된 작가면 is_artist(앱이 프로필을 거치지 않고 바로 상점을 연다)
+        $artists = $mentions ? $this->db()->table('starttoo_users')
+            ->whereIn('id', array_map(fn ($m) => (int) $m['user_id'], $mentions))
+            ->where('status', 'active')->where('moderation_hidden', false)
+            ->pluck('artist_status', 'id')->all() : [];
+        $mentions = array_values(array_map(
+            fn ($mention) => $mention + ['is_artist' => ($artists[(int) $mention['user_id']] ?? null) === 'approved'],
+            array_filter($mentions, fn ($mention) => array_key_exists((int) $mention['user_id'], $artists)
+                && !app(Blocks::class)->between($viewer, (int) $mention['user_id'])),
+        ));
         return ['id' => (int) $row->id, 'parent_id' => $row->parent_id === null ? null : (int) $row->parent_id,
             'content' => $deleted ? '' : $row->content, 'deleted' => $deleted, 'created_at' => Carbon::parse($row->created_at)->toIso8601String(),
             'author' => $deleted ? null : (($row->author_status ?? 'active') === 'withdrawn'
