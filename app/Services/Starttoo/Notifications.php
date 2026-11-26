@@ -236,7 +236,8 @@ class Notifications
     public function listing(int $viewer, array $input): array
     {
         if (Validator::make($input, ['filter' => ['nullable', 'in:all,reservation,social,notice'], 'cursor' => ['nullable', 'string', 'max:512'],
-            'notices' => ['nullable', 'in:0,1,2,3,4']])->fails()) $this->fail(422, 'INVALID_NOTIFICATIONS', '알림 조회 조건을 확인해주세요.');
+            // 5: 운영 제재 안내(sanction)까지 처리하는 앱
+            'notices' => ['nullable', 'in:0,1,2,3,4,5']])->fails()) $this->fail(422, 'INVALID_NOTIFICATIONS', '알림 조회 조건을 확인해주세요.');
         $filter = $input['filter'] ?? 'all';
         // 안내 알림을 모르는 이전 앱은 목록 전체를 버리므로 notices=1을 보낸 앱에만 준다.
         // AI 결과 알림(fit_result)은 notices=2 를 보낸 앱에만 준다.
