@@ -92,6 +92,8 @@ class AdminModerationController extends AdminBaseController
                 'real' => Ui::maskName(app(IdentityVerifications::class)->realName((int) $row->user_id)),
                 'region' => $regions[$row->region] ?? $row->region,
                 'uid' => 'U-' . $row->user_id,
+                'memberHref' => Ui::memberUrl($row->user_id),
+                'shopHref' => $approved ? Ui::publicUrl('shop', $row->user_id) : null,
                 'photos' => array_map(fn ($p) => $p['url'], $detail['photos'] ?? []),
                 'works' => count($detail['photos'] ?? []),
                 'link' => $row->portfolio_link ?: '-',
@@ -152,7 +154,7 @@ class AdminModerationController extends AdminBaseController
     private const KIND_LABEL = ['artwork' => '작품', 'design' => '도안', 'post' => '게시물', 'review' => '리뷰', 'community' => '커뮤니티'];
 
     /** 콘텐츠 종류별 조회를 같은 열로 맞춘다(전체 탭은 UNION) */
-    private function contentQueries(string $tab, string $term)
+    private function contentQueries(string $tab, string $term, ?int $author = null)
     {
         $db = $this->db();
         $reports = fn (string $type, string $col) => "(select count(*) from starttoo_reports r where r.target_type = '{$type}' and r.target_id = {$col})";
@@ -167,7 +169,7 @@ class AdminModerationController extends AdminBaseController
                     . " {$reports('artwork', 'a.id')} as reports, {$pending('artwork', 'a.id')} as pending");
             if ($tab === '작품') $q->where('a.kind', 'work');
             if (in_array($tab, ['도안', '피팅 도안'], true)) $q->where('a.kind', 'design');
-            $parts[] = [$q, 'a.title', 'a.id', true];
+            $parts[] = [$q, 'a.title', 'a.id', true, 'a.user_id'];
         }
         if (in_array($tab, ['전체', '게시물'], true)) {
             $q = $db->table('starttoo_posts as p')->join('starttoo_users as u', 'u.id', '=', 'p.user_id')
@@ -175,7 +177,7 @@ class AdminModerationController extends AdminBaseController
                     . " p.moderation_hidden as hidden, p.moderation_removed_at as removed_at, NULL as kind, 0 as fit_blocked, 0 as recommend_excluded,"
                     . " (select count(*) from starttoo_post_likes x where x.post_id = p.id) as likes, 0 as fits, NULL as images,"
                     . " {$reports('post', 'p.id')} as reports, {$pending('post', 'p.id')} as pending");
-            $parts[] = [$q, 'p.content', 'p.id', true];
+            $parts[] = [$q, 'p.content', 'p.id', true, 'p.user_id'];
         }
         if (in_array($tab, ['전체', '리뷰'], true)) {
             $q = $db->table('starttoo_reviews as v')->join('starttoo_users as u', 'u.id', '=', 'v.customer_id')
@@ -183,7 +185,7 @@ class AdminModerationController extends AdminBaseController
                     . " v.moderation_hidden as hidden, v.moderation_removed_at as removed_at, NULL as kind, 0 as fit_blocked, 0 as recommend_excluded,"
                     . " v.helpful_count as likes, 0 as fits, v.images as images,"
                     . " {$reports('review', 'v.id')} as reports, {$pending('review', 'v.id')} as pending");
-            $parts[] = [$q, 'v.content', 'v.id', false];
+            $parts[] = [$q, 'v.content', 'v.id', false, 'v.customer_id'];
         }
         if (in_array($tab, ['전체', '커뮤니티'], true)) {
             $q = $db->table('starttoo_community_posts as c')->join('starttoo_users as u', 'u.id', '=', 'c.user_id')
@@ -191,10 +193,12 @@ class AdminModerationController extends AdminBaseController
                     . " c.moderation_hidden as hidden, c.moderation_removed_at as removed_at, NULL as kind, 0 as fit_blocked, 0 as recommend_excluded,"
                     . " c.like_count as likes, 0 as fits, c.images as images,"
                     . " {$reports('community', 'c.id')} as reports, {$pending('community', 'c.id')} as pending");
-            $parts[] = [$q, 'c.title', 'c.id', false];
+            $parts[] = [$q, 'c.title', 'c.id', false, 'c.user_id'];
         }
         $out = [];
-        foreach ($parts as [$q, $titleCol, $idCol, $uuid]) {
+        foreach ($parts as [$q, $titleCol, $idCol, $uuid, $authorCol]) {
+            // 회원 관리에서 오면: 그 회원이 쓴 것만
+            if ($author) $q->where($authorCol, $author);
             if ($term !== '') {
                 $like = '%' . addcslashes(mb_substr($term, 0, 40), '%_\\') . '%';
                 $id = ltrim($term, '#');
@@ -217,7 +221,8 @@ class AdminModerationController extends AdminBaseController
         $page = $this->page($request);
         $isFit = $tab === '피팅 도안';
 
-        $queries = $this->contentQueries($tab, $term);
+        $author = ctype_digit((string) $request->query('author', '')) ? (int) $request->query('author') : null;
+        $queries = $this->contentQueries($tab, $term, $author);
         $union = array_shift($queries);
         foreach ($queries as $q) $union->unionAll($q);
         $base = $this->db()->query()->fromSub($union, 'x');
@@ -258,6 +263,9 @@ class AdminModerationController extends AdminBaseController
                 'code' => $x->ctype === 'artwork' || $x->ctype === 'post' ? '#' . substr($x->cid, 0, 8) : '#' . $x->cid,
                 'kind' => $kind, 'title' => mb_strimwidth($title, 0, 80, '…'),
                 'author' => $x->author ?? '-', 'date' => Ui::date($x->created_at, 'm.d'),
+                'authorHref' => Ui::memberUrl($x->author_id),
+                // 공개 미리보기(앱 밖 공유 페이지): 숨김이 아닌 작품 · 게시물 · 커뮤니티 글만
+                'publicHref' => !$x->hidden ? Ui::publicUrl($x->ctype, $x->cid) : null,
                 'state' => $label, 'pill' => Ui::pill($kinds[$label] ?? 'gray'),
                 'likesLabel' => $isFit ? '피팅 ' . number_format((int) $x->fits) . '회' : ($x->ctype === 'review' ? '도움 ' : '좋아요 ') . number_format((int) $x->likes),
                 'reports' => number_format((int) $x->reports),
@@ -336,6 +344,12 @@ class AdminModerationController extends AdminBaseController
     private const REASON_LABEL = ['spam' => '스팸 · 광고', 'harassment' => '욕설 · 혐오 · 괴롭힘', 'sexual' => '음란 · 불쾌한 콘텐츠', 'violence' => '폭력적인 내용',
         'illegal' => '불법 정보', 'rights' => '저작권 침해', 'fraud' => '사기 · 외부 거래 유도', 'privacy' => '개인정보 노출', 'other' => '기타'];
 
+    /** 신고 대상으로 가는 콘솔 링크: 콘텐츠는 게시물 · 작품 화면, 회원은 회원 관리 */
+    private function targetHref(string $type, string $id): ?string
+    {
+        return $type === 'user' ? Ui::memberUrl((int) $id) : Ui::contentUrl($type, $id);
+    }
+
     private function targetLabel(string $type, string $id): string
     {
         $code = match ($type) {
@@ -361,6 +375,8 @@ class AdminModerationController extends AdminBaseController
         if ($target = app(Moderation::class)->parseKey((string) $request->query('target', ''))) {
             $q->where('r.target_type', $target[0])->where('r.target_id', (string) $target[1]);
         }
+        // 회원 관리 「신고 누적」에서 오면: 그 회원이 받은 신고만
+        if (ctype_digit((string) $request->query('subject', ''))) $q->where('r.subject_user_id', (int) $request->query('subject'));
         $total = (clone $q)->count();
         $list = $q->orderByDesc('r.id')->offset(($page - 1) * self::PER_PAGE)->limit(self::PER_PAGE)->get();
 
@@ -373,6 +389,7 @@ class AdminModerationController extends AdminBaseController
             'type' => self::TYPE_LABEL[$r->target_type] ?? $r->target_type,
             'reason' => self::REASON_LABEL[$r->reason] ?? $r->reason,
             'target' => $this->targetLabel($r->target_type, (string) $r->target_id),
+            'targetHref' => $this->targetHref($r->target_type, (string) $r->target_id),
             'count' => (int) $r->same_count,
             'state' => self::REPORT_STATE[$r->status][0] ?? $r->status,
             'pill' => Ui::pill(self::REPORT_STATE[$r->status][1] ?? 'gray'),
@@ -390,6 +407,10 @@ class AdminModerationController extends AdminBaseController
                 'id' => (int) $selRow->id,
                 'reason' => self::REASON_LABEL[$selRow->reason] ?? $selRow->reason,
                 'target' => $this->targetLabel($selRow->target_type, (string) $selRow->target_id),
+                'targetHref' => $this->targetHref($selRow->target_type, (string) $selRow->target_id),
+                'publicHref' => Ui::publicUrl($selRow->target_type, (string) $selRow->target_id),
+                'authorHref' => Ui::memberUrl($selRow->subject_user_id),
+                'authorReportsHref' => Ui::memberReportsUrl((int) $selRow->subject_user_id),
                 'author' => !$subject ? '-' : (($subject->status === 'withdrawn' ? '(탈퇴 회원)' : ($subject->nickname ?? '-')) . ' · U-' . $selRow->subject_user_id
                     . ($subject->status === 'suspended' ? ' · ' . ($subject->suspended_until ? Ui::date($subject->suspended_until, 'm.d') . '까지 정지 중' : '영구 정지') : '')),
                 'count' => (int) $selRow->same_count, 'reporters' => $reporters,

@@ -205,7 +205,7 @@ class AdminAiController extends AdminBaseController
         $took = fn ($r) => $r->status === 'processing' ? '-' : number_format(abs(Carbon::parse($r->updated_at)->diffInSeconds(Carbon::parse($r->created_at))), 1) . '초';
         $code = fn ($r) => 'job_' . substr(str_replace('-', '', $r->id), 0, 6);
         $jobs = $rows->map(fn ($r) => [
-            'id' => $code($r), 'kind' => self::TYPES[$r->type ?? 'blend'] ?? $r->type, 'who' => $who($r),
+            'id' => $code($r), 'kind' => self::TYPES[$r->type ?? 'blend'] ?? $r->type, 'who' => $who($r), 'whoHref' => Ui::memberUrl($r->user_id),
             'at' => Ui::date($r->created_at, 'm.d H:i:s'), 'took' => $took($r),
             'state' => self::JOB_STATE[$r->status][0] ?? $r->status, 'pill' => Ui::pill(self::JOB_STATE[$r->status][1] ?? 'gray'),
             'delivery' => $r->status === 'processing' ? '-' : '소켓 · 푸시', 'dPill' => Ui::pill($r->status === 'processing' ? 'gray' : 'green'),
@@ -262,7 +262,7 @@ class AdminAiController extends AdminBaseController
             [$errCode, $errText] = self::ERRORS[$sel->error ?? ''] ?? [strtoupper((string) $sel->error), '처리하지 못했어요. 횟수는 차감되지 않았어요.'];
             $refunded = $done && $sel->error === 'refunded';
             $selView = [
-                'id' => $code($sel), 'kind' => self::TYPES[$sel->type ?? 'blend'] ?? $sel->type, 'who' => $who($sel),
+                'id' => $code($sel), 'kind' => self::TYPES[$sel->type ?? 'blend'] ?? $sel->type, 'who' => $who($sel), 'whoHref' => Ui::memberUrl($sel->user_id),
                 'state' => self::JOB_STATE[$sel->status][0] ?? $sel->status, 'pill' => Ui::pill(self::JOB_STATE[$sel->status][1] ?? 'gray'),
                 'code' => $errCode, 'reason' => $errText, 'isFail' => $isFail,
                 'source' => $sel->source === 'virtual' ? '가상 모델' : '내 사진',

@@ -8,7 +8,7 @@
         <h1 style="margin: 0; font-size: 26px; font-weight: 900; letter-spacing: -0.5px">신고 · 차단 관리</h1>
         <p style="margin: 0; font-size: 14px; color: #66625B">접수된 신고를 검토하고 콘텐츠 숨김과 회원 제재를 처리해요.</p>
       </div>
-      @if (request('target'))
+      @if (request('target') || request('subject'))
         <div style="display: flex; flex-wrap: wrap; gap: 8px"><a href="{{ route('admin.reports') }}" class="btn-a" style="height: 40px; padding: 0 16px; border-radius: 10px; font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #D9D4CB; background: #FFFFFF; color: #141413">전체 신고 보기</a></div>
       @endif
     </header>
@@ -28,7 +28,7 @@
                   <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; color: #66625B">{{ $r['date'] }}</td>
                   <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">{{ $r['type'] }}</td>
                   <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-weight: 700"><a href="{{ $r['href'] }}" class="btn-a" style="padding: 0; border: 0; background: none; font-size: 14px; font-weight: 700; color: #141413; text-align: left">{{ $r['reason'] }}</a></td>
-                  <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">{{ $r['target'] }}</td>
+                  <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">@if ($r['targetHref'])<a href="{{ $r['targetHref'] }}" style="color: #141413; text-decoration: underline; text-underline-offset: 3px">{{ $r['target'] }}</a>@else{{ $r['target'] }}@endif</td>
                   <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">{{ $r['count'] }}회</td>
                   <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap"><span style="{{ $r['pill'] }}">{{ $r['state'] }}</span></td>
                 </tr>
@@ -49,8 +49,8 @@
         </div>
         <dl style="margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 10px 16px; font-size: 14px">
           <dt style="color: #66625B">사유</dt><dd style="margin: 0; font-weight: 700">{{ $sel['reason'] }}</dd>
-          <dt style="color: #66625B">대상</dt><dd style="margin: 0">{{ $sel['target'] }}</dd>
-          <dt style="color: #66625B">작성자</dt><dd style="margin: 0">{{ $sel['author'] }}</dd>
+          <dt style="color: #66625B">대상</dt><dd style="margin: 0">@if ($sel['targetHref'])<a href="{{ $sel['targetHref'] }}" style="color: #141413; text-decoration: underline; text-underline-offset: 3px">{{ $sel['target'] }}</a>@else{{ $sel['target'] }}@endif @if ($sel['publicHref'])· <a href="{{ $sel['publicHref'] }}" target="_blank" rel="noopener" style="color: #1F4F99; font-weight: 700">공개 페이지</a>@endif</dd>
+          <dt style="color: #66625B">작성자</dt><dd style="margin: 0"><a href="{{ $sel['authorHref'] }}" style="color: #141413; text-decoration: underline; text-underline-offset: 3px">{{ $sel['author'] }}</a> · <a href="{{ $sel['authorReportsHref'] }}" style="color: #1F4F99; font-weight: 700">받은 신고 전체</a></dd>
           <dt style="color: #66625B">누적 신고</dt><dd style="margin: 0">{{ $sel['count'] }}회 · 신고자 {{ $sel['reporters'] }}명</dd>
         </dl>
         <div style="padding: 14px; border-radius: 10px; background: #F7F5F1; display: flex; flex-direction: column; gap: 6px">

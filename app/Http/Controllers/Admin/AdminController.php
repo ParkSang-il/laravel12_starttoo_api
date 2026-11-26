@@ -186,7 +186,13 @@ class AdminController extends AdminBaseController
         $kind = ['활성' => 'green', '정지' => 'red', '휴면' => 'gray', '탈퇴' => 'gray'];
         $rows = $rows->map(function ($r) use ($kind) {
             $row = $this->memberRow($r);
-            return $row + ['statePill' => Ui::pill($kind[$row['state']]), 'typePill' => Ui::pill($row['type'] === '아티스트' ? 'ink' : 'gray')];
+            $id = (int) $r->id;
+            return $row + ['statePill' => Ui::pill($kind[$row['state']]), 'typePill' => Ui::pill($row['type'] === '아티스트' ? 'ink' : 'gray'),
+                // 이 회원으로 이어지는 링크
+                'profileHref' => $r->status === 'active' ? Ui::publicUrl($r->artist_status === 'approved' ? 'shop' : 'user', $id) : null,
+                'contentsHref' => Ui::memberContentsUrl($id),
+                'reportsHref' => (int) $r->report_count > 0 ? Ui::memberReportsUrl($id) : null,
+                'bookingsHref' => Ui::memberBookingsUrl($id)];
         })->all();
 
         return view('admin.members', [
@@ -224,6 +230,11 @@ class AdminController extends AdminBaseController
             ->leftJoin('starttoo_users as a', 'a.id', '=', 'b.artist_id')
             ->select('b.*', 'c.nickname as customer_nickname', 'c.status as customer_status', 'a.nickname as artist_nickname');
         if (self::BOOKING_TABS[$tab]) $q->whereIn('b.status', self::BOOKING_TABS[$tab]);
+        // 회원 관리 「예약」에서 오면: 그 회원이 고객이거나 작가인 예약만
+        if (ctype_digit((string) $request->query('member', ''))) {
+            $member = (int) $request->query('member');
+            $q->where(fn ($w) => $w->where('b.customer_id', $member)->orWhere('b.artist_id', $member));
+        }
         return [$tab, $q];
     }
 
@@ -272,7 +283,8 @@ class AdminController extends AdminBaseController
         $page = $this->page($request);
         $total = (clone $q)->count();
         $rows = $q->orderByDesc('b.id')->offset(($page - 1) * self::PER_PAGE)->limit(self::PER_PAGE)->get()
-            ->map(fn ($b) => $this->bookingRow($b) + ['pill' => Ui::pill(self::BOOKING_STATE[$b->status][1] ?? 'gray')])->all();
+            ->map(fn ($b) => $this->bookingRow($b) + ['pill' => Ui::pill(self::BOOKING_STATE[$b->status][1] ?? 'gray'),
+                'customerHref' => Ui::memberUrl($b->customer_id), 'artistHref' => Ui::memberUrl($b->artist_id)])->all();
 
         return view('admin.payments', [
             'kpis' => $kpis, 'rows' => $rows,
@@ -313,6 +325,7 @@ class AdminController extends AdminBaseController
             return [
                 'where' => $where,
                 'who' => $ad->advertiser . ($ad->artist_nickname ? ' · ' . $ad->artist_nickname : ''),
+                'whoHref' => $ad->artist_id ? Ui::publicUrl('shop', $ad->artist_id) : null,
                 'title' => $ad->title,
                 'period' => ($ad->starts_at ? Ui::date($ad->starts_at, 'm.d') : '바로') . ' ~ ' . ($ad->ends_at ? Ui::date($ad->ends_at, 'm.d') : '계속'),
                 'imp' => number_format((int) $ad->impressions), 'clk' => number_format((int) $ad->clicks),

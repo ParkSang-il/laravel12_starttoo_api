@@ -34,13 +34,14 @@
           <tbody>
             @forelse ($rows as $r)
               <tr>
-                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; color: #66625B; font-variant-numeric: tabular-nums">{{ $r['id'] }}</td>
-                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-weight: 700">{{ $r['nick'] }}</td>
+                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; color: #66625B; font-variant-numeric: tabular-nums">@if ($r['profileHref'])<a href="{{ $r['profileHref'] }}" target="_blank" rel="noopener" title="공개 프로필 · 상점" style="color: #66625B; text-decoration: underline; text-underline-offset: 3px">{{ $r['id'] }}</a>@else{{ $r['id'] }}@endif</td>
+                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-weight: 700">{{ $r['nick'] }}
+                  <span style="display: block; margin-top: 2px; font-size: 12px; font-weight: 500"><a href="{{ $r['contentsHref'] }}" style="color: #1F4F99">쓴 글</a> · <a href="{{ $r['bookingsHref'] }}" style="color: #1F4F99">예약</a></span></td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap"><span style="{{ $r['typePill'] }}">{{ $r['type'] }}</span></td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">{{ $r['via'] }}</td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; color: #66625B">{{ $r['joined'] }}</td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; color: #66625B">{{ $r['last'] }}</td>
-                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">{{ $r['reports'] }}</td>
+                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">@if ($r['reportsHref'])<a href="{{ $r['reportsHref'] }}" style="color: #A3301A; font-weight: 700; text-decoration: underline; text-underline-offset: 3px">{{ $r['reports'] }}</a>@else{{ $r['reports'] }}@endif</td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap"><span style="{{ $r['statePill'] }}">{{ $r['state'] }}</span></td>
               </tr>
             @empty

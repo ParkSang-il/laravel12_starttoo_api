@@ -36,7 +36,7 @@
             <details style="font-size: 13px; color: #3A3731">
               <summary style="cursor: pointer; font-weight: 700">받을 회원 보기</summary>
               <ul style="margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px">
-                @foreach ($reachList as $u)<li style="padding: 4px 10px; border-radius: 12px; background: #F4F2EE; font-size: 12px"><b style="font-variant-numeric: tabular-nums">{{ $u['id'] }}</b> · {{ $u['nick'] }}</li>@endforeach
+                @foreach ($reachList as $u)<li style="padding: 4px 10px; border-radius: 12px; background: #F4F2EE; font-size: 12px"><a href="{{ route('admin.members', ['q' => $u['id']]) }}" style="color: #141413"><b style="font-variant-numeric: tabular-nums">{{ $u['id'] }}</b> · {{ $u['nick'] }}</a></li>@endforeach
                 @if ($reachMore > 0)<li style="padding: 4px 10px; font-size: 12px; color: #66625B">외 {{ number_format($reachMore) }}명</li>@endif
               </ul>
             </details>
@@ -88,7 +88,7 @@
                     <details style="margin-top: 6px; font-weight: 400; font-size: 12px; color: #3A3731">
                       <summary style="cursor: pointer; color: #66625B">받은 회원 {{ count($h['recipients']) + $h['more'] }}명</summary>
                       <ul style="margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px">
-                        @foreach ($h['recipients'] as $u)<li><b style="font-variant-numeric: tabular-nums">{{ $u['id'] }}</b> · {{ $u['nick'] }} · <span style="color: #66625B">{{ $u['state'] }}</span></li>@endforeach
+                        @foreach ($h['recipients'] as $u)<li><a href="{{ route('admin.members', ['q' => $u['id']]) }}" style="color: #141413"><b style="font-variant-numeric: tabular-nums">{{ $u['id'] }}</b> · {{ $u['nick'] }}</a> · <span style="color: #66625B">{{ $u['state'] }}</span></li>@endforeach
                         @if ($h['more'] > 0)<li style="color: #66625B">외 {{ number_format($h['more']) }}명</li>@endif
                       </ul>
                     </details>

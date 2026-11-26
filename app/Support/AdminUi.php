@@ -139,6 +139,45 @@ final class AdminUi
         Cache::forget('starttoo:admin:badges');
     }
 
+    // ── 화면끼리 잇는 링크 ─────────────────────────
+    // 회원 · 콘텐츠 · 신고 · 예약 · 푸시를 서로 오가게 한다(회원 상세 화면은 아직 없어 회원 목록 검색으로)
+
+    /** 회원 목록에서 이 회원만 */
+    public static function memberUrl(int|string|null $userId): ?string
+    {
+        return $userId ? route('admin.members', ['q' => 'U-' . (int) $userId]) : null;
+    }
+
+    /** 이 회원이 받은 신고 · 이 회원의 예약 · 이 회원의 콘텐츠 */
+    public static function memberReportsUrl(int $userId): string
+    {
+        return route('admin.reports', ['tab' => '전체', 'subject' => $userId]);
+    }
+
+    public static function memberBookingsUrl(int $userId): string
+    {
+        return route('admin.payments', ['member' => $userId]);
+    }
+
+    public static function memberContentsUrl(int $userId): string
+    {
+        return route('admin.contents', ['author' => $userId]);
+    }
+
+    /** 콘텐츠 화면에서 이 콘텐츠만(작품 · 게시물 · 리뷰 · 커뮤니티) */
+    public static function contentUrl(string $type, string|int $id): ?string
+    {
+        $tab = ['artwork' => '전체', 'post' => '게시물', 'review' => '리뷰', 'community' => '커뮤니티'][$type] ?? null;
+        return $tab ? route('admin.contents', ['tab' => $tab, 'q' => (string) $id]) : null;
+    }
+
+    /** 앱 밖 공개 미리보기 페이지(공유 링크와 같은 주소). 공개된 것만 열린다 */
+    public static function publicUrl(string $type, string|int $id): ?string
+    {
+        $path = ['artwork' => '/artwork', 'post' => '/post', 'community' => '/community/post', 'user' => '/user', 'shop' => '/shop'][$type] ?? null;
+        return $path ? url($path) . '?id=' . rawurlencode((string) $id) : null;
+    }
+
     public static function date(mixed $at, string $format = 'Y.m.d'): string
     {
         return $at ? Carbon::parse($at)->timezone('Asia/Seoul')->format($format) : '-';

@@ -9,7 +9,8 @@
         <p style="margin: 0; font-size: 14px; color: #66625B">작품 · 도안 · 피팅 도안 · 커뮤니티 게시물의 노출 상태를 관리해요. 회원의 신체 사진은 저장 · 열람하지 않아요.</p>
       </div>
       <form method="GET" action="{{ route('admin.contents') }}" style="display: flex; flex-wrap: wrap; gap: 8px">
-        @foreach (['tab', 'state', 'sort'] as $k) @if (request($k))<input type="hidden" name="{{ $k }}" value="{{ request($k) }}">@endif @endforeach
+        @if (request('author'))<a href="{{ route('admin.contents', request()->except('author', 'page')) }}" class="btn-a" style="height: 40px; padding: 0 14px; border-radius: 10px; background: #141413; color: #FFFFFF; font-size: 13px; font-weight: 700">U-{{ (int) request('author') }} 회원 글만 · 해제</a>@endif
+        @foreach (['tab', 'state', 'sort', 'author'] as $k) @if (request($k))<input type="hidden" name="{{ $k }}" value="{{ request($k) }}">@endif @endforeach
         <label style="height: 40px; min-width: 260px; border-radius: 10px; border: 1px solid #D9D4CB; background: #FFFFFF; display: flex; align-items: center; gap: 8px; padding: 0 12px; color: #66625B"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">콘텐츠 검색</span><input type="search" name="q" value="{{ $q }}" maxlength="40" placeholder="제목, 작성자, ID" style="flex: 1; min-width: 0; border: 0; outline: none; font-size: 14px; color: #141413"></label>
       </form>
     </header>
@@ -60,9 +61,9 @@
             <span style="{{ $it['pill'] }}; position: absolute; top: 14px; right: 10px">{{ $it['state'] }}</span>
           </div>
           <div style="padding: 14px; display: flex; flex-direction: column; gap: 6px">
-            <span style="font-size: 12px; color: #66625B">{{ $it['kind'] }} · {{ $it['code'] }}</span>
+            <span style="font-size: 12px; color: #66625B">{{ $it['kind'] }} · {{ $it['code'] }}@if ($it['publicHref']) · <a href="{{ $it['publicHref'] }}" target="_blank" rel="noopener" style="color: #1F4F99; font-weight: 700">공개 페이지</a>@endif</span>
             <span style="font-size: 14px; font-weight: 700; line-height: 1.4">{{ $it['title'] }}</span>
-            <span style="font-size: 12px; color: #66625B">{{ $it['author'] }} · {{ $it['date'] }}</span>
+            <span style="font-size: 12px; color: #66625B">@if ($it['authorHref'])<a href="{{ $it['authorHref'] }}" style="color: #141413; font-weight: 700">{{ $it['author'] }}</a>@else{{ $it['author'] }}@endif · {{ $it['date'] }}</span>
             <span style="font-size: 12px; color: #55524C">{{ $it['likesLabel'] }} · @if ($it['reportsHref'])<a href="{{ $it['reportsHref'] }}" style="color: #A3301A; font-weight: 700">신고 {{ $it['reports'] }}</a>@else 신고 {{ $it['reports'] }}@endif</span>
           </div>
         </article>

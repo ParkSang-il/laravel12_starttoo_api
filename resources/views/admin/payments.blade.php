@@ -8,8 +8,11 @@
         <h1 style="margin: 0; font-size: 26px; font-weight: 900; letter-spacing: -0.5px">예약 · 결제 모니터링</h1>
         <p style="margin: 0; font-size: 14px; color: #66625B">예약 상태 흐름과 변경 · 취소 · 분쟁을 모니터링해요.</p>
       </div>
+      @if (request('member'))
+        <div style="display: flex; flex-wrap: wrap; gap: 8px"><a href="{{ route('admin.payments', request()->except('member', 'page')) }}" class="btn-a" style="height: 40px; padding: 0 14px; border-radius: 10px; background: #141413; color: #FFFFFF; font-size: 13px; font-weight: 700">U-{{ (int) request('member') }} 회원 예약만 · 해제</a></div>
+      @endif
       @if ($canExport)
-        <div style="display: flex; flex-wrap: wrap; gap: 8px"><a href="{{ route('admin.payments.export', request()->only('tab')) }}" class="btn-a" style="height: 40px; padding: 0 16px; border-radius: 10px; font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #D9D4CB; background: #FFFFFF; color: #141413">엑셀 내보내기</a></div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px"><a href="{{ route('admin.payments.export', request()->only('tab', 'member')) }}" class="btn-a" style="height: 40px; padding: 0 16px; border-radius: 10px; font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #D9D4CB; background: #FFFFFF; color: #141413">엑셀 내보내기</a></div>
       @endif
     </header>
     <section style="padding: 14px 18px; border-radius: 12px; background: #FFF1D6; color: #5C3B00; display: flex; flex-wrap: wrap; gap: 12px; align-items: center">
@@ -40,8 +43,8 @@
             @forelse ($rows as $r)
               <tr>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 700">{{ $r['id'] }}</td>
-                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">{{ $r['customer'] }}</td>
-                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">{{ $r['artist'] }}</td>
+                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap"><a href="{{ $r['customerHref'] }}" style="color: #141413; text-decoration: underline; text-underline-offset: 3px">{{ $r['customer'] }}</a></td>
+                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap"><a href="{{ $r['artistHref'] }}" style="color: #141413; text-decoration: underline; text-underline-offset: 3px">{{ $r['artist'] }}</a></td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">{{ $r['when'] }}</td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-variant-numeric: tabular-nums">{{ $r['quote'] }}</td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; color: #66625B">결제 미사용</td>

@@ -34,7 +34,7 @@
               <tr style="{{ $j['rowStyle'] }}">
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 13px"><a href="{{ $j['href'] }}" class="btn-a" style="padding: 0; border: 0; background: none; font-size: 14px; font-weight: 700; color: #141413; text-align: left">{{ $j['id'] }}</a></td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">{{ $j['kind'] }}</td>
-                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">{{ $j['who'] }}</td>
+                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap"><a href="{{ $j['whoHref'] }}" style="color: #141413; text-decoration: underline; text-underline-offset: 3px">{{ $j['who'] }}</a></td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; color: #66625B">{{ $j['at'] }}</td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-variant-numeric: tabular-nums">{{ $j['took'] }}</td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap"><span style="{{ $j['pill'] }}">{{ $j['state'] }}</span></td>
@@ -51,7 +51,7 @@
       @if ($sel)
       <div style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; flex: 2 1 340px; min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 16px">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px">
-          <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #66625B; font-family: ui-monospace, Menlo, monospace">{{ $sel['id'] }}</span><h2 style="margin: 0; font-size: 17px; font-weight: 700">{{ $sel['kind'] }} · {{ $sel['who'] }}</h2></div>
+          <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #66625B; font-family: ui-monospace, Menlo, monospace">{{ $sel['id'] }}</span><h2 style="margin: 0; font-size: 17px; font-weight: 700">{{ $sel['kind'] }} · <a href="{{ $sel['whoHref'] }}" style="color: #141413; text-decoration: underline; text-underline-offset: 3px">{{ $sel['who'] }}</a></h2></div>
           <span style="{{ $sel['pill'] }}">{{ $sel['state'] }}</span>
         </div>
         <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column">

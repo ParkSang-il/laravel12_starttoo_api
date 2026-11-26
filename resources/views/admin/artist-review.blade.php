@@ -45,7 +45,7 @@
           @endif
           <div style="flex: 1; display: flex; flex-direction: column; gap: 4px">
             <h2 style="margin: 0; font-size: 22px; font-weight: 900">{{ $sel['name'] }}</h2>
-            <span style="font-size: 14px; color: #66625B">실명 {{ $sel['real'] }} · {{ $sel['region'] }} · 회원 {{ $sel['uid'] }}</span>
+            <span style="font-size: 14px; color: #66625B">실명 {{ $sel['real'] }} · {{ $sel['region'] }} · 회원 <a href="{{ $sel['memberHref'] }}" style="color: #141413; text-decoration: underline; text-underline-offset: 3px">{{ $sel['uid'] }}</a>@if ($sel['shopHref']) · <a href="{{ $sel['shopHref'] }}" target="_blank" rel="noopener" style="color: #1F4F99; font-weight: 700">상점 공개 페이지</a>@endif</span>
           </div>
           <span style="{{ $sel['pill'] }}">{{ $sel['code'] }}</span>
         </div>
