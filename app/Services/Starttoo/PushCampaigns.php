@@ -193,7 +193,7 @@ class PushCampaigns
                 $result = $fcm->send(Crypt::decryptString($device->token_ciphertext), [
                     'notification' => ['title' => $c->title, 'body' => $c->body],
                     'data' => ['campaign_id' => $campaign, 'recipient_id' => (string) $d->user_id],
-                    'android' => ['priority' => $info ? 'high' : 'normal', 'ttl' => '3600s', 'notification' => ['channel_id' => $info ? 'starttoo_notice' : 'starttoo_marketing', 'tag' => 'campaign:'.$campaign, 'icon' => 'ic_stat_starttoo']],
+                    'android' => ['priority' => 'high', 'ttl' => '3600s', 'notification' => ['channel_id' => $info ? 'starttoo_notice' : 'starttoo_event', 'tag' => 'campaign:'.$campaign, 'icon' => 'ic_stat_starttoo']],
                     'apns' => ['headers' => ['apns-push-type' => 'alert', 'apns-priority' => '10', 'apns-collapse-id' => 'campaign:'.$campaign], 'payload' => ['aps' => ['sound' => 'default']]],
                 ]);
                 $db->table('starttoo_push_logs')->where('id', $log)->update(['platform' => $device->platform]);

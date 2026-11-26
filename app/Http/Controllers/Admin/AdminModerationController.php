@@ -347,6 +347,12 @@ class AdminModerationController extends AdminBaseController
     /** 신고 대상으로 가는 콘솔 링크: 콘텐츠는 게시물 · 작품 화면, 회원은 회원 관리 */
     private function targetHref(string $type, string $id): ?string
     {
+        // 상담 · 채팅 신고 → 상담 · 채팅 모니터링의 그 방
+        if ($type === 'consultation') return route('admin.chats', ['tab' => '전체', 'sel' => (int) $id]);
+        if ($type === 'message') {
+            $room = $this->db()->table('starttoo_messages')->where('id', (int) $id)->value('consultation_id');
+            return $room ? route('admin.chats', ['tab' => '전체', 'sel' => (int) $room]) : null;
+        }
         return $type === 'user' ? Ui::memberUrl((int) $id) : Ui::contentUrl($type, $id);
     }
 

@@ -125,6 +125,7 @@ class PushSender
                     'booking_remind' => '다가오는 시술 예약이 있어요.',
                     'booking_event' => '예약 소식이 있어요.',
                     'report_result' => '신고 처리 결과가 나왔어요.',
+                    'sanction' => '운영 정책 안내가 있어요.',
                     default => '새 알림이 있어요.',
                 };
                 // 이력에는 본문 원문 대신 안내 문구만 남긴다.
@@ -335,6 +336,14 @@ class PushSender
     /** 아티스트 심사 단계별 안내 문구. */
     private function noticeText(object $n): array
     {
+        // 운영 제재 안내(누가 신고했는지는 담지 않는다)
+        if ($n->kind === 'sanction') {
+            return match ($n->variant) {
+                'warning' => ['⚠️ 운영 정책 위반 경고', '신고된 게시물이 운영 정책에 맞지 않아 숨김 처리되고 경고가 기록됐어요.'],
+                'suspend' => ['이용이 일시 정지됐어요', '운영 정책 위반으로 일정 기간 이용이 정지됐어요.'],
+                default => ['이용이 정지됐어요', '운영 정책 위반으로 이용이 정지됐어요. 고객지원에 문의해주세요.'],
+            };
+        }
         // 신고 처리 결과(상대 정보 · 처리 내용은 담지 않는다)
         if ($n->kind === 'report_result') {
             return $n->variant === 'resolved'

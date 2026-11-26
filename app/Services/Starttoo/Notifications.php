@@ -46,7 +46,8 @@ class Notifications
     /** 안내 알림(심사 결과 등)의 종류. 보낸 회원이 없어 actor는 받는 회원 자신으로 기록한다. */
     /** fit_result: AI 피팅 · 타투 도구 결과(variant = 종류:상태). 목록에는 notices=2 를 보낸 앱에만 준다. */
     /** report_result: 내가 낸 신고의 처리 결과(variant = resolved · dismissed, 대상 = 신고 번호) */
-    public const NOTICE_KINDS = ['artist_review', 'fit_result', 'report_result'];
+    /** sanction: 운영 콘솔 신고 처리로 받은 제재(variant = warning · suspend · ban, 대상 = 제재 이력 번호) */
+    public const NOTICE_KINDS = ['artist_review', 'fit_result', 'report_result', 'sanction'];
 
     /**
      * 예약 알림(알림함 「예약 · 상담」 탭, 예약 알림 설정을 따른다). 대상 = 예약 번호.
@@ -60,7 +61,7 @@ class Notifications
 
     /** 이전 버전 앱이 모르는 알림 종류(notices=1을 보낸 앱에만 목록에 준다). */
     public const NEW_KINDS = ['artist_review', 'shop_news', 'fit_result', 'review_new', 'review_reply', 'comm_comment', 'comm_like', 'comm_reply',
-        'booking_event', 'booking_remind', 'report_result'];
+        'booking_event', 'booking_remind', 'report_result', 'sanction'];
 
     /**
      * Phase 5 알림(소셜 알림 설정을 따른다). 목록에는 notices=3 을 보낸 앱에만 준다.
@@ -247,6 +248,8 @@ class Notifications
         if ($level < 3) $q->whereNotIn('n.kind', self::PHASE5_KINDS);
         // 예약 · 신고 결과 알림은 notices=4 를 보낸 앱에만 준다.
         if ($level < 4) $q->whereNotIn('n.kind', self::LEVEL4_KINDS);
+        // 운영 제재 안내(sanction)는 notices=5 를 보낸 앱에만 준다.
+        if ($level < 5) $q->where('n.kind', '<>', 'sanction');
         if ($filter === 'reservation') $q->whereIn('n.kind', self::BOOKING_KINDS);
         elseif ($filter === 'notice') $notices ? $q->whereIn('n.kind', self::NOTICE_KINDS) : $q->whereRaw('1 = 0');
         elseif ($filter === 'social') $q->whereNotIn('n.kind', $notices ? [...self::NOTICE_KINDS, ...self::BOOKING_KINDS] : self::NEW_KINDS);

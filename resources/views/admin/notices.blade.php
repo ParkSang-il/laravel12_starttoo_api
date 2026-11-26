@@ -51,16 +51,22 @@
           </select>
         </label>
         <label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">본문</span><textarea name="body" form="f-save" required maxlength="10000" rows="8" @disabled(! $canManage) style="border-radius: 10px; border: 1px solid #D9D4CB; padding: 12px; font-size: 14px; line-height: 1.5; resize: vertical; color: #141413; box-sizing: border-box; width: 100%">{{ old('body', $sel['body']) }}</textarea></label>
+        @if ($editableTime)
+          <label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">게시 시각 <span style="font-weight: 400; color: #66625B">· 비우면 바로 게시</span></span><input type="datetime-local" name="published_at" form="f-save" value="{{ old('published_at', $sel['at']) }}" @disabled(! $canManage) style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+        @endif
         <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700"><input type="hidden" name="pinned" value="0" form="f-save"><input type="checkbox" name="pinned" value="1" form="f-save" @checked(old('pinned', $sel['pinned'])) @disabled(! $canManage) style="width: 18px; height: 18px; margin: 0; accent-color: #141413">맨 위 고정</label>
         @if ($canPush)
           <div style="display: flex; flex-direction: column; gap: 4px">
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700"><input type="hidden" name="push" value="0" form="f-save"><input type="checkbox" name="push" value="1" form="f-save" @checked(old('push')) style="width: 18px; height: 18px; margin: 0; accent-color: #141413">게시할 때 푸시 보내기</label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700"><input type="hidden" name="push" value="0" form="f-save"><input type="checkbox" name="push" value="1" form="f-save" @checked(old('push', $sel['push'])) style="width: 18px; height: 18px; margin: 0; accent-color: #141413">게시할 때 푸시 보내기</label>
             <span style="font-size: 12px; color: #66625B; line-height: 1.5; padding-left: 26px">{{ $pushNote }}</span>
           </div>
         @endif
+        @if ($pushSent)
+          <span style="font-size: 12px; color: #66625B">{{ $pushSent }} · <a href="{{ $pushHref }}" style="color: #1F4F99; font-weight: 700">발송 내역</a></span>
+        @endif
         @if ($canManage)
           <div style="display: flex; gap: 8px"><button type="submit" form="f-save" style="height: 40px; padding: 0 16px; border-radius: 10px; font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: #141413; color: #FFFFFF; flex: 1">{{ $saveLabel }}</button></div>
-          <span style="font-size: 12px; color: #66625B; line-height: 1.5">게시하면 바로 앱에 보여요. 예약 게시는 서버 명령(starttoo:announce add --at=)으로 해요.</span>
+          <span style="font-size: 12px; color: #66625B; line-height: 1.5">게시 시각을 앞으로로 정하면 그때부터 앱에 보여요(예약). 게시된 뒤에는 시각 · 푸시를 바꿀 수 없어요.</span>
         @endif
       </div>
     </section>

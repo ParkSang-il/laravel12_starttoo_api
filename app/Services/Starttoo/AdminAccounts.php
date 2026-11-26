@@ -28,7 +28,7 @@ class AdminAccounts
         'super' => ['*'],
         'operator' => ['artist.review', 'report.dismiss', 'report.hide', 'report.warn', 'report.suspend',
             'content.hide', 'content.delete', 'content.recommend', 'content.fit', 'ads.manage', 'export', 'license.view',
-            'ai.manage', 'notice.manage', 'push.send'],
+            'ai.manage', 'notice.manage', 'push.send', 'chat.view'],
         'cs' => ['report.dismiss', 'report.hide', 'report.warn', 'content.hide', 'license.view'],
         'viewer' => [],
     ];

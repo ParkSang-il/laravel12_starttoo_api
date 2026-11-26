@@ -346,6 +346,15 @@ Artisan::command('starttoo:announce {action=list} {id?} {--title=} {--body=} {--
     }
 })->purpose('공지사항 등록 · 목록 · 고정 · 내리기');
 
+// 운영 콘솔 「게시할 때 푸시 보내기」: 게시 시각이 된 공지의 푸시를 보낸다(예약 공지 포함)
+Artisan::command('starttoo:announce-push', function () {
+    [$sent, $errors] = app(ProjectDatabase::class)->run('starttoo', fn () => app(\App\Services\Starttoo\Announcements::class)->sendDuePushes());
+    if ($sent) $this->info("공지 푸시 {$sent}건을 보내기 시작했어요.");
+    foreach ($errors as $e) $this->warn($e);
+    return 0;
+})->purpose('게시 시각이 된 공지 푸시 보내기');
+\Illuminate\Support\Facades\Schedule::command('starttoo:announce-push')->everyMinute()->withoutOverlapping();
+
 // 자체 광고 관리. 자리(slot): community_top = 커뮤니티 피드 맨 위 카드
 // 목록) php artisan starttoo:ad
 // 등록) php artisan starttoo:ad add --slot=community_top --advertiser="잉크하우스" --title="12월 예약 오픈" --artist=12 --image=ads/a.jpg --from=2026-12-01 --until=2026-12-31

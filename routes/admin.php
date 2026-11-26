@@ -59,6 +59,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('virtual-models/{id}/toggle', [AdminAiController::class, 'toggleModel'])->whereNumber('id')->name('virtual-models.toggle');
         Route::post('virtual-models/{id}/redo', [AdminAiController::class, 'regenerateModel'])->whereNumber('id')->name('virtual-models.redo');
 
+        // M-14 상담 · 채팅 모니터링(신고된 방만 · 사유 기록 후 열람)
+        Route::get('chats', [AdminCommsController::class, 'chats'])->name('chats');
+        Route::post('chats/{id}/open', [AdminCommsController::class, 'openChat'])->whereNumber('id')->name('chats.open');
+        Route::post('chats/{id}/warn', [AdminCommsController::class, 'warnChat'])->whereNumber('id')->name('chats.warn');
+
         // M-16 · M-17 소통
         Route::get('push', [AdminCommsController::class, 'push'])->name('push');
         Route::post('push/send', [AdminCommsController::class, 'sendPush'])->middleware('throttle:10,1,admin-push')->name('push.send');

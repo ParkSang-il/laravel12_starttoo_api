@@ -40,10 +40,14 @@ class Sanctions
                 $db->table('starttoo_auth_sessions')->where('user_id', $userId)->whereNull('revoked_at')
                     ->update(['revoked_at' => now(), 'previous_result' => null, 'updated_at' => now()]);
             }
-            $db->table('starttoo_user_sanctions')->insert([
+            $sanctionId = $db->table('starttoo_user_sanctions')->insertGetId([
                 'user_id' => $userId, 'kind' => $kind, 'days' => $days, 'until' => $kind === 'suspend' ? $until : null,
                 'reason' => mb_substr(trim($reason), 0, 1000), 'report_id' => $reportId, 'admin_id' => $adminId, 'created_at' => now(),
             ]);
+            // 작성자에게 제재 안내(알림함 · 푸시). 정지는 기기 연결을 끊어 푸시는 가지 않고, 정지가 풀린 뒤 알림함에 보인다.
+            if ($user->status !== 'withdrawn') {
+                app(Notifications::class)->notice($userId, 'sanction', 'sanction', (string) $sanctionId, $kind);
+            }
             return ['user_id' => $userId, 'kind' => $kind, 'until' => $until?->toIso8601String(), 'applied' => $kind === 'warning' || $suspend];
         }, 3);
     }

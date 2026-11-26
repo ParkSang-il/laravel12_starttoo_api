@@ -128,6 +128,8 @@ final class AdminUi
             return [
                 'artistReview' => $db->table('starttoo_artist_applications')->whereIn('status', ['submitted', 'reviewing'])->count(),
                 'reports' => $db->table('starttoo_reports')->where('status', 'pending')->count(),
+                // 미처리 상담 · 메시지 신고
+                'chats' => $db->table('starttoo_reports')->where('status', 'pending')->whereIn('target_type', ['consultation', 'message'])->count(),
                 // 오늘 실패한 AI 생성(원인 확인용)
                 'aiJobs' => $db->table('starttoo_fit_results')->where('status', 'failed')->where('cost_units', '>', 0)->where('created_at', '>=', today())->count(),
             ];
