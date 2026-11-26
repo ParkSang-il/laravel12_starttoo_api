@@ -986,7 +986,8 @@ class Fittings
     {
         // 사진 여러 장 · AI 응답(base64)을 함께 다뤄 기본 128MB로는 모자랄 수 있다
         @ini_set('memory_limit', '512M');
-        $lock = Cache::lock('starttoo:fit-result:'.$id, 100);
+        // 상위 모델은 오래 걸려(최대 140초) 잠금을 넉넉히 둔다
+        $lock = Cache::lock('starttoo:fit-result:'.$id, 200);
         if (!$lock->get()) return;
         try {
             $r = $this->db()->table('starttoo_fit_results')->where('id', $id)->first();
@@ -1120,7 +1121,9 @@ class Fittings
             '',
             'REMEMBER: tattoo on bare skin only, exactly where the sticker is, in exactly the sticker\'s orientation (never turned upright), and the rest of the photo untouched.',
         ]);
-        $bytes = app(NanoBanana::class)->generate($prompt, [[$aiComposite, $this->mime($aiComposite)], [$aiStencil, $this->mime($aiStencil)]], $this->aspectOf($aiComposite));
+        // 합성은 상위 모델(STARTTOO_GEMINI_BLEND_MODEL)이 있으면 그걸로
+        $bytes = app(NanoBanana::class)->generate($prompt, [[$aiComposite, $this->mime($aiComposite)], [$aiStencil, $this->mime($aiStencil)]],
+            $this->aspectOf($aiComposite), config('starttoo.gemini_blend_model') ?: null);
         // 돌려 보낸 사진이면 결과를 원래 방향으로 되돌린다(AI 결과 크기를 돌린 입력에 맞춘 뒤 되돌림)
         if ($turned) $bytes = $this->orient($this->matchSize($bytes, $aiComposite), $quarter, $flip, true);
         // 전후 비교가 맞도록 결과를 입력 사진과 같은 크기로 맞춘다(AI는 정해진 비율로만 돌려줌)
@@ -1565,7 +1568,8 @@ class Fittings
     {
         $r = $this->own($viewer, $id);
         // 큐가 늦거나 멈췄으면 조회 요청이 직접 처리한다.
-        if ($r->status === 'processing' && Carbon::parse($r->updated_at)->lt(now()->subSeconds(25))) {
+        // (상위 모델은 큐에서 1~2분 걸릴 수 있어 3분이 지나도 그대로일 때만)
+        if ($r->status === 'processing' && Carbon::parse($r->updated_at)->lt(now()->subSeconds(180))) {
             $this->process($id);
             $r = $this->own($viewer, $id);
         }

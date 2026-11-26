@@ -86,7 +86,11 @@ class NanoBanana
      *
      * @param  array<int, array{0: string, 1: string}>  $images  [[bytes, mime], ...]
      */
-    public function generate(string $prompt, array $images = [], ?string $aspectRatio = null): string
+    /**
+     * [$model] 없으면 기본 이미지 모델(STARTTOO_GEMINI_IMAGE_MODEL).
+     * 가상 피팅 합성은 상위 모델(STARTTOO_GEMINI_BLEND_MODEL)을 따로 쓸 수 있다.
+     */
+    public function generate(string $prompt, array $images = [], ?string $aspectRatio = null, ?string $model = null): string
     {
         $key = trim((string) config('starttoo.gemini_api_key', ''));
         if ($key === '') throw new RuntimeException('FIT_AI_NOT_CONFIGURED');
@@ -96,9 +100,10 @@ class NanoBanana
         }
         $config = ['responseModalities' => ['IMAGE']];
         if ($aspectRatio) $config['imageConfig'] = ['aspectRatio' => $aspectRatio];
-        $model = $this->modelName((string) config('starttoo.gemini_image_model', 'gemini-2.5-flash-image'));
+        $model = $this->modelName($model ?: (string) config('starttoo.gemini_image_model', 'gemini-2.5-flash-image'));
 
-        $response = Http::connectTimeout(5)->timeout(70)->acceptJson()
+        // 상위 모델(Pro)은 생각을 거쳐 그려서 오래 걸린다 → 넉넉히 기다린다(큐 작업 제한 시간 안)
+        $response = Http::connectTimeout(5)->timeout((int) config('starttoo.gemini_image_timeout', 140))->acceptJson()
             ->withHeaders(['x-goog-api-key' => $key])
             ->post(sprintf(self::ENDPOINT, rawurlencode($model)), [
                 'contents' => [['role' => 'user', 'parts' => $parts]],
@@ -110,13 +115,17 @@ class NanoBanana
             $message = mb_substr((string) $response->json('error.message', ''), 0, 160);
             throw new RuntimeException('FIT_AI_HTTP_'.$response->status().($reason !== '' ? " {$reason}" : '').($message !== '' ? " | {$message}" : ''));
         }
+        // 상위 모델은 생각하는 중간 그림(thought)도 돌려준다 → 그건 건너뛰고 마지막 최종 그림을 쓴다
+        $final = null;
         foreach ((array) $response->json('candidates.0.content.parts', []) as $part) {
+            if (!empty($part['thought'])) continue;
             $data = $part['inlineData']['data'] ?? $part['inline_data']['data'] ?? null;
             if (is_string($data) && $data !== '') {
                 $bytes = base64_decode($data, true);
-                if ($bytes !== false) return $bytes;
+                if ($bytes !== false) $final = $bytes;
             }
         }
+        if ($final !== null) return $final;
         // 안전 필터 등으로 이미지가 없을 때
         throw new RuntimeException('FIT_AI_NO_IMAGE:'.((string) $response->json('candidates.0.finishReason', 'unknown')));
     }

@@ -40,7 +40,8 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            // 가장 오래 걸리는 작업(가상 피팅 합성, 180초)보다 길어야 처리 중인 작업을 다시 집어 가지 않는다
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 210),
             'after_commit' => false,
         ],
 

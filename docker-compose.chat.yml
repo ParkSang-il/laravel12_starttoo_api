@@ -56,8 +56,8 @@ services:
   chat-queue-media:
     <<: *chat-php
     container_name: starttoo_chat_queue_media
-    command: ["php", "artisan", "queue:work", "database", "--queue=chat-media", "--sleep=3", "--tries=3", "--backoff=5", "--timeout=75", "--max-time=3600"]
-    stop_grace_period: 120s
+    command: ["php", "artisan", "queue:work", "database", "--queue=chat-media", "--sleep=3", "--tries=3", "--backoff=5", "--timeout=180", "--max-time=3600"]
+    stop_grace_period: 200s
 
   chat-scheduler:
     <<: *chat-php

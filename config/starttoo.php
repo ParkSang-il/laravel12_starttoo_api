@@ -40,6 +40,12 @@ return [
     'fit_enabled' => (bool) env('STARTTOO_FIT_ENABLED', true),
     'gemini_api_key' => env('STARTTOO_GEMINI_API_KEY', env('STARTTOO_NANOBANANA_API_KEY')),
     'gemini_image_model' => env('STARTTOO_GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image'),
+    // 가상 피팅 합성(도안을 피부에 입히기)만 쓸 상위 모델. 비우면 위 이미지 모델을 쓴다.
+    // 예) gemini-3-pro-image(Nano Banana Pro) · gemini-3.1-flash-image(Nano Banana 2)
+    // 피부 영역 찾기 · 가상 모델 만들기는 위 이미지 모델 그대로(비용 절약).
+    'gemini_blend_model' => env('STARTTOO_GEMINI_BLEND_MODEL'),
+    // 이미지 AI 응답을 기다리는 시간(초). 큐 작업 제한(ProcessStarttooFitResult 180초)보다 짧아야 한다.
+    'gemini_image_timeout' => (int) env('STARTTOO_GEMINI_IMAGE_TIMEOUT', 140),
     // 피부 영역 분할(마스크)용 텍스트 모델 — 하루 AI 횟수에 세지 않는다
     // gemini-flash-latest = Google 이 최신 flash 모델로 바꿔 주는 이름(특정 버전이 종료돼도 계속 동작)
     'gemini_text_model' => env('STARTTOO_GEMINI_TEXT_MODEL', 'gemini-flash-latest'),
