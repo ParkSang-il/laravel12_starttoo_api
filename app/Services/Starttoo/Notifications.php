@@ -47,7 +47,8 @@ class Notifications
     /** fit_result: AI 피팅 · 타투 도구 결과(variant = 종류:상태). 목록에는 notices=2 를 보낸 앱에만 준다. */
     /** report_result: 내가 낸 신고의 처리 결과(variant = resolved · dismissed, 대상 = 신고 번호) */
     /** sanction: 운영 콘솔 신고 처리로 받은 제재(variant = warning · suspend · ban, 대상 = 제재 이력 번호) */
-    public const NOTICE_KINDS = ['artist_review', 'fit_result', 'report_result', 'sanction'];
+    /** ad_review: 작가 광고 심사 결과(variant = approved · rejected · changed, 대상 = 광고 번호). 목록에는 notices=6 을 보낸 앱에만 준다. */
+    public const NOTICE_KINDS = ['artist_review', 'fit_result', 'report_result', 'sanction', 'ad_review'];
 
     /**
      * 예약 알림(알림함 「예약 · 상담」 탭, 예약 알림 설정을 따른다). 대상 = 예약 번호.
@@ -61,7 +62,7 @@ class Notifications
 
     /** 이전 버전 앱이 모르는 알림 종류(notices=1을 보낸 앱에만 목록에 준다). */
     public const NEW_KINDS = ['artist_review', 'shop_news', 'fit_result', 'review_new', 'review_reply', 'comm_comment', 'comm_like', 'comm_reply',
-        'booking_event', 'booking_remind', 'report_result', 'sanction'];
+        'booking_event', 'booking_remind', 'report_result', 'sanction', 'ad_review'];
 
     /**
      * Phase 5 알림(소셜 알림 설정을 따른다). 목록에는 notices=3 을 보낸 앱에만 준다.
@@ -237,7 +238,7 @@ class Notifications
     {
         if (Validator::make($input, ['filter' => ['nullable', 'in:all,reservation,social,notice'], 'cursor' => ['nullable', 'string', 'max:512'],
             // 5: 운영 제재 안내(sanction)까지 처리하는 앱
-            'notices' => ['nullable', 'in:0,1,2,3,4,5']])->fails()) $this->fail(422, 'INVALID_NOTIFICATIONS', '알림 조회 조건을 확인해주세요.');
+            'notices' => ['nullable', 'in:0,1,2,3,4,5,6']])->fails()) $this->fail(422, 'INVALID_NOTIFICATIONS', '알림 조회 조건을 확인해주세요.');
         $filter = $input['filter'] ?? 'all';
         // 안내 알림을 모르는 이전 앱은 목록 전체를 버리므로 notices=1을 보낸 앱에만 준다.
         // AI 결과 알림(fit_result)은 notices=2 를 보낸 앱에만 준다.
@@ -251,6 +252,8 @@ class Notifications
         if ($level < 4) $q->whereNotIn('n.kind', self::LEVEL4_KINDS);
         // 운영 제재 안내(sanction)는 notices=5 를 보낸 앱에만 준다.
         if ($level < 5) $q->where('n.kind', '<>', 'sanction');
+        // 광고 심사 결과(ad_review)는 notices=6 을 보낸 앱에만 준다.
+        if ($level < 6) $q->where('n.kind', '<>', 'ad_review');
         if ($filter === 'reservation') $q->whereIn('n.kind', self::BOOKING_KINDS);
         elseif ($filter === 'notice') $notices ? $q->whereIn('n.kind', self::NOTICE_KINDS) : $q->whereRaw('1 = 0');
         elseif ($filter === 'social') $q->whereNotIn('n.kind', $notices ? [...self::NOTICE_KINDS, ...self::BOOKING_KINDS] : self::NEW_KINDS);

@@ -14,9 +14,15 @@ use Illuminate\Http\Exceptions\HttpResponseException;
  */
 class Ads
 {
-    /** community_top 커뮤니티 피드 맨 위 카드 · feed_inline 홈(추천) 피드 2번째 게시물 뒤(사진 카드라 이미지 필수) */
-    public const SLOTS = ['community_top', 'feed_inline'];
-    private const IMAGE_REQUIRED = ['feed_inline'];
+    /**
+     * community_top 커뮤니티 피드 맨 위 카드 · feed_inline 홈(추천) 피드 게시물 사이(사진 카드라 이미지 필수)
+     * 작가 광고 전용(ArtistAds): search_top 검색 결과 상단(키워드) · region_top 지역 탐색 상단(상점 지역)
+     * · popular_carousel 발견 인기 작가 줄 첫 자리
+     */
+    public const SLOTS = ['community_top', 'feed_inline', 'search_top', 'region_top', 'popular_carousel'];
+    /** 운영자가 직접 등록 · 구글 광고를 쓰는 자리 */
+    public const ADMIN_SLOTS = ['community_top', 'feed_inline'];
+    private const IMAGE_REQUIRED = ['feed_inline', 'search_top', 'region_top'];
 
     private function db() { return app(ProjectDatabase::class)->database(); }
 
@@ -30,9 +36,11 @@ class Ads
     {
         $saved = app(Settings::class)->json('admob') ?? [];
         $slots = [];
-        foreach (self::SLOTS as $slot) {
+        foreach (self::ADMIN_SLOTS as $slot) {
             $s = $saved['slots'][$slot] ?? [];
-            $slots[$slot] = ['on' => (bool) ($s['on'] ?? false), 'android' => (string) ($s['android'] ?? ''), 'ios' => (string) ($s['ios'] ?? '')];
+            $slots[$slot] = ['on' => (bool) ($s['on'] ?? false), 'android' => (string) ($s['android'] ?? ''), 'ios' => (string) ($s['ios'] ?? ''),
+                // 구글 광고 비율(%): 자체 광고가 있어도 이 비율만큼은 구글 광고를 보여 준다(자체 광고가 없으면 항상 구글)
+                'share' => max(0, min(100, (int) ($s['share'] ?? 50)))];
         }
         return ['enabled' => (bool) ($saved['enabled'] ?? false), 'slots' => $slots];
     }
@@ -47,21 +55,41 @@ class Ads
         return preg_match(self::ADMOB_UNIT, $s[$platform]) ? $s[$platform] : null;
     }
 
-    /** 앱: 이 자리에 보여 줄 광고 1건(없으면 null) + 자체 광고가 없을 때 쓸 구글 광고 단위(admob_unit) */
-    public function pick(string $slot, int $viewer, ?string $platform = null): array
+    /**
+     * 앱: 이 자리에 보여 줄 자체 광고 1건(ad) 또는 구글 광고 단위(admob_unit). 둘 다 없으면 둘 다 null.
+     * 구글 광고를 켠 자리는 「구글 광고 비율」만큼 무작위로 구글 광고, 나머지는 자체 광고(없으면 구글)로 섞는다.
+     * $context: search_top 은 q(검색어), region_top 은 region(지역 코드)으로 맞는 광고만 고른다.
+     */
+    public function pick(string $slot, int $viewer, ?string $platform = null, array $context = []): array
     {
-        $result = $this->pickOwn($slot, $viewer);
-        $result['admob_unit'] = $result['ad'] === null ? $this->admobUnit($slot, $platform) : null;
+        $unit = in_array($slot, self::ADMIN_SLOTS, true) ? $this->admobUnit($slot, $platform) : null;
+        // 구글 광고 차례면 자체 광고를 고르지 않는다(자체 광고 노출 수도 세지 않는다)
+        if ($unit !== null && random_int(1, 100) <= $this->admobConfig()['slots'][$slot]['share']) {
+            return ['ad' => null, 'admob_unit' => $unit];
+        }
+        $result = $this->pickOwn($slot, $viewer, $context);
+        $result['admob_unit'] = $result['ad'] === null ? $unit : null;
         return $result;
     }
 
-    private function pickOwn(string $slot, int $viewer): array
+    /** 검색어 · 키워드 비교: 공백 · # 빼고 소문자 */
+    private static function norm(string $v): string
+    {
+        return mb_strtolower(preg_replace('/[\s#]+/u', '', $v) ?? '', 'UTF-8');
+    }
+
+    private function pickOwn(string $slot, int $viewer, array $context): array
     {
         if (!in_array($slot, self::SLOTS, true)) $this->fail(422, 'INVALID_AD', '광고 자리를 확인해주세요.');
+        $q = self::norm((string) ($context['q'] ?? ''));
+        $region = (string) ($context['region'] ?? '');
+        // 검색 · 지역 자리는 맞는 조건이 없으면 광고를 고르지 않는다
+        if (($slot === 'search_top' && $q === '') || ($slot === 'region_top' && $region === '')) return ['ad' => null];
         $rows = $this->db()->table('starttoo_ads')->where('slot', $slot)->where('active', true)
-            ->where(fn ($q) => $q->whereNull('starts_at')->orWhere('starts_at', '<=', now()))
-            ->where(fn ($q) => $q->whereNull('ends_at')->orWhere('ends_at', '>', now()))
-            ->inRandomOrder()->limit(10)->get();
+            ->where(fn ($w) => $w->whereNull('status')->orWhere('status', 'running'))->whereNull('paused_at')
+            ->where(fn ($w) => $w->whereNull('starts_at')->orWhere('starts_at', '<=', now()))
+            ->where(fn ($w) => $w->whereNull('ends_at')->orWhere('ends_at', '>', now()))
+            ->inRandomOrder()->limit(in_array($slot, ['search_top', 'region_top'], true) ? 50 : 10)->get();
         foreach ($rows as $ad) {
             $u = null;
             if ($ad->artist_id) {
@@ -69,29 +97,49 @@ class Ads
                 $u = $this->db()->table('starttoo_users')->where('id', $ad->artist_id)->first(['status', 'moderation_hidden', 'avatar_path']);
                 if (!$u || $u->status !== 'active' || $u->moderation_hidden || app(Blocks::class)->between($viewer, (int) $ad->artist_id)) continue;
             }
-            // 이미지가 꼭 필요한 자리(홈 피드)인데 이미지가 없으면 건너뛴다
-            if (!$ad->image_path && in_array($slot, self::IMAGE_REQUIRED, true)) continue;
+            // 작가 광고: 작품 사진 · 평점 · 상담 가능 여부(6-08 카드)
+            $extra = $ad->product ? app(ArtistAds::class)->serveExtras($ad, $viewer) : null;
+            if ($slot === 'search_top') {
+                $keywords = array_map(fn ($k) => self::norm((string) $k), json_decode((string) $ad->keywords, true) ?: []);
+                $hit = false;
+                foreach ($keywords as $k) if ($k !== '' && (str_contains($q, $k) || str_contains($k, $q))) $hit = true;
+                if (!$hit) continue;
+            }
+            if ($slot === 'region_top' && ($extra['region'] ?? null) !== $region) continue;
+            $image = $ad->image_path ?: ($extra['image_path'] ?? null);
+            // 이미지가 꼭 필요한 자리(홈 피드 · 검색 · 지역)인데 이미지가 없으면 건너뛴다
+            if (!$image && in_array($slot, self::IMAGE_REQUIRED, true)) continue;
             $this->db()->table('starttoo_ads')->where('id', $ad->id)->increment('impressions');
+            app(ArtistAds::class)->count((int) $ad->id, 'impressions');
             // 신규 노출: 이 회원이 이 광고를 처음 볼 때만 +1(이미 본 회원은 세지 않는다)
             if ($this->db()->table('starttoo_ad_views')->insertOrIgnore(['ad_id' => $ad->id, 'user_id' => $viewer, 'created_at' => now()]) > 0) {
                 $this->db()->table('starttoo_ads')->where('id', $ad->id)->increment('reach');
             }
             return ['ad' => [
                 'id' => (int) $ad->id, 'advertiser' => $ad->advertiser, 'title' => $ad->title,
-                'image_url' => app(MediaUrls::class)->url($ad->image_path, 1200),
+                'image_url' => app(MediaUrls::class)->url($image, 1200),
                 // 홈 피드 카드의 동그란 프로필(작가 광고만)
                 'avatar_url' => $u ? app(MediaUrls::class)->url($u->avatar_path, 300) : null,
                 'artist_id' => $ad->artist_id === null ? null : (int) $ad->artist_id,
                 'link' => $ad->link,
+                'product' => $ad->product,
+                'artwork_id' => $extra['artwork_id'] ?? null,
+                'rating' => $extra['rating'] ?? null,
+                'review_count' => $extra['review_count'] ?? null,
+                'consult_open' => $extra['consult_open'] ?? null,
             ]];
         }
         return ['ad' => null];
     }
 
-    /** 앱: 광고를 눌렀다 */
-    public function click(int $id): array
+    /** 앱: 광고를 눌렀다(작가 광고는 상담 요청 집계를 위해 누른 회원을 남긴다) */
+    public function click(int $id, ?int $viewer = null): array
     {
+        $ad = $this->db()->table('starttoo_ads')->where('id', $id)->first();
+        if (!$ad) return ['ok' => true];
         $this->db()->table('starttoo_ads')->where('id', $id)->increment('clicks');
+        app(ArtistAds::class)->count($id, 'clicks');
+        if ($viewer) app(ArtistAds::class)->clicked($ad, $viewer);
         return ['ok' => true];
     }
 
@@ -128,7 +176,7 @@ class Ads
         $slot = (string) ($in['slot'] ?? '');
         $advertiser = trim((string) ($in['advertiser'] ?? ''));
         $title = trim((string) ($in['title'] ?? ''));
-        if (!in_array($slot, self::SLOTS, true)) throw new \InvalidArgumentException('자리는 '.implode(', ', self::SLOTS).' 중 하나예요.');
+        if (!in_array($slot, self::ADMIN_SLOTS, true)) throw new \InvalidArgumentException('자리는 '.implode(', ', self::ADMIN_SLOTS).' 중 하나예요.');
         if ($advertiser === '' || mb_strlen($advertiser) > 60) throw new \InvalidArgumentException('광고주 이름은 1~60자로 적어주세요.');
         if ($title === '' || mb_strlen($title) > 80) throw new \InvalidArgumentException('광고 문구는 1~80자로 적어주세요.');
         $artist = ($in['artist'] ?? null) ? (int) $in['artist'] : null;

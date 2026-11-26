@@ -40,7 +40,11 @@ class Studios
             'works' => (int) ($counts->works ?? 0), 'designs' => (int) ($counts->designs ?? 0),
             'open_designs' => (int) ($counts->open_designs ?? 0),
             'new_consults' => app(Consultations::class)->newRequestCount($userId),
-        ], 'social' => $social, 'bookings' => app(Bookings::class)->dashboard($userId)];
+        ], 'social' => $social, 'bookings' => app(Bookings::class)->dashboard($userId),
+            // 2-14 「광고」 칸 주홍 점: 지금 노출 중인 내 광고가 있음
+            'ads_running' => $this->db()->table('starttoo_ads')->where('artist_id', $userId)->whereNotNull('product')
+                ->where('status', 'running')->where('active', true)->whereNull('paused_at')
+                ->where('starts_at', '<=', now())->where('ends_at', '>', now())->exists()];
     }
 
     public function update(int $userId, array $input): array

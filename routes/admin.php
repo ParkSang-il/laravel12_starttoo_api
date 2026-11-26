@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminAiController;
 use App\Http\Controllers\Admin\AdminAppVersionController;
+use App\Http\Controllers\Admin\AdminArtistAdsController;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminCommsController;
 use App\Http\Controllers\Admin\AdminController;
@@ -46,6 +47,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('ads/{id}/toggle', [AdminController::class, 'toggleAd'])->whereNumber('id')->name('ads.toggle');
         Route::post('ads', [AdminController::class, 'storeAd'])->name('ads.store');
         Route::post('ads/admob', [AdminController::class, 'saveAdmob'])->name('ads.admob');
+        // 작가가 앱에서 신청한 광고: 심사(승인 · 반려) · 상품 설정
+        Route::post('ads/artist/products', [AdminArtistAdsController::class, 'products'])->name('ads.artist.products');
+        Route::post('ads/artist/{id}/approve', [AdminArtistAdsController::class, 'approve'])->whereNumber('id')->name('ads.artist.approve');
+        Route::post('ads/artist/{id}/reject', [AdminArtistAdsController::class, 'reject'])->whereNumber('id')->name('ads.artist.reject');
         Route::post('ads/{id}', [AdminController::class, 'updateAd'])->whereNumber('id')->name('ads.update');
 
         Route::get('settings', [AdminController::class, 'settings'])->name('settings');

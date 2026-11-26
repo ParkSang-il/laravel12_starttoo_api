@@ -306,7 +306,7 @@ class AdminController extends AdminBaseController
 
     // ================================================================ M-08 광고
 
-    private const SLOT_LABELS = ['community_top' => '커뮤니티 맨 위', 'feed_inline' => '홈 피드 · 2~6번째 게시물 사이 무작위'];
+    private const SLOT_LABELS = ['community_top' => '커뮤니티 맨 위', 'feed_inline' => '홈 피드 · 불러온 묶음마다 1개 무작위 위치'];
 
     public function ads(Request $request): View
     {
@@ -315,13 +315,22 @@ class AdminController extends AdminBaseController
         $canManage = $this->can($request, 'ads.manage');
         $slots = $rows->map(function ($ad) use ($canManage) {
             $live = $ad->active && (!$ad->starts_at || now()->gte($ad->starts_at)) && (!$ad->ends_at || now()->lt($ad->ends_at));
+            // 작가 광고(product): 심사 중 · 반려 · 작가 종료 · 작가가 멈춤. 내용은 작가가 앱에서 고치고 운영자는 심사만 한다.
+            $artistAd = ($ad->product ?? null) !== null;
             [$state, $kind] = match (true) {
+                $artistAd && $ad->status === 'reviewing' => ['심사 중', 'blue'],
+                $artistAd && $ad->status === 'rejected' => ['반려', 'red'],
+                $artistAd && $ad->status === 'ended' => ['작가 종료', 'gray'],
+                $artistAd && $ad->paused_at !== null => ['작가가 멈춤', 'gray'],
                 !$ad->active => ['중지', 'gray'],
                 $ad->ends_at && now()->gte($ad->ends_at) => ['기간 종료', 'gray'],
                 $ad->starts_at && now()->lt($ad->starts_at) => ['노출 예정', 'blue'],
                 default => ['노출 중', 'green'],
             };
-            $where = self::SLOT_LABELS[$ad->slot] ?? $ad->slot;
+            $where = $artistAd
+                ? '작가 광고 · ' . (\App\Services\Starttoo\ArtistAds::PRODUCTS[$ad->product]['name'] ?? $ad->product)
+                : (self::SLOT_LABELS[$ad->slot] ?? $ad->slot);
+            $canSwitch = $canManage && (!$artistAd || ($ad->status === 'running' && $ad->paused_at === null));
             return [
                 'where' => $where,
                 'who' => $ad->advertiser . ($ad->artist_nickname ? ' · ' . $ad->artist_nickname : ''),
@@ -333,11 +342,11 @@ class AdminController extends AdminBaseController
                 'reach' => number_format((int) ($ad->reach ?? 0)),
                 'ctr' => (int) ($ad->reach ?? 0) > 0 ? number_format((int) $ad->clicks / (int) $ad->reach * 100, 1) . '%' : '-',
                 'on' => (bool) $ad->active, 'state' => $state, 'pill' => Ui::pill($kind),
-                'aria' => "{$where} · {$ad->title} 노출", 'canToggle' => $canManage,
+                'aria' => "{$where} · {$ad->title} 노출", 'canToggle' => $canSwitch,
                 'action' => route('admin.ads.toggle', $ad->id),
-                'editHref' => $canManage ? Ui::url(['sel' => $ad->id]) : null,
+                'editHref' => $canManage && !$artistAd ? Ui::url(['sel' => $ad->id]) : null,
                 'rowStyle' => Ui::rowBg((string) request()->query('sel') === (string) $ad->id),
-                'track' => Ui::switchTrack((bool) $ad->active, !$canManage),
+                'track' => Ui::switchTrack((bool) $ad->active, !$canSwitch),
                 'knob' => 'width: 20px; height: 20px; border-radius: 50%; background: #FFFFFF; display: block',
                 'live' => $live,
             ];
@@ -346,10 +355,13 @@ class AdminController extends AdminBaseController
         // 등록 · 수정 패널: ?sel=광고번호 · ?sel=new
         $isNew = $request->query('sel') === 'new';
         $edit = !$isNew && ctype_digit((string) $request->query('sel', '')) ? $rows->firstWhere('id', (int) $request->query('sel')) : null;
+        if ($edit && ($edit->product ?? null) !== null) $edit = null; // 작가 광고는 운영자가 고치지 않는다
         $fmt = fn ($at) => $at ? Carbon::parse($at)->format('Y-m-d') : '';
         $admob = app(Ads::class)->admobConfig();
         return view('admin.ads', [
             'slots' => $slots,
+            // 작가 광고 심사 · 상품 설정(AdminArtistAdsController)
+            ...AdminArtistAdsController::viewData($canManage),
             // 구글 광고(AdMob): 자체 광고가 없을 때 같은 자리를 채운다
             'admob' => $admob, 'admobOn' => $admob['enabled'],
             'admobTrack' => Ui::switchTrack($admob['enabled'], !$canManage), 'knob' => Ui::KNOB,
@@ -378,18 +390,20 @@ class AdminController extends AdminBaseController
     {
         $this->need($request, 'ads.manage');
         $rules = ['enabled' => ['nullable', 'boolean']];
-        foreach (Ads::SLOTS as $slot) {
+        foreach (Ads::ADMIN_SLOTS as $slot) {
             $rules["slots.$slot.on"] = ['nullable', 'boolean'];
             $rules["slots.$slot.android"] = ['nullable', 'string', 'regex:' . Ads::ADMOB_UNIT];
             $rules["slots.$slot.ios"] = ['nullable', 'string', 'regex:' . Ads::ADMOB_UNIT];
+            $rules["slots.$slot.share"] = ['nullable', 'integer', 'min:0', 'max:100'];
         }
         $data = $request->validate($rules, ['*.regex' => '광고 단위 ID 모양을 확인해주세요(ca-app-pub-숫자16자리/숫자10자리).',
             'slots.*.*.regex' => '광고 단위 ID 모양을 확인해주세요(ca-app-pub-숫자16자리/숫자10자리).']);
         $before = app(Ads::class)->admobConfig();
         $value = ['enabled' => (bool) ($data['enabled'] ?? false), 'slots' => []];
-        foreach (Ads::SLOTS as $slot) {
+        foreach (Ads::ADMIN_SLOTS as $slot) {
             $s = $data['slots'][$slot] ?? [];
-            $value['slots'][$slot] = ['on' => (bool) ($s['on'] ?? false), 'android' => trim((string) ($s['android'] ?? '')), 'ios' => trim((string) ($s['ios'] ?? ''))];
+            $value['slots'][$slot] = ['on' => (bool) ($s['on'] ?? false), 'android' => trim((string) ($s['android'] ?? '')), 'ios' => trim((string) ($s['ios'] ?? '')),
+                'share' => (int) ($s['share'] ?? 50)];
         }
         app(\App\Services\Starttoo\Settings::class)->set('admob', $value, (int) $this->admin($request)->id);
         $this->audit($request, '설정', '구글 광고 설정 저장', '광고 · 프리미엄 · ' . ($value['enabled'] ? '켜짐' : '꺼짐'), ['before' => $before, 'after' => $value]);

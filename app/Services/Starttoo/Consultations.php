@@ -132,6 +132,9 @@ class Consultations
                 $this->db()->table('starttoo_consultations')->where('id', $room->id)->update(['current_case_id' => $caseId, 'status' => 'requested']);
                 $room->current_case_id = $caseId;
                 $room->status = 'requested';
+                // 7일 안에 이 작가 광고를 누르고 들어온 상담이면 광고 성과(상담 요청)로 센다
+                try { app(ArtistAds::class)->lead((int) $room->customer_id, (int) $room->artist_id, (int) $caseId); }
+                catch (\Throwable $e) { report($e); }
             } else {
                 $caseId = (int) $case->id;
             }

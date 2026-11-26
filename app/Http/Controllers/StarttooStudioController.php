@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Starttoo\ArtistAds;
 use App\Services\Starttoo\AuthSessions;
 use App\Services\Starttoo\KakaoLocal;
 use App\Services\Starttoo\Studios;
@@ -10,6 +11,48 @@ use Illuminate\Http\Request;
 /** 2-14·2-15·2-16 아티스트 스튜디오(승인된 아티스트 전용). */
 class StarttooStudioController extends Controller
 {
+    // ── 6-05 ~ 6-09 광고 ──
+
+    public function ads(Request $request, Studios $studios, AuthSessions $sessions, ArtistAds $ads)
+    {
+        return $this->json($ads->list($this->artist($request, $sessions, $studios)));
+    }
+
+    public function adProducts(Request $request, Studios $studios, AuthSessions $sessions, ArtistAds $ads)
+    {
+        return $this->json($ads->products($this->artist($request, $sessions, $studios)));
+    }
+
+    public function createAd(Request $request, Studios $studios, AuthSessions $sessions, ArtistAds $ads)
+    {
+        return $this->json($ads->create($this->artist($request, $sessions, $studios), $request->all()));
+    }
+
+    public function ad(Request $request, int $ad, Studios $studios, AuthSessions $sessions, ArtistAds $ads)
+    {
+        return $this->json($ads->detail($this->artist($request, $sessions, $studios), $ad));
+    }
+
+    public function editAd(Request $request, int $ad, Studios $studios, AuthSessions $sessions, ArtistAds $ads)
+    {
+        return $this->json($ads->edit($this->artist($request, $sessions, $studios), $ad, $request->all()));
+    }
+
+    public function pauseAd(Request $request, int $ad, Studios $studios, AuthSessions $sessions, ArtistAds $ads)
+    {
+        return $this->json($ads->pause($this->artist($request, $sessions, $studios), $ad, $request->boolean('paused')));
+    }
+
+    public function extendAd(Request $request, int $ad, Studios $studios, AuthSessions $sessions, ArtistAds $ads)
+    {
+        return $this->json($ads->extend($this->artist($request, $sessions, $studios), $ad, $request->input('days')));
+    }
+
+    public function endAd(Request $request, int $ad, Studios $studios, AuthSessions $sessions, ArtistAds $ads)
+    {
+        return $this->json($ads->end($this->artist($request, $sessions, $studios), $ad));
+    }
+
     public function dashboard(Request $request, Studios $studios, AuthSessions $sessions)
     {
         return $this->json($studios->dashboard($this->artist($request, $sessions, $studios)));

@@ -25,6 +25,15 @@ Route::prefix('v1/projects/starttoo/studio')->middleware([StarttooDatabase::clas
     Route::get('news', [StarttooShopController::class, 'myNews']);
     Route::post('news', [StarttooShopController::class, 'createNews'])->middleware('throttle:20,1,studio-news');
     Route::post('news/{news}/delete', [StarttooShopController::class, 'deleteNews'])->whereNumber('news');
+    // 6-05 ~ 6-09 광고(신청 → 운영 콘솔 심사 → 승인되면 노출)
+    Route::get('ads', [StarttooStudioController::class, 'ads']);
+    Route::get('ads/products', [StarttooStudioController::class, 'adProducts']);
+    Route::post('ads', [StarttooStudioController::class, 'createAd'])->middleware('throttle:20,1,studio-ads');
+    Route::get('ads/{ad}', [StarttooStudioController::class, 'ad'])->whereNumber('ad');
+    Route::post('ads/{ad}', [StarttooStudioController::class, 'editAd'])->whereNumber('ad')->middleware('throttle:20,1,studio-ads');
+    Route::post('ads/{ad}/pause', [StarttooStudioController::class, 'pauseAd'])->whereNumber('ad')->middleware('throttle:30,1,studio-ads-state');
+    Route::post('ads/{ad}/extend', [StarttooStudioController::class, 'extendAd'])->whereNumber('ad')->middleware('throttle:30,1,studio-ads-state');
+    Route::post('ads/{ad}/end', [StarttooStudioController::class, 'endAd'])->whereNumber('ad')->middleware('throttle:30,1,studio-ads-state');
 });
 
 // 2-07~2-11 고객용 상점

@@ -48,6 +48,76 @@
       </div>
     </section>
 
+    {{-- 작가 광고 심사: 앱 「스튜디오 → 광고」에서 작가가 신청 · 변경 요청한 광고. 승인하면 바로 노출(결제는 Phase 6) --}}
+    <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; overflow: hidden">
+      <div style="padding: 18px 20px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-size: 17px; font-weight: 700">작가 광고 심사</h2>
+          <span style="font-size: 13px; color: #66625B">승인하면 바로 노출돼요(한 달 상품은 다음 달 1일부터). 가격 할인 · 시술 효과 보장 표현은 반려해요. 결과는 작가에게 알림으로 가요.</span>
+        </div>
+        <span style="{{ \App\Support\AdminUi::pill(count($queue) ? 'blue' : 'gray') }}">대기 {{ count($queue) }}건</span>
+      </div>
+      @forelse ($queue as $q)
+        <article style="padding: 16px 20px; border-top: 1px solid #F0EDE7; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+          @if ($q['image'])
+            <img src="{{ $q['image'] }}" alt="광고 작품" style="width: 72px; height: 90px; object-fit: cover; border-radius: 8px; border: 1px solid #E4E0D8; flex: none">
+          @else
+            <div style="width: 72px; height: 90px; border-radius: 8px; background: #F0EDE7; flex: none"></div>
+          @endif
+          <div style="flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center">
+              <span style="{{ \App\Support\AdminUi::pill($q['kind'] === 'change' ? 'amber' : 'blue') }}">{{ $q['kind'] === 'change' ? '문구 · 작품 변경' : '새 신청' }}</span>
+              <strong style="font-size: 14px">{{ $q['product'] }}</strong>
+              <span style="font-size: 12px; color: #66625B">#{{ $q['id'] }} · {{ $q['when'] }} 신청</span>
+            </div>
+            <div style="font-size: 15px; font-weight: 700">“{{ $q['title'] }}”</div>
+            @if ($q['before'])
+              <div style="font-size: 12px; color: #66625B">지금 문구: “{{ $q['before'] }}”</div>
+            @endif
+            <div style="font-size: 13px; color: #3A3731">
+              @if ($q['shopHref'])<a href="{{ $q['shopHref'] }}" target="_blank" rel="noopener" style="color: #141413; text-decoration: underline; text-underline-offset: 3px">{{ $q['advertiser'] }}</a>@else{{ $q['advertiser'] }}@endif
+              · {{ $q['artist'] }} · {{ $q['period'] }} · 예상 광고비 ₩{{ number_format($q['amount']) }}
+              @if ($q['keywords']) · 키워드 {{ collect($q['keywords'])->map(fn ($k) => '#' . $k)->join(' ') }}@endif
+            </div>
+          </div>
+          @if ($canReview)
+            <div style="flex: 1 1 280px; display: flex; flex-direction: column; gap: 8px">
+              <form method="POST" action="{{ $q['approve'] }}" style="display: contents">@csrf
+                <button type="submit" style="height: 40px; border-radius: 10px; font-size: 14px; font-weight: 700; border: 0; background: #141413; color: #FFFFFF">{{ $q['kind'] === 'change' ? '변경 승인' : '승인 · 노출 시작' }}</button>
+              </form>
+              <form method="POST" action="{{ $q['reject'] }}" style="display: flex; gap: 8px">@csrf
+                <input name="reason" required maxlength="300" placeholder="반려 사유(작가에게 보여요)" aria-label="광고 #{{ $q['id'] }} 반려 사유" style="flex: 1; min-width: 0; height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 13px; color: #141413; background: #FFFFFF; box-sizing: border-box">
+                <button type="submit" style="height: 40px; padding: 0 14px; border-radius: 10px; font-size: 14px; font-weight: 700; border: 1px solid #E8C2B8; background: #FFFFFF; color: #B3261E">반려</button>
+              </form>
+            </div>
+          @endif
+        </article>
+      @empty
+        <div style="padding: 24px 20px; border-top: 1px solid #F0EDE7; font-size: 14px; color: #66625B; text-align: center">심사할 작가 광고가 없어요.</div>
+      @endforelse
+    </section>
+
+    {{-- 작가 광고 상품: 앱 「광고 만들기 1/3」에 보이는 위치 · 단가 · 자리 수 --}}
+    <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <h2 style="margin: 0; font-size: 17px; font-weight: 700">작가 광고 상품</h2>
+        <span style="font-size: 13px; color: #66625B">단가는 부가세 별도이고 지금은 앱에 「예상 광고비」로만 안내해요(결제는 Phase 6). 자리 수 0은 제한 없음, 한 달 상품은 한 달에 받을 수 있는 광고 수예요.</span>
+      </div>
+      <form method="POST" action="{{ $productsAction }}" style="display: flex; flex-direction: column; gap: 10px">
+        @csrf
+        @foreach ($products as $id => $p)
+          <div style="padding: 14px; border-radius: 12px; background: #F7F5F1; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end">
+            <label style="flex: 1 1 200px; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; min-height: 40px"><input type="hidden" name="products[{{ $id }}][on]" value="0"><input type="checkbox" name="products[{{ $id }}][on]" value="1" @checked(old("products.$id.on", $p['on'])) @disabled(! $canReview) style="width: 18px; height: 18px; margin: 0; accent-color: #141413">{{ $p['name'] }} <span style="font-weight: 400; color: #66625B">· {{ $p['unit'] === 'month' ? '한 달' : '하루' }} 단위</span></label>
+            <label style="flex: 0 1 160px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">{{ $p['unit'] === 'month' ? '한 달' : '하루' }} 단가(원)</span><input type="number" name="products[{{ $id }}][price]" min="0" max="100000000" step="1000" value="{{ old("products.$id.price", $p['price']) }}" @disabled(! $canReview) style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+            <label style="flex: 0 1 120px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">자리 수</span><input type="number" name="products[{{ $id }}][capacity]" min="0" max="1000" value="{{ old("products.$id.capacity", $p['capacity']) }}" @disabled(! $canReview) style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+          </div>
+        @endforeach
+        @if ($canReview)
+          <div style="display: flex; justify-content: flex-end"><button type="submit" style="height: 40px; padding: 0 20px; border-radius: 10px; font-size: 14px; font-weight: 700; border: 0; background: #141413; color: #FFFFFF">저장</button></div>
+        @endif
+      </form>
+    </section>
+
     {{-- 구글 광고(AdMob): 자체 광고가 없을 때 같은 자리를 채운다 --}}
     <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
       <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px">
@@ -61,13 +131,15 @@
         @csrf
         <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700"><input type="hidden" name="enabled" value="0"><input type="checkbox" name="enabled" value="1" @checked(old('enabled', $admobOn)) @disabled(! $canManage) style="width: 18px; height: 18px; margin: 0; accent-color: #141413">구글 광고 사용</label>
         @foreach ($slotOptions as $slot => $label)
-          @php $s = $admob['slots'][$slot] ?? ['on' => false, 'android' => '', 'ios' => '']; @endphp
+          @php $s = $admob['slots'][$slot] ?? ['on' => false, 'android' => '', 'ios' => '', 'share' => 50]; @endphp
           <div style="padding: 14px; border-radius: 12px; background: #F7F5F1; display: flex; flex-direction: column; gap: 10px">
             <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700"><input type="hidden" name="slots[{{ $slot }}][on]" value="0"><input type="checkbox" name="slots[{{ $slot }}][on]" value="1" @checked(old("slots.$slot.on", $s['on'])) @disabled(! $canManage) style="width: 18px; height: 18px; margin: 0; accent-color: #141413">{{ $label }}</label>
             <div style="display: flex; flex-wrap: wrap; gap: 10px">
               <label style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">Android 광고 단위 ID</span><input name="slots[{{ $slot }}][android]" value="{{ old("slots.$slot.android", $s['android']) }}" placeholder="ca-app-pub-0000000000000000/0000000000" @disabled(! $canManage) style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 13px; font-family: ui-monospace, Menlo, monospace; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
               <label style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">iOS 광고 단위 ID</span><input name="slots[{{ $slot }}][ios]" value="{{ old("slots.$slot.ios", $s['ios']) }}" placeholder="ca-app-pub-0000000000000000/0000000000" @disabled(! $canManage) style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 13px; font-family: ui-monospace, Menlo, monospace; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+              <label style="flex: 0 0 140px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">구글 광고 비율(%)</span><input type="number" name="slots[{{ $slot }}][share]" value="{{ old("slots.$slot.share", $s['share']) }}" min="0" max="100" step="5" @disabled(! $canManage) style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 13px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
             </div>
+            <span style="font-size: 12px; color: #66625B">광고 칸마다 이 비율만큼 구글 광고, 나머지는 자체 광고를 무작위로 보여 줘요. 자체 광고가 없으면 항상 구글 광고예요(0 = 자체 광고 우선, 100 = 구글 광고만).</span>
           </div>
         @endforeach
         <div style="display: flex; gap: 8px; align-items: center">

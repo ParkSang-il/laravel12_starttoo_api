@@ -13,13 +13,14 @@ class StarttooAdController extends Controller
     public function show(Request $r, Ads $ads, AuthSessions $s, Artworks $a)
     {
         // 앱이 보내는 X-App-Platform(ios · android)으로 구글 광고 단위를 고른다
-        return $this->json($ads->pick((string) $r->query('slot'), $this->viewer($r, $s, $a), $r->header('X-App-Platform')));
+        // 검색 결과 상단은 q(검색어), 지역 탐색 상단은 region(지역 코드)에 맞는 작가 광고만 준다
+        $context = ['q' => mb_substr((string) $r->query('q', ''), 0, 80), 'region' => mb_substr((string) $r->query('region', ''), 0, 40)];
+        return $this->json($ads->pick((string) $r->query('slot'), $this->viewer($r, $s, $a), $r->header('X-App-Platform'), $context));
     }
 
     public function click(Request $r, int $ad, Ads $ads, AuthSessions $s, Artworks $a)
     {
-        $this->viewer($r, $s, $a);
-        return $this->json($ads->click($ad));
+        return $this->json($ads->click($ad, $this->viewer($r, $s, $a)));
     }
 
     private function viewer(Request $request, AuthSessions $sessions, Artworks $artworks): int
