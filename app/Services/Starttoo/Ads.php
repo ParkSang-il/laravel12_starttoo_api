@@ -85,10 +85,13 @@ class Ads
         $region = (string) ($context['region'] ?? '');
         // 검색 · 지역 자리는 맞는 조건이 없으면 광고를 고르지 않는다
         if (($slot === 'search_top' && $q === '') || ($slot === 'region_top' && $region === '')) return ['ad' => null];
+        // 같은 피드에서 이 회원에게 이미 보여 준 광고(앱이 보낸 exclude)는 다시 고르지 않는다
+        $exclude = array_values(array_filter(array_map('intval', (array) ($context['exclude'] ?? [])), fn ($id) => $id > 0));
         $rows = $this->db()->table('starttoo_ads')->where('slot', $slot)->where('active', true)
             ->where(fn ($w) => $w->whereNull('status')->orWhere('status', 'running'))->whereNull('paused_at')
             ->where(fn ($w) => $w->whereNull('starts_at')->orWhere('starts_at', '<=', now()))
             ->where(fn ($w) => $w->whereNull('ends_at')->orWhere('ends_at', '>', now()))
+            ->when($exclude, fn ($w) => $w->whereNotIn('id', $exclude))
             ->inRandomOrder()->limit(in_array($slot, ['search_top', 'region_top'], true) ? 50 : 10)->get();
         foreach ($rows as $ad) {
             $u = null;
