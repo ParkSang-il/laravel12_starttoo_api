@@ -38,19 +38,32 @@ class UserPreferences
         return (bool) app(ProjectDatabase::class)->database()->table('starttoo_user_preferences')->where('user_id', $user)->value('privateSave');
     }
 
-    /** 개발용 초안 동의를 실제 광고 수신 동의로 사용하지 않는다. */
+    /**
+     * 광고 수신 동의 여부(최근 선택 기준, 거부 · 미동의는 항상 제외).
+     * 초안 약관에 한 동의는 정식 약관을 쓰기 전까지만 인정한다:
+     * 약관 버전이 초안(…-draft)인 동안 또는 .env STARTTOO_MARKETING_DRAFT_CONSENT=true 일 때.
+     * 정식 약관을 발행해 버전에서 -draft 가 빠지면 초안 동의는 자동으로 빠진다.
+     */
     public function marketingEligible(int $user): bool
     {
         $db = app(ProjectDatabase::class)->database();
+        $allowDraft = $this->draftConsentAllowed();
         $change = $db->table('starttoo_marketing_choices')->where('user_id', $user)->orderByDesc('recorded_at')->orderByDesc('id')->first();
         $signup = $db->table('starttoo_consent_records as r')->join('starttoo_consent_submissions as s', 's.id', '=', 'r.submission_id')
             ->where('s.user_id', $user)->where('r.document_id', 'marketing')->orderByDesc('r.recorded_at')->orderByDesc('r.id')
             ->first(['r.accepted', 'r.recorded_at', 's.is_draft']);
         if ($change && (!$signup || $change->recorded_at >= $signup->recorded_at)) {
             $snapshot = json_decode($change->document_snapshot ?? 'null', true);
-            return (bool) $change->accepted && is_array($snapshot) && ($snapshot['is_draft'] ?? true) === false;
+            return (bool) $change->accepted && is_array($snapshot) && ($allowDraft || ($snapshot['is_draft'] ?? true) === false);
         }
-        return $signup && (bool) $signup->accepted && !$signup->is_draft;
+        return $signup && (bool) $signup->accepted && ($allowDraft || !$signup->is_draft);
+    }
+
+    private function draftConsentAllowed(): bool
+    {
+        $flag = config('starttoo.marketing_draft_consent');
+        if ($flag !== null && $flag !== '') return filter_var($flag, FILTER_VALIDATE_BOOLEAN);
+        return str_ends_with((string) config('starttoo.terms_version'), '-draft');
     }
 
     public function change(int $user, array $input): array
