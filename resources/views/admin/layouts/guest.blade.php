@@ -6,11 +6,11 @@
 <meta name="robots" content="noindex, nofollow">
 <title>@yield('title') · STARTTOO 운영 콘솔</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Unbounded:wght@500;700;800&display=swap">
-<link rel="stylesheet" href="{{ asset('admin-assets/admin.css') }}">
+<link rel="stylesheet" href="{{ asset('admin-assets/admin.css') }}?v={{ @filemtime(public_path('admin-assets/admin.css')) }}">
 </head>
 <body>
 @yield('content')
 @include('admin.partials.flash')
-<script src="{{ asset('admin-assets/admin.js') }}" defer></script>
+<script src="{{ asset('admin-assets/admin.js') }}?v={{ @filemtime(public_path('admin-assets/admin.js')) }}" defer></script>
 </body>
 </html>

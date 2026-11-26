@@ -38,9 +38,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const key = input.dataset.preview;
     const out = document.querySelector('[data-preview-out="' + key + '"]');
     if (!out) return;
-    const prefix = key === 'title' ? '(광고) ' : 'STARTTOO ';
+    // 앞에 붙는 글자(광고성: 「(광고) 」 · 「STARTTOO 」, 정보성: 없음)는 화면이 data-prefix 로 알려 준다
+    const prefix = out.dataset.prefix || '';
     const fallback = key === 'title' ? '제목' : '내용';
-    input.addEventListener('input', () => { out.textContent = prefix + (input.value.trim() || fallback); });
+    const update = () => { out.textContent = prefix + (input.value.trim() || fallback); };
+    input.addEventListener('input', update);
+    input.addEventListener('change', update);
+    update();
   });
 
   // 처리 결과 토스트 자동 숨김

@@ -6,7 +6,7 @@
     <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
       <div style="display: flex; flex-direction: column; gap: 6px">
         <h1 style="margin: 0; font-size: 26px; font-weight: 900; letter-spacing: -0.5px">알림 · 푸시 발송</h1>
-        <p style="margin: 0; font-size: 14px; color: #66625B">이벤트 · 혜택(광고성) 푸시를 보내고, 서비스 자동 알림 상태를 확인해요.</p>
+        <p style="margin: 0; font-size: 14px; color: #66625B">공지 · 이벤트 푸시를 보내고, 서비스 자동 알림 상태를 확인해요.</p>
       </div>
     </header>
     <section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 14px">
@@ -23,10 +23,10 @@
         <h2 style="margin: 0; font-size: 17px; font-weight: 700">새 푸시 보내기</h2>
         <div style="display: flex; flex-direction: column; gap: 8px">
           <span style="font-size: 13px; font-weight: 700; color: #3A3731">유형</span>
-          <div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="btn-a" style="{{ \App\Support\AdminUi::chip(true) }}">광고성</span></div>
-          <span style="font-size: 12px; color: #66625B; line-height: 1.5">제목 앞에 (광고)가 자동으로 붙고, 수신 동의자에게만 보내요. 끝에 수신 거부 방법이 들어가요.</span>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px">@foreach ($types as $t)<a href="{{ $t['href'] }}" class="btn-a" style="{{ $t['style'] }}">{{ $t['label'] }}</a>@endforeach</div>
+          <span style="font-size: 12px; color: #66625B; line-height: 1.5">{{ $typeNote }}</span>
         </div>
-        <label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">제목</span><input name="title" form="f-send" required maxlength="45" value="{{ $title }}" data-preview="title" style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+        <label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">제목</span><input name="title" form="f-send" required maxlength="{{ $titleMax }}" value="{{ $title }}" data-preview="title" style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
         <label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">내용</span><textarea name="body" form="f-send" required maxlength="500" rows="3" data-preview="body" style="border-radius: 10px; border: 1px solid #D9D4CB; padding: 12px; font-size: 14px; line-height: 1.5; resize: vertical; color: #141413; box-sizing: border-box; width: 100%">{{ $body }}</textarea></label>
         <div style="display: flex; flex-direction: column; gap: 8px">
           <span style="font-size: 13px; font-weight: 700; color: #3A3731">받는 사람</span>
@@ -44,7 +44,7 @@
           <div style="border-radius: 12px; background: #ECEAE5; color: #55524C; padding: 12px 14px; font-size: 13px; line-height: 1.5">{{ $blocked }}</div>
         @endif
         @if ($canSend)
-          <button type="submit" form="f-send" data-confirm="광고 푸시를 보낼까요? 보낸 뒤에는 남은 발송만 취소할 수 있어요." style="height: 40px; padding: 0 16px; border-radius: 10px; font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: #141413; color: #FFFFFF">{{ $sendLabel }}</button>
+          <button type="submit" form="f-send" data-confirm="{{ $info ? '앱 알림을 켠 모든 회원에게 정보성 푸시를 보낼까요? 광고 내용이 없는지 확인해주세요.' : '광고 푸시를 보낼까요?' }} 보낸 뒤에는 남은 발송만 취소할 수 있어요." style="height: 40px; padding: 0 16px; border-radius: 10px; font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: #141413; color: #FFFFFF">{{ $sendLabel }}</button>
         @endif
       </div>
       <div style="flex: 2 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
@@ -52,7 +52,7 @@
           <span style="font-size: 12px; color: #BDB8B0; text-align: center">미리보기 · 잠금 화면</span>
           <div style="border-radius: 16px; background: rgba(255,255,255,0.92); padding: 12px 14px; display: flex; gap: 10px">
             <span style="width: 32px; height: 32px; border-radius: 8px; background: #0E0E0F; color: #FFFFFF; font-family: Unbounded, 'Arial Black', sans-serif; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0">ST.</span>
-            <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="display: flex; justify-content: space-between; font-size: 12px; color: #55524C"><b style="color: #141413">STARTTOO</b><span>지금</span></span><span data-preview-out="title" style="font-size: 13px; font-weight: 700">(광고) {{ $title !== '' ? $title : '제목' }}</span><span data-preview-out="body" style="font-size: 12px; color: #3A3731; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical">STARTTOO {{ $body !== '' ? $body : '내용' }}</span></span>
+            <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="display: flex; justify-content: space-between; font-size: 12px; color: #55524C"><b style="color: #141413">STARTTOO</b><span>지금</span></span><span data-preview-out="title" data-prefix="{{ $info ? '' : '(광고) ' }}" style="font-size: 13px; font-weight: 700">{{ $info ? '' : '(광고) ' }}{{ $title !== '' ? $title : '제목' }}</span><span data-preview-out="body" data-prefix="{{ $info ? '' : 'STARTTOO ' }}" style="font-size: 12px; color: #3A3731; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical">{{ $info ? '' : 'STARTTOO ' }}{{ $body !== '' ? $body : '내용' }}</span></span>
           </div>
         </div>
         <div style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; overflow: hidden">
@@ -91,5 +91,5 @@
         </div>
     </section>
   </div>
-    <form id="f-send" method="POST" action="{{ $sendAction }}" hidden>@csrf<input type="hidden" name="target" value="{{ $target }}"></form>
+    <form id="f-send" method="POST" action="{{ $sendAction }}" hidden>@csrf<input type="hidden" name="type" value="{{ $type }}"><input type="hidden" name="target" value="{{ $target }}"></form>
 @endsection

@@ -9,15 +9,32 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
-/** 서버 운영자 CLI 전용. 수신자 전체를 메모리나 큐에 한 번에 올리지 않는다. */
+/**
+ * 푸시 캠페인(서버 명령 · 운영 콘솔). 수신자 전체를 메모리나 큐에 한 번에 올리지 않는다.
+ * kind: marketing 광고성((광고) · 수신 동의자 · 09~20시) · info 정보성(앱 알림을 켠 모든 정상 회원 · 시간 제한 없음)
+ */
 class PushCampaigns
 {
     private function db() { return app(ProjectDatabase::class)->database(); }
 
+    private static function isInfo(object $c): bool
+    {
+        return ($c->kind ?? 'marketing') === 'info';
+    }
+
+    /** 정보성은 푸시만, 광고성은 광고 푸시 설정까지 켜져 있어야 한다 */
+    private static function enabled(bool $info): bool
+    {
+        return config('starttoo.push_enabled') && ($info || config('starttoo.marketing_push_enabled'));
+    }
+
     public function create(array $input): string
     {
+        $info = ($input['kind'] ?? 'marketing') === 'info';
         $v = Validator::make($input, [
-            'title' => ['required', 'string', 'max:45'], 'body' => ['required', 'string', 'max:600'], 'sender' => ['required', 'string', 'max:50'],
+            'kind' => ['sometimes', 'in:marketing,info'],
+            'title' => ['required', 'string', 'max:'.($info ? 60 : 45)], 'body' => ['required', 'string', 'max:600'],
+            'sender' => [$info ? 'nullable' : 'required', 'string', 'max:50'],
             'target_type' => ['required', 'in:home,settings,artwork,post'], 'target_id' => ['nullable', 'required_if:target_type,artwork,post', 'uuid'],
             'user_ids' => ['nullable', 'array', 'min:1', 'max:1000'], 'user_ids.*' => ['integer', 'min:1', 'distinct'],
             'per_minute' => ['sometimes', 'integer', 'min:1', 'max:6000'],
@@ -31,8 +48,9 @@ class PushCampaigns
         }
         $id = (string) Str::uuid();
         $this->db()->table('starttoo_push_campaigns')->insert([
-            'id' => $id, 'title' => '(광고) '.$input['title'],
-            'body' => $input['sender']."\n".$input['body']."\n수신거부: 앱 > 알림 · 개인정보 설정 > 이벤트 · 혜택",
+            'id' => $id, 'kind' => $info ? 'info' : 'marketing',
+            'title' => $info ? $input['title'] : '(광고) '.$input['title'],
+            'body' => $info ? $input['body'] : $input['sender']."\n".$input['body']."\n수신거부: 앱 > 알림 · 개인정보 설정 > 이벤트 · 혜택",
             'target_type' => $input['target_type'], 'target_id' => in_array($input['target_type'], ['post', 'artwork'], true) ? $input['target_id'] : null,
             'user_ids' => isset($input['user_ids']) ? json_encode($input['user_ids'], JSON_THROW_ON_ERROR) : null,
             'per_minute' => $input['per_minute'] ?? 300, 'created_at' => now(),
@@ -50,7 +68,7 @@ class PushCampaigns
             if (in_array($c->state, ['cancelled', 'completed'], true)) throw new \InvalidArgumentException('종료된 캠페인은 다시 시작할 수 없어요.');
             if ($action === 'start') {
                 if ($c->state === 'running') return;
-                if (!config('starttoo.push_enabled') || !config('starttoo.marketing_push_enabled')) throw new \InvalidArgumentException('푸시 및 광고 푸시 서버 설정을 켜주세요.');
+                if (!self::enabled(self::isInfo($c))) throw new \InvalidArgumentException(self::isInfo($c) ? '푸시 서버 설정을 켜주세요.' : '푸시 및 광고 푸시 서버 설정을 켜주세요.');
                 $db->table('starttoo_push_campaigns')->where('id', $id)->update([
                     'state' => 'running', 'max_device_id' => $c->started_at ? $c->max_device_id : (int) ($db->table('starttoo_push_devices')->max('id') ?? 0),
                     'started_at' => $c->started_at ?? now(), 'expires_at' => $c->expires_at ?? now()->addDays(7),
@@ -76,16 +94,17 @@ class PushCampaigns
     /** 한 큐 작업은 최대 25기기 대상 생성, 실제 FCM 호출은 한 대만 한다. */
     public function tick(string $id): ?int
     {
-        if (!config('starttoo.push_enabled') || !config('starttoo.marketing_push_enabled')) return null;
         $db = $this->db();
         $c = $db->table('starttoo_push_campaigns')->where('id', $id)->first();
         if (!$c || $c->state !== 'running') return null;
+        if (!self::enabled(self::isInfo($c))) return null;
         if ($c->expires_at <= now()->toDateTimeString()) {
             $db->table('starttoo_campaign_deliveries')->where('campaign_id', $id)->whereIn('state', ['pending', 'sending'])->update(['state' => 'skipped']);
             $db->table('starttoo_push_campaigns')->where('id', $id)->update(['state' => 'completed']);
             return null;
         }
-        if ($wait = $this->dayDelay()) return $wait;
+        // 광고성만 야간(20~9시)에 보내지 않는다
+        if (!self::isInfo($c) && ($wait = $this->dayDelay())) return $wait;
         if ($c->next_send_at !== null && $c->next_send_at > now()->toDateTimeString()) {
             return max(1, (int) now()->diffInSeconds(Carbon::parse($c->next_send_at), false) + 1);
         }
@@ -147,7 +166,8 @@ class PushCampaigns
         if (!$claimed) return 1;
         [$c, $d] = $claimed;
         $audit = app(PushAudit::class);
-        $log = $audit->begin('campaign', $campaign, $delivery, (int) $d->user_id, (int) $d->device_id, null, $d->attempts + 1, 'marketing', $c->title, $c->body);
+        $info = self::isInfo($c);
+        $log = $audit->begin('campaign', $campaign, $delivery, (int) $d->user_id, (int) $d->device_id, null, $d->attempts + 1, $info ? 'notice' : 'marketing', $c->title, $c->body);
         try {
             $device = $db->table('starttoo_push_devices as dev')->join('starttoo_auth_sessions as s', 's.id', '=', 'dev.session_id')
                 ->join('starttoo_users as u', 'u.id', '=', 'dev.user_id')->where('dev.id', $d->device_id)->where('dev.user_id', $d->user_id)
@@ -161,12 +181,14 @@ class PushCampaigns
                 $alias = $c->target_type === 'post' ? 'p' : 'a';
                 $running = $service->feedQuery((int) $device->user_id, 'public')->where($alias.'.id', $c->target_id)->exists();
             }
-            if ($device && $running && $this->dayDelay() === 0 && app(UserPreferences::class)->marketingEligible((int) $device->user_id)) {
+            // 광고성: 09~20시 · 광고 수신 동의자만 / 정보성: 시간 · 동의 조건 없음
+            $allowed = $device && ($info || ($this->dayDelay() === 0 && app(UserPreferences::class)->marketingEligible((int) $device->user_id)));
+            if ($device && $running && $allowed) {
                 $fcm = app('starttoo.fcm');
                 $result = $fcm->send(Crypt::decryptString($device->token_ciphertext), [
                     'notification' => ['title' => $c->title, 'body' => $c->body],
                     'data' => ['campaign_id' => $campaign, 'recipient_id' => (string) $d->user_id],
-                    'android' => ['priority' => 'normal', 'ttl' => '3600s', 'notification' => ['channel_id' => 'starttoo_marketing', 'tag' => 'campaign:'.$campaign, 'icon' => 'ic_stat_starttoo']],
+                    'android' => ['priority' => $info ? 'high' : 'normal', 'ttl' => '3600s', 'notification' => ['channel_id' => $info ? 'starttoo_notice' : 'starttoo_marketing', 'tag' => 'campaign:'.$campaign, 'icon' => 'ic_stat_starttoo']],
                     'apns' => ['headers' => ['apns-push-type' => 'alert', 'apns-priority' => '10', 'apns-collapse-id' => 'campaign:'.$campaign], 'payload' => ['aps' => ['sound' => 'default']]],
                 ]);
                 $db->table('starttoo_push_logs')->where('id', $log)->update(['platform' => $device->platform]);
