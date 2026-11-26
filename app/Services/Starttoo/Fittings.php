@@ -215,7 +215,8 @@ class Fittings
             try {
                 $bytes = app(NanoBanana::class)->generate($prompt, [], '3:4');
                 $path = app(ArtworkPhotos::class)->storeBytes($bytes);
-                $this->db()->table('starttoo_fit_models')->where('id', $id)->update(['image_path' => $path, 'status' => 'ready', 'updated_at' => now()]);
+                // 사진이 바뀌었으니 예전 사진으로 만든 피부 영역은 버린다(다음에 열 때 새로 만든다)
+                $this->db()->table('starttoo_fit_models')->where('id', $id)->update(['image_path' => $path, 'skin_path' => null, 'status' => 'ready', 'updated_at' => now()]);
             } catch (Throwable $e) {
                 report(new \RuntimeException('Fit model generation failed: '.$e->getMessage()));
                 $this->db()->table('starttoo_fit_models')->where('id', $id)->update(['status' => 'failed', 'updated_at' => now()]);
