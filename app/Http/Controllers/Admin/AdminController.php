@@ -306,7 +306,7 @@ class AdminController extends AdminBaseController
 
     // ================================================================ M-08 광고
 
-    private const SLOT_LABELS = ['community_top' => '커뮤니티 맨 위', 'feed_inline' => '홈 피드 · 2번째 게시물 뒤'];
+    private const SLOT_LABELS = ['community_top' => '커뮤니티 맨 위', 'feed_inline' => '홈 피드 · 2~6번째 게시물 사이 무작위'];
 
     public function ads(Request $request): View
     {
@@ -329,6 +329,9 @@ class AdminController extends AdminBaseController
                 'title' => $ad->title,
                 'period' => ($ad->starts_at ? Ui::date($ad->starts_at, 'm.d') : '바로') . ' ~ ' . ($ad->ends_at ? Ui::date($ad->ends_at, 'm.d') : '계속'),
                 'imp' => number_format((int) $ad->impressions), 'clk' => number_format((int) $ad->clicks),
+                // 신규 노출(처음 본 회원 수) · 클릭률(클릭 ÷ 신규 노출)
+                'reach' => number_format((int) ($ad->reach ?? 0)),
+                'ctr' => (int) ($ad->reach ?? 0) > 0 ? number_format((int) $ad->clicks / (int) $ad->reach * 100, 1) . '%' : '-',
                 'on' => (bool) $ad->active, 'state' => $state, 'pill' => Ui::pill($kind),
                 'aria' => "{$where} · {$ad->title} 노출", 'canToggle' => $canManage,
                 'action' => route('admin.ads.toggle', $ad->id),

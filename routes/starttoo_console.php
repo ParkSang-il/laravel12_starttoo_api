@@ -381,9 +381,9 @@ Artisan::command('starttoo:ad {action=list} {id?} {--slot=community_top} {--adve
                 $a->id, $a->slot, $a->active ? '켜짐' : '꺼짐', $a->advertiser, $a->title,
                 $a->artist_id ? "상점 {$a->artist_id}" : (string) $a->link,
                 ($a->starts_at ? substr((string) $a->starts_at, 0, 10) : '바로').' ~ '.($a->ends_at ? substr((string) $a->ends_at, 0, 10) : '계속'),
-                $a->impressions, $a->clicks,
+                $a->impressions, $a->reach ?? 0, $a->clicks,
             ], $ads->all());
-            $this->table(['번호', '자리', '상태', '광고주', '문구', '이동', '기간', '노출', '누름'], $rows);
+            $this->table(['번호', '자리', '상태', '광고주', '문구', '이동', '기간', '전체 노출', '신규 노출', '누름'], $rows);
             return 0;
         });
     } catch (\InvalidArgumentException $e) {

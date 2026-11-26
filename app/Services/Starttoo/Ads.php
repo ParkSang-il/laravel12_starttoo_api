@@ -38,6 +38,10 @@ class Ads
             // 이미지가 꼭 필요한 자리(홈 피드)인데 이미지가 없으면 건너뛴다
             if (!$ad->image_path && in_array($slot, self::IMAGE_REQUIRED, true)) continue;
             $this->db()->table('starttoo_ads')->where('id', $ad->id)->increment('impressions');
+            // 신규 노출: 이 회원이 이 광고를 처음 볼 때만 +1(이미 본 회원은 세지 않는다)
+            if ($this->db()->table('starttoo_ad_views')->insertOrIgnore(['ad_id' => $ad->id, 'user_id' => $viewer, 'created_at' => now()]) > 0) {
+                $this->db()->table('starttoo_ads')->where('id', $ad->id)->increment('reach');
+            }
             return ['ad' => [
                 'id' => (int) $ad->id, 'advertiser' => $ad->advertiser, 'title' => $ad->title,
                 'image_url' => app(MediaUrls::class)->url($ad->image_path, 1200),
