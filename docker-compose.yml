@@ -5,6 +5,9 @@ services:
       dockerfile: Dockerfile
     container_name: starttoo_app
     restart: unless-stopped
+    # php-fpm(API · 사진 처리). 요청당 memory_limit 256M × 프로세스 수 + 여유
+    mem_limit: 4g
+    memswap_limit: 4g
     working_dir: /var/www/html
     volumes:
       - /home/web/laravel12_starttoo_api:/var/www/html
@@ -20,6 +23,8 @@ services:
     image: nginx:alpine
     container_name: starttoo_nginx
     restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
     ports:
       - "80:80"
       - "443:443"
