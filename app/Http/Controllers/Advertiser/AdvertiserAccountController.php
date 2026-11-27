@@ -87,22 +87,24 @@ class AdvertiserAccountController extends Controller
         return redirect()->route('advertiser.account')->with('status', '비밀번호를 설정했어요.');
     }
 
-    /** 견적서 비밀 링크에서 계정 만들기(견적 메일을 받은 사람 = 이메일 주인) */
+    /**
+     * 견적서 비밀 링크에서 계정 만들기(메일 링크의 비밀 토큰 = 받은 이메일 주인 인증).
+     * 비밀번호가 아직 없을 때 한 번만 — 그 뒤로 이 링크는 로그인해야 열린다. 만들면 로그인되고 견적서로 간다.
+     */
     public function createFromQuote(Request $request, string $token): RedirectResponse
     {
         $c = app(AdSales::class)->byQuoteToken($token);
         abort_unless($c && $c->advertiser_id, 404);
-        // 견적서에서 받은 이메일을 확인한 세션만 계정을 만들 수 있다
-        if (!AdvertiserWeb::quoteUnlocked($request, $c)) return redirect()->route('advertiser.quote', $token);
         $owner = $this->accounts()->find((int) $c->advertiser_id);
         abort_unless($owner, 404);
         if ($owner->password) {
-            return back()->withErrors(['account' => '이미 계정이 있어요. 로그인해주세요.']);
+            return redirect()->route('advertiser.quote', $token);
         }
         $data = $request->validate(['password' => $this->passwordRule()], self::PASSWORD_MESSAGES);
         $this->accounts()->setPassword((int) $owner->id, $data['password']);
         AdvertiserWeb::login($request, $this->accounts()->find((int) $owner->id));
-        return back()->with('status', '광고주 계정을 만들었어요. 앞으로 ' . $owner->email . ' 로 로그인해 견적 · 성과 보고를 볼 수 있어요.');
+        return redirect()->route('advertiser.quote', $token)
+            ->with('status', '광고주 계정을 만들었어요. 앞으로 ' . $owner->email . ' 로 로그인해 견적 · 성과 보고를 볼 수 있어요.');
     }
 
     public function home(Request $request): View

@@ -111,53 +111,40 @@ class AdvertiserWebController extends Controller
 
     // ── AW-02 ──────────────────────────────────
 
-    public function quote(Request $request, string $token): View
+    /**
+     * 견적서. 메일 링크의 비밀 토큰 = 받은 이메일 주인 인증.
+     *  계정(비밀번호) 없음 → 계정 만들기 화면 → 만들면 로그인되고 견적서가 열린다
+     *  계정 있음 · 로그인 안 함 → 로그인 화면(로그인하면 이 견적서로 돌아옴)
+     *  견적 주인으로 로그인 → 견적서
+     */
+    public function quote(Request $request, string $token): View|RedirectResponse
     {
         $c = $this->sales()->byQuoteToken($token);
-        abort_unless($c, 404);
-        // 받은 이메일을 확인하기 전에는 견적 내용 없이 이메일 입력만 보여 준다
+        abort_unless($c && $c->advertiser_id, 404);
+        $owner = app(Advertisers::class)->find((int) $c->advertiser_id);
+        abort_unless($owner, 404);
         if (!AdvertiserWeb::quoteUnlocked($request, $c)) {
-            return view('advertiser.quote-verify', ['token' => $token]);
+            if ($request->attributes->get('advertiser')) {
+                abort(403, '다른 광고주 계정으로 로그인돼 있어요. 로그아웃한 뒤 견적서를 받은 이메일로 로그인해주세요.');
+            }
+            if (!$owner->password) {
+                return view('advertiser.quote-account', ['token' => $token, 'email' => $owner->email, 'company' => $c->company]);
+            }
+            $request->session()->put('url.intended', route('advertiser.quote', $token));
+            return redirect()->route('advertiser.login')->withInput(['email' => $owner->email])
+                ->with('status', '광고주 계정으로 로그인하면 견적서를 볼 수 있어요.');
         }
-        $owner = $c->advertiser_id ? app(\App\Services\Starttoo\Advertisers::class)->find((int) $c->advertiser_id) : null;
-        $me = $request->attributes->get('advertiser');
         return view('advertiser.quote', [
             'c' => $c, 'stage' => $c->stage, 'expired' => $c->expired,
             'lines' => $this->sales()->quoteLines($c),
             'expected' => $this->sales()->expected($c),
             'bank' => config('advertiser.bank'),
             'company' => config('advertiser.company'),
-            // 견적 · 성과 보고를 한 곳에서: 계정 만들기(비밀번호 없음) · 로그인 · 내 광고
-            'account' => match (true) {
-                !$owner => null,
-                $me && (int) $me->id === (int) $owner->id => 'mine',
-                !$owner->password => 'create',
-                default => 'login',
-            },
-            'ownerEmail' => $owner?->email,
             'taxPrefill' => $owner,
         ]);
     }
 
-    /** 견적서 열기: 견적을 받은 이메일(또는 문의할 때 적은 이메일)과 같으면 이 세션에서 견적서를 연다 */
-    public function verifyQuote(Request $request, string $token): RedirectResponse
-    {
-        $c = $this->sales()->byQuoteToken($token);
-        abort_unless($c, 404);
-        $data = $request->validate(['email' => ['required', 'string', 'max:150']], ['email.required' => '이메일을 입력해주세요.']);
-        $typed = Advertisers::normEmail($data['email']);
-        $inq = $c->inquiry_id ? $this->sales()->inquiry((int) $c->inquiry_id) : null;
-        $allowed = array_filter([Advertisers::normEmail((string) $c->email), $inq ? Advertisers::normEmail((string) $inq->email) : null]);
-        $ok = false;
-        foreach ($allowed as $email) $ok = hash_equals($email, $typed) || $ok;
-        if (!$ok) {
-            return back()->withErrors(['email' => '견적서를 받은 이메일과 달라요. 광고 문의 때 적은 이메일을 입력해주세요.'])->withInput();
-        }
-        AdvertiserWeb::unlockQuote($request, $c);
-        return redirect()->route('advertiser.quote', $token);
-    }
-
-    /** 이메일을 확인하지 않은 세션의 수락 · 수정 요청 · 입금 알림은 이메일 입력 화면으로 돌려보낸다 */
+    /** 견적 주인으로 로그인하지 않은 세션의 수락 · 수정 요청 · 입금 알림은 견적서 주소(계정 만들기 · 로그인)로 돌려보낸다 */
     private function locked(Request $request, object $c, string $token): ?RedirectResponse
     {
         return AdvertiserWeb::quoteUnlocked($request, $c) ? null : redirect()->route('advertiser.quote', $token);
