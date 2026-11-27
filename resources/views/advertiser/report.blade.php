@@ -12,7 +12,7 @@
   <div style="display: flex; flex-direction: column; gap: 6px">
     <span style="font-size: 13px; color: #66625B">광고 성과 보고 · {{ $c->company }}</span>
     <h1 style="margin: 0; font-size: clamp(26px, 3vw, 34px); font-weight: 900; letter-spacing: -0.5px">{{ $c->title }}</h1>
-    <span style="font-size: 14px; color: #55524C">{{ $c->starts_at->format('Y.m.d') }} ~ 최대 {{ $c->ends_at->format('m.d') }} · {{ $totalDays }}일 @if ($final) · 최종 보고 @else 중 {{ $shown }}일 반영 · 중간 보고 @endif</span>
+    <span style="font-size: 14px; color: #55524C">{{ $c->starts_at->format('Y.m.d') }} ~ 최대 {{ $c->ends_at->format('m.d') }} · {{ $totalDays }}일 @if ($final) · 최종 보고 @else 중 {{ $shown }}일 반영@if ($liveDay)(오늘은 집계 중)@endif · 중간 보고 @endif</span>
   </div>
 
   @if ($final)
@@ -51,7 +51,7 @@
         </div>
       @endforeach
     </div>
-    @unless ($final)<span style="font-size: 12px; color: #77736B">회색 칸은 아직 지나지 않은 날이에요. 보장 노출을 먼저 채우면 그날 광고가 끝나요.</span>@endunless
+    @unless ($final)<span style="font-size: 12px; color: #77736B">@if ($liveDay)연한 주홍 막대(오늘)는 집계 중이라 계속 늘어나요. @endif회색 칸은 아직 지나지 않은 날이에요. 보장 노출을 먼저 채우면 그날 광고가 끝나요.</span>@endunless
   </section>
 
   <section class="adv-card" style="overflow: hidden">
@@ -95,7 +95,7 @@
   <section style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 18px 20px; border-radius: 14px; background: #ECEAE5">
     <div style="flex: 1 1 420px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #55524C; line-height: 1.7">
       <b style="font-size: 13px; color: #141413">집계 기준</b>
-      <span>노출 · 클릭은 앱 광고 기록(하루 단위)을 그대로 더한 값이에요 · 전날까지 반영해요 · 보장 노출은 오늘 기록까지 세어 채우는 즉시 광고를 멈춰요</span>
+      <span>노출 · 클릭은 앱 광고 기록(하루 단위)을 그대로 더한 값이에요 · 오늘 기록도 바로 반영하고, 오늘은 하루가 끝날 때까지 집계 중이에요 · 보장 노출은 오늘 기록까지 세어 채우는 즉시 광고를 멈춰요</span>
       <span>이 페이지는 광고주 계정으로 로그인해야 열려요. 담당자 외에는 링크를 공유하지 말아주세요.</span>
     </div>
     <div class="adv-noprint" style="display: flex; gap: 8px"><button type="button" onclick="window.print()" class="adv-btn is-ghost is-sm">PDF 저장 · 인쇄</button></div>

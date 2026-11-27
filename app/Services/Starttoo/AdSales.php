@@ -503,7 +503,7 @@ class AdSales
     {
         $sent = $this->mail($c->email, "[STARTTOO 광고] 노출 시작 · 성과 보고 링크 · {$c->title}", [
             "{$c->company} {$c->contact_name}님, 광고 노출이 시작됐어요.",
-            '', '일별 노출 · 클릭은 아래 링크에서 볼 수 있어요(매일 전날까지 반영).', '',
+            '', '일별 노출 · 클릭은 아래 링크에서 볼 수 있어요(오늘 기록도 집계 중으로 바로 반영).', '',
             $this->reportUrl($c), '',
             '광고주 계정(' . $c->email . ')으로 로그인하면 열려요. 아직 비밀번호가 없으면 링크에서 만들 수 있어요.',
             '이 링크는 이 메일을 받은 분을 확인하는 전용 링크예요. 다른 사람에게 공유하지 말아주세요.',
@@ -594,7 +594,9 @@ class AdSales
         $ads = collect($this->contractAds((int) $c->id));
         $from = $c->starts_at;
         $to = $c->ends_at;
-        $last = Carbon::yesterday()->lt($to) ? Carbon::yesterday() : $to->copy(); // 전날까지 반영
+        // 오늘 기록까지 반영. 오늘(노출 기간 안 · 아직 안 끝남)은 「집계 중」으로 표시한다
+        $last = today()->lt($to) ? today() : $to->copy();
+        $liveDay = $c->status !== 'ended' && today()->between($from, $to) ? today()->toDateString() : null;
         $daily = [];
         if ($ads->isNotEmpty() && $last->gte($from)) {
             foreach ($this->db()->table('starttoo_ad_daily')->whereIn('ad_id', $ads->pluck('id'))
@@ -629,7 +631,7 @@ class AdSales
             ];
         })->values();
         $goal = (int) array_sum(array_column($c->lines, 'imps'));
-        return compact('days', 'byDay', 'shown', 'totImp', 'totClk', 'perAd', 'placements', 'goal');
+        return compact('days', 'byDay', 'shown', 'totImp', 'totClk', 'perAd', 'placements', 'goal', 'liveDay');
     }
 
     // ── 메일 ───────────────────────────────────

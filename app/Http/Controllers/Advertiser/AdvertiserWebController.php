@@ -222,18 +222,27 @@ class AdvertiserWebController extends Controller
         }
         $passed = array_slice(array_keys($series), 0, $r['shown']);
         $max = max(1, ...array_map(fn ($d) => $series[$d], $passed ?: [array_key_first($series)]));
+        $live = $r['liveDay'];
         $lastShown = $passed ? end($passed) : null;
         $fmt = fn ($v) => $metric === 'ctr' ? number_format($v, 1) . '%' : AdSales::short((int) $v);
         $bars = [];
         foreach ($series as $d => $v) {
             $has = in_array($d, $passed, true);
             $bars[] = [
-                'd' => Carbon::parse($d)->format('d'),
+                'd' => $d === $live ? '오늘' : Carbon::parse($d)->format('d'),
                 'v' => $has ? $fmt($v) : '',
+                // 지난 날 = 검정(마지막 날 주홍) · 오늘 집계 중 = 연한 주홍 · 아직 안 온 날 = 회색
                 'style' => 'display: block; width: 100%; border-radius: 6px 6px 2px 2px; height: ' . ($has ? max(4, round($v / $max * 150)) : 4) . 'px; background: '
-                    . (!$has ? '#ECEAE5' : ($d === $lastShown ? '#FF5A36' : '#141413')),
+                    . (!$has ? '#ECEAE5' : ($d === $live ? '#FFAD9B' : ($d === $lastShown ? '#FF5A36' : '#141413'))),
             ];
         }
+        // 하루 평균은 다 끝난 날 기준(오늘 집계 중인 날은 빼고, 첫날이면 오늘 값)
+        $fullDays = $live && $r['shown'] > 1 ? $r['shown'] - 1 : $r['shown'];
+        $todayImp = $live ? $r['byDay'][$live][0] : 0;
+        $todayClk = $live ? $r['byDay'][$live][1] : 0;
+        $avgImp = $fullDays ? ($live && $r['shown'] > 1 ? $r['totImp'] - $todayImp : $r['totImp']) / $fullDays : 0;
+        $avgClk = $fullDays ? ($live && $r['shown'] > 1 ? $r['totClk'] - $todayClk : $r['totClk']) / $fullDays : 0;
+        $liveSub = $live ? ' · 오늘 집계 중 포함' : '';
         $label = ['imp' => '노출', 'clk' => '클릭', 'ctr' => '클릭률'][$metric];
         $avgCtr = $this->sales()->avgCtr();
         $goalPct = $r['goal'] ? (int) min(100, floor($r['totImp'] / $r['goal'] * 100)) : 0;
@@ -242,14 +251,14 @@ class AdvertiserWebController extends Controller
             'c' => $c, 'final' => $final, 'metric' => $metric, 'metricLabel' => $label, 'bars' => $bars,
             'chartAria' => '일별 ' . $label . ', ' . implode(', ', array_map(fn ($d) => Carbon::parse($d)->format('m.d') . ' ' . $fmt($series[$d]), $passed)),
             'kpis' => [
-                ['label' => '노출', 'v' => number_format($r['totImp']), 'sub' => '하루 평균 ' . number_format($r['shown'] ? $r['totImp'] / $r['shown'] : 0)],
-                ['label' => '클릭', 'v' => number_format($r['totClk']), 'sub' => '하루 평균 ' . number_format($r['shown'] ? $r['totClk'] / $r['shown'] : 0)],
-                ['label' => '클릭률', 'v' => ($r['totImp'] ? number_format($r['totClk'] / $r['totImp'] * 100, 2) : '0') . '%', 'sub' => $avgCtr !== null ? '앱 광고 평균 ' . number_format($avgCtr, 1) . '%' : ''],
+                ['label' => '노출', 'v' => number_format($r['totImp']), 'sub' => '하루 평균 ' . number_format($avgImp) . $liveSub],
+                ['label' => '클릭', 'v' => number_format($r['totClk']), 'sub' => '하루 평균 ' . number_format($avgClk) . $liveSub],
+                ['label' => '클릭률', 'v' => ($r['totImp'] ? number_format($r['totClk'] / $r['totImp'] * 100, 2) : '0') . '%', 'sub' => ($avgCtr !== null ? '앱 광고 평균 ' . number_format($avgCtr, 1) . '%' : '') . ($live ? ($avgCtr !== null ? ' · ' : '') . '오늘 집계 중 포함' : '')],
                 ['label' => '보장 노출 달성', 'v' => $goalPct . '%', 'sub' => number_format($r['totImp']) . ' / ' . number_format($r['goal']) . '회', 'bar' => $goalPct],
             ],
             'placements' => $r['placements'],
             'creatives' => $r['perAd'],
-            'shown' => $r['shown'], 'totalDays' => count($r['days']),
+            'shown' => $r['shown'], 'totalDays' => count($r['days']), 'liveDay' => $live,
             'totImp' => $r['totImp'], 'totClk' => $r['totClk'],
             'slots' => AdSales::SLOTS,
         ]);
