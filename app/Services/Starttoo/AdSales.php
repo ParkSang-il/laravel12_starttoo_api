@@ -307,7 +307,8 @@ class AdSales
         if ($company === '' || $contact === '') throw new \InvalidArgumentException('회사명과 담당자를 적어주세요.');
         $landing = trim((string) ($in['landing_url'] ?? $inq?->landing_url ?? '')) ?: null;
         if ($landing !== null && !preg_match('#^https://#i', $landing)) throw new \InvalidArgumentException('연결 주소는 https:// 로 시작해야 앱에서 열 수 있어요.');
-        $terms = array_values(array_filter(array_map('trim', preg_split('/\R/', (string) ($in['terms'] ?? '')) ?: [])));
+        // u 플래그 필수: 없으면 \R 이 바이트 0x85(NEL)도 줄바꿈으로 보고 한글 글자 중간을 잘라 json_encode 가 실패한다
+        $terms = array_values(array_filter(array_map('trim', preg_split('/\R/u', (string) ($in['terms'] ?? '')) ?: [])));
 
         $adv = app(Advertisers::class)->findOrCreate($email, ['company' => $company, 'contact_name' => $contact, 'phone' => $inq?->phone]);
         $id = null;

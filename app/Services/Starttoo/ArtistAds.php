@@ -305,11 +305,14 @@ class ArtistAds
 
     // ── 작가: 목록 · 상세 ─────────────────────────────
 
-    /** 화면에 보일 상태: reviewing · rejected · scheduled 노출 예정 · running · paused · ended */
+    /** 화면에 보일 상태: reviewing · rejected · scheduled 노출 예정 · running · paused · suspended 게시 중지(운영자) · ended */
     public function state(object $ad): string
     {
         if ($ad->status === 'reviewing' || $ad->status === 'rejected') return $ad->status;
-        if ($ad->status === 'ended' || ($ad->ends_at && now()->gte($ad->ends_at))) return 'ended';
+        if ($ad->status === 'ended') return 'ended';
+        // 게시 중지 중에는 종료일이 지나도 끝내지 않는다(재개하면 멈춘 기간만큼 늘린다)
+        if (($ad->suspended_at ?? null) !== null) return 'suspended';
+        if ($ad->ends_at && now()->gte($ad->ends_at)) return 'ended';
         if ($ad->paused_at) return 'paused';
         if ($ad->starts_at && now()->lt($ad->starts_at)) return 'scheduled';
         return 'running';
@@ -353,6 +356,9 @@ class ArtistAds
             'total_days' => $total, 'elapsed_days' => $elapsed,
             'impressions' => (int) $ad->impressions, 'clicks' => (int) $ad->clicks, 'leads' => (int) $ad->leads,
             'reject_reason' => $state === 'rejected' ? $ad->reject_reason : null,
+            // 운영자 게시 중지: 사유를 보고 고쳐서 다시 심사를 요청한다
+            'suspend_reason' => $state === 'suspended' ? ($ad->suspend_reason ?? null) : null,
+            'suspended_at' => $state === 'suspended' && $ad->suspended_at ? Carbon::parse($ad->suspended_at)->toIso8601String() : null,
             'pending' => $ad->pending ? true : false, 'pending_reject_reason' => $ad->pending_reject_reason,
         ];
     }
@@ -396,8 +402,14 @@ class ArtistAds
         $agreed = $this->agreement($input);
         $exists = $this->db()->table('starttoo_ads')->where('artist_id', $artist)->where('product', $id)
             ->where(fn ($q) => $q->where('status', 'reviewing')->orWhere(fn ($r) => $r->where('status', 'running')
-                ->where(fn ($e) => $e->whereNull('ends_at')->orWhere('ends_at', '>', now()))))->exists();
-        if ($exists) $this->fail(409, 'AD_EXISTS', '이 위치에 심사 중이거나 노출 중인 광고가 있어요.');
+                ->where(fn ($e) => $e->whereNull('ends_at')->orWhere('ends_at', '>', now())->orWhereNotNull('suspended_at'))))->exists();
+        if ($exists) {
+            $suspended = $this->db()->table('starttoo_ads')->where('artist_id', $artist)->where('product', $id)
+                ->where('status', 'running')->whereNotNull('suspended_at')->exists();
+            $this->fail(409, 'AD_EXISTS', $suspended
+                ? '이 위치에 게시 중지된 광고가 있어요. 광고 관리에서 고쳐 다시 심사를 요청해주세요.'
+                : '이 위치에 심사 중이거나 노출 중인 광고가 있어요.');
+        }
         // 올린 사진 연결(claim)은 다른 검사를 모두 통과한 뒤에
         $values = $this->content($artist, $p, $input, null) + $agreed;
         $days = $p['unit'] === 'day' ? $this->days($input['days'] ?? null) : null;
@@ -417,7 +429,7 @@ class ArtistAds
         $ad = $this->mine($artist, $id);
         $p = $this->config()[$ad->product];
         $state = $this->state($ad);
-        if (!in_array($state, ['rejected', 'running', 'paused', 'scheduled'], true)) {
+        if (!in_array($state, ['rejected', 'running', 'paused', 'scheduled', 'suspended'], true)) {
             $this->fail(409, 'AD_STATE', $state === 'reviewing' ? '심사 중인 광고는 결과가 나온 뒤 고칠 수 있어요.' : '종료된 광고는 고칠 수 없어요.');
         }
         // 다시 요청 · 변경 요청도 그때의 광고 운영 정책에 동의해야 한다
@@ -429,7 +441,8 @@ class ArtistAds
             $this->db()->table('starttoo_ads')->where('id', $id)->update($values + $agreed + ['status' => 'reviewing', 'reject_reason' => null,
                 'days' => $days, 'amount' => $p['unit'] === 'day' ? $price * $days : $price,
                 'requested_at' => now(), 'updated_at' => now()]);
-        } elseif (in_array($state, ['running', 'paused', 'scheduled'], true)) {
+        } elseif (in_array($state, ['running', 'paused', 'scheduled', 'suspended'], true)) {
+            // 게시 중지된 광고도 변경 요청으로 심사한다. 승인하면 바뀐 내용으로 다시 나온다(approve)
             $this->db()->table('starttoo_ads')->where('id', $id)->update(['pending' => json_encode([
                 'title' => $values['title'], 'artwork_id' => $values['artwork_id'], 'keywords' => json_decode((string) $values['keywords'], true),
                 // 바꿀 사진(직접 올린 사진 경로, 작품으로 바꾸면 null)
@@ -536,18 +549,49 @@ class ArtistAds
 
     // ── 운영 콘솔: 운영자 종료 · 수정 ─────────────────────
 
+    public const SUSPEND_REASON_MAX = 300;
+
     /**
-     * 운영자가 「광고 목록」 노출 스위치로 끈 작가 광고는 종료한다(다시 켤 수 없다).
-     * 종료해야 앱에서도 끝난 광고로 보이고, 작가가 같은 자리에 새로 신청할 수 있다.
+     * 운영자 게시 중지: 노출만 막고 광고는 남긴다(종료하지 않는다).
+     * 작가는 앱에서 사유를 보고 고쳐 다시 심사를 요청하고, 승인하면 다시 나온다. 운영자가 바로 재개할 수도 있다.
      */
-    public function adminEnd(int $id): object
+    public function suspend(int $id, string $reason): object
+    {
+        $reason = trim($reason);
+        if ($reason === '' || mb_strlen($reason) > self::SUSPEND_REASON_MAX) throw new \InvalidArgumentException('게시 중지 사유를 1~'.self::SUSPEND_REASON_MAX.'자로 적어주세요(작가에게 보여요).');
+        $ad = $this->db()->table('starttoo_ads')->where('id', $id)->whereNotNull('product')->first();
+        if (!$ad) throw new \InvalidArgumentException('작가 광고를 찾을 수 없어요.');
+        if (!in_array($this->state($ad), ['running', 'scheduled', 'paused'], true)) throw new \InvalidArgumentException('노출 중 · 노출 예정 · 작가가 멈춘 광고만 게시 중지할 수 있어요.');
+        // 작가가 멈춘 상태였으면 그 멈춤을 끝내고(그동안 기간은 늘려 주고) 게시 중지로 바꾼다
+        $ends = $ad->ends_at ? Carbon::parse($ad->ends_at) : null;
+        if ($ad->paused_at && $ends) $ends = $ends->addSeconds((int) Carbon::parse($ad->paused_at)->diffInSeconds(now(), true));
+        $this->db()->table('starttoo_ads')->where('id', $id)->update(['suspended_at' => now(), 'suspend_reason' => $reason, 'pending_reject_reason' => null,
+            'paused_at' => null, 'active' => false, 'ends_at' => $ends, 'updated_at' => now()]);
+        $this->notify($ad, 'suspended');
+        return $this->db()->table('starttoo_ads')->where('id', $id)->first();
+    }
+
+    /** 게시 재개(승인 · 운영자 재개): 멈춘 기간만큼 종료일을 늘리고 다시 노출한다. 아직 시작 전이면 시작일은 그대로. */
+    private function resumeValues(object $ad): array
+    {
+        $gap = (int) Carbon::parse($ad->suspended_at)->diffInSeconds(now(), true);
+        // 시작 전에 멈췄으면 멈춘 동안 시작 전 시간을 잃지 않았으므로, 시작 뒤로 멈춘 시간만 늘린다
+        $start = $ad->starts_at ? Carbon::parse($ad->starts_at) : null;
+        if ($start && $start->gt(Carbon::parse($ad->suspended_at))) $gap = max(0, (int) $start->diffInSeconds(now(), false));
+        return ['suspended_at' => null, 'suspend_reason' => null, 'active' => true,
+            'ends_at' => $ad->ends_at ? Carbon::parse($ad->ends_at)->addSeconds($gap) : null];
+    }
+
+    public function resume(int $id): object
     {
         $ad = $this->db()->table('starttoo_ads')->where('id', $id)->whereNotNull('product')->first();
         if (!$ad) throw new \InvalidArgumentException('작가 광고를 찾을 수 없어요.');
-        if (in_array($this->state($ad), ['ended', 'reviewing', 'rejected'], true)) throw new \InvalidArgumentException('노출 중인 광고만 끌 수 있어요.');
-        $this->db()->table('starttoo_ads')->where('id', $id)->update(['status' => 'ended', 'active' => false, 'pending' => null,
-            'ends_at' => $ad->starts_at && now()->gte($ad->starts_at) ? now() : $ad->ends_at, 'paused_at' => null, 'updated_at' => now()]);
-        $this->notify($ad, 'ended');
+        // 예전 콘솔 스위치로 노출만 꺼 둔 광고(상태는 노출 중 · 작가가 멈춘 것도 아님)도 여기서 다시 켠다
+        $legacyOff = $ad->status === 'running' && !$ad->active && !$ad->paused_at && !$ad->suspended_at
+            && in_array($this->state($ad), ['running', 'scheduled'], true);
+        if (!$legacyOff && $this->state($ad) !== 'suspended') throw new \InvalidArgumentException('게시 중지된 광고가 아니에요.');
+        $this->db()->table('starttoo_ads')->where('id', $id)->update(($legacyOff ? ['active' => true] : $this->resumeValues($ad)) + ['updated_at' => now()]);
+        $this->notify($ad, 'resumed');
         return $this->db()->table('starttoo_ads')->where('id', $id)->first();
     }
 
@@ -617,8 +661,10 @@ class ArtistAds
                 'artwork_id' => array_key_exists('image_path', $p) ? ($p['artwork_id'] ?? null) : ($p['artwork_id'] ?? $ad->artwork_id),
                 'image_path' => array_key_exists('image_path', $p) ? $p['image_path'] : $ad->image_path,
                 'keywords' => array_key_exists('keywords', $p) && $p['keywords'] !== null ? json_encode($p['keywords'], JSON_UNESCAPED_UNICODE) : $ad->keywords,
-                'pending' => null, 'pending_reject_reason' => null, 'reviewed_at' => now(), 'reviewed_by' => $adminId, 'updated_at' => now()]);
-            $this->notify($ad, 'changed');
+                'pending' => null, 'pending_reject_reason' => null, 'reviewed_at' => now(), 'reviewed_by' => $adminId, 'updated_at' => now()]
+                // 게시 중지된 광고를 고친 요청이면 승인과 함께 다시 노출한다
+                + (($ad->suspended_at ?? null) !== null && $ad->status === 'running' ? $this->resumeValues($ad) : []));
+            $this->notify($ad, ($ad->suspended_at ?? null) !== null && $ad->status === 'running' ? 'resumed' : 'changed');
             return $this->db()->table('starttoo_ads')->where('id', $id)->first();
         }
         if ($ad->status !== 'reviewing') throw new \InvalidArgumentException('심사 중인 광고가 아니에요.');
@@ -688,6 +734,8 @@ class ArtistAds
             return [
                 'id' => (int) $r->id, 'artist_id' => (int) $r->artist_id, 'artist' => $r->nickname, 'advertiser' => $r->advertiser,
                 'product' => $p['name'], 'kind' => $pending ? 'change' : 'new',
+                // 게시 중지된 광고를 고친 요청: 승인하면 다시 노출된다
+                'suspended' => ($r->suspended_at ?? null) !== null, 'suspend_reason' => $r->suspend_reason ?? null,
                 'title' => $pending['title'] ?? $r->title, 'before' => $pending ? $r->title : null,
                 'keywords' => $pending['keywords'] ?? (json_decode((string) $r->keywords, true) ?: []),
                 'period' => $p['unit'] === 'month' ? $this->nextMonth()[0]->month.'월 한 달' : ((int) $r->days).'일',

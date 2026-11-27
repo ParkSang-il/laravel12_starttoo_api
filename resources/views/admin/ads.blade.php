@@ -38,8 +38,11 @@
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-variant-numeric: tabular-nums">{{ $s['clk'] }} <span style="color: #66625B">· {{ $s['ctr'] }}</span></td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap"><span style="{{ $s['pill'] }}">{{ $s['state'] }}</span></td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">
-                  @if ($s['canToggle'])
-                    <form method="POST" action="{{ $s['action'] }}" style="display: contents">@csrf<button type="submit" role="switch" aria-checked="{{ $s['on'] ? 'true' : 'false' }}" aria-label="{{ $s['aria'] }}" @if ($s['confirm']) data-confirm="{{ $s['confirm'] }}" title="끄면 광고를 종료해요" @endif style="{{ $s['track'] }}"><span style="{{ $s['knob'] }}"></span></button></form>
+                  @if ($s['canToggle'] && $s['switchHref'])
+                    {{-- 작가 광고: 사유를 적어야 해서 수정 패널의 게시 중지 · 재개 칸으로 간다 --}}
+                    <a href="{{ $s['switchHref'] }}" role="switch" aria-checked="{{ $s['on'] ? 'true' : 'false' }}" aria-label="{{ $s['aria'] }} · 게시 중지 · 재개" title="{{ $s['on'] ? '게시 중지(사유 입력)' : '게시 재개' }}" style="{{ $s['track'] }}"><span style="{{ $s['knob'] }}"></span></a>
+                  @elseif ($s['canToggle'])
+                    <form method="POST" action="{{ $s['action'] }}" style="display: contents">@csrf<button type="submit" role="switch" aria-checked="{{ $s['on'] ? 'true' : 'false' }}" aria-label="{{ $s['aria'] }}" style="{{ $s['track'] }}"><span style="{{ $s['knob'] }}"></span></button></form>
                   @else
                     <span role="switch" aria-checked="{{ $s['on'] ? 'true' : 'false' }}" aria-disabled="true" aria-label="{{ $s['aria'] }}" style="{{ $s['track'] }}"><span style="{{ $s['knob'] }}"></span></span>
                   @endif
@@ -78,9 +81,13 @@
           <div style="flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 6px">
             <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center">
               <span style="{{ \App\Support\AdminUi::pill($q['kind'] === 'change' ? 'amber' : 'blue') }}">{{ $q['kind'] === 'change' ? '문구 · 작품 변경' : '새 신청' }}</span>
+              @if ($q['suspended'])<span style="{{ \App\Support\AdminUi::pill('red') }}">게시 중지 · 승인하면 재개</span>@endif
               <strong style="font-size: 14px">{{ $q['product'] }}</strong>
               <span style="font-size: 12px; color: #66625B">#{{ $q['id'] }} · {{ $q['when'] }} 신청</span>
             </div>
+            @if ($q['suspended'] && $q['suspend_reason'])
+              <div style="font-size: 12px; color: #B3261E; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere">중지 사유: {{ $q['suspend_reason'] }}</div>
+            @endif
             {{-- 두 줄 문구: 작가가 넣은 줄바꿈을 앱 카드처럼 그대로 보여 준다 --}}
             <div style="font-size: 15px; font-weight: 700; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere">“{{ $q['title'] }}”</div>
             @if ($q['before'])
@@ -95,7 +102,7 @@
           @if ($canReview)
             <div style="flex: 1 1 280px; display: flex; flex-direction: column; gap: 8px">
               <form method="POST" action="{{ $q['approve'] }}" style="display: contents">@csrf
-                <button type="submit" style="height: 40px; border-radius: 10px; font-size: 14px; font-weight: 700; border: 0; background: #141413; color: #FFFFFF">{{ $q['kind'] === 'change' ? '변경 승인' : '승인 · 노출 시작' }}</button>
+                <button type="submit" style="height: 40px; border-radius: 10px; font-size: 14px; font-weight: 700; border: 0; background: #141413; color: #FFFFFF">{{ $q['suspended'] ? '변경 승인 · 게시 재개' : ($q['kind'] === 'change' ? '변경 승인' : '승인 · 노출 시작') }}</button>
               </form>
               <form method="POST" action="{{ $q['reject'] }}" style="display: flex; gap: 8px">@csrf
                 <input name="reason" required maxlength="300" placeholder="반려 사유(작가에게 보여요)" aria-label="광고 #{{ $q['id'] }} 반려 사유" style="flex: 1; min-width: 0; height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 13px; color: #141413; background: #FFFFFF; box-sizing: border-box">
@@ -343,8 +350,39 @@
       <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
         <div style="display: flex; justify-content: space-between; align-items: center"><h2 style="margin: 0; font-size: 17px; font-weight: 700">{{ $f['title'] }}</h2><a href="{{ $closeHref }}" style="font-size: 13px; color: #66625B">닫기</a></div>
         @if ($f['pending'])
-          <span style="font-size: 13px; color: #8A5A00; background: #FFF4DC; border-radius: 10px; padding: 10px 12px">작가가 보낸 변경 요청이 심사를 기다리고 있어요. 그 요청을 승인하면 문구 · 사진 · 키워드가 요청 내용으로 바뀌어요.</span>
+          <span style="font-size: 13px; color: #8A5A00; background: #FFF4DC; border-radius: 10px; padding: 10px 12px">작가가 보낸 변경 요청이 심사를 기다리고 있어요. 「작가 광고 심사」에서 승인하면 문구 · 사진 · 키워드가 요청 내용으로 바뀌어요{{ $f['state'] === 'suspended' ? '(게시 중지도 함께 풀려요)' : '' }}.</span>
         @endif
+
+        {{-- 게시 중지 · 재개: 광고 목록의 스위치가 여기로 온다 --}}
+        <div id="suspend" style="border: 1px solid {{ $f['state'] === 'suspended' ? '#F2C6C2' : '#E4E0D8' }}; background: {{ $f['state'] === 'suspended' ? '#FDF1F0' : '#FAF8F5' }}; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+          @if ($f['state'] === 'suspended')
+            <strong style="font-size: 14px; color: #B3261E">게시 중지됨{{ $f['suspendedAt'] ? ' · ' . $f['suspendedAt'] : '' }}</strong>
+            <span style="font-size: 13px; color: #3A3731; white-space: pre-line; overflow-wrap: anywhere">사유: {{ $f['suspendReason'] }}</span>
+            <span style="font-size: 12px; color: #66625B; line-height: 1.5">작가가 앱에서 광고를 고쳐 다시 심사를 요청하면 「작가 광고 심사」에 올라와요. 승인하면 다시 게시돼요. 고칠 게 없으면 여기서 바로 재개할 수 있어요. 멈춘 기간만큼 종료일이 늘어나요.</span>
+            <form method="POST" action="{{ $f['resumeAction'] }}" style="display: flex; justify-content: flex-end">@csrf
+              <button type="submit" data-confirm="작가 광고를 다시 게시할까요? 작가에게 재개 알림이 가요." style="height: 40px; padding: 0 18px; border-radius: 10px; font-size: 14px; font-weight: 700; border: 0; background: #141413; color: #FFFFFF">게시 재개</button>
+            </form>
+          @elseif ($f['legacyOff'])
+            <strong style="font-size: 14px">노출이 꺼져 있어요</strong>
+            <span style="font-size: 12px; color: #66625B; line-height: 1.5">예전 스위치로 노출만 꺼 둔 광고예요. 다시 켜거나, 아래에서 사유를 적어 게시 중지로 바꿀 수 있어요.</span>
+            <form method="POST" action="{{ $f['resumeAction'] }}" style="display: flex; justify-content: flex-end">@csrf
+              <button type="submit" style="height: 40px; padding: 0 18px; border-radius: 10px; font-size: 14px; font-weight: 700; border: 1px solid #D9D4CB; background: #FFFFFF; color: #141413">다시 켜기</button>
+            </form>
+          @endif
+          @if (in_array($f['state'], ['running', 'scheduled', 'paused'], true))
+            <form method="POST" action="{{ $f['suspendAction'] }}" style="display: flex; flex-direction: column; gap: 8px">@csrf
+              <label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">게시 중지 사유 <span style="font-weight: 400; color: #66625B">· 작가에게 그대로 보여요, {{ $f['reasonMax'] }}자까지</span></span>
+                <textarea name="reason" required rows="2" maxlength="{{ $f['reasonMax'] }}" placeholder="예: 문구에 가격 할인 표현이 있어요. 할인 문구를 빼고 다시 요청해주세요." style="border-radius: 10px; border: 1px solid #D9D4CB; padding: 10px 12px; font-size: 14px; line-height: 1.5; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%; resize: vertical; font-family: inherit">{{ old('reason') }}</textarea>
+              </label>
+              <div style="display: flex; gap: 8px; align-items: center">
+                <span style="flex: 1; font-size: 12px; color: #66625B; line-height: 1.5">광고는 종료되지 않고 노출만 멈춰요. 작가가 고쳐 다시 요청하면 심사 후 재개돼요.</span>
+                <button type="submit" data-confirm="이 작가 광고를 게시 중지할까요? 작가에게 사유와 함께 알림이 가요." style="height: 40px; padding: 0 18px; border-radius: 10px; font-size: 14px; font-weight: 700; border: 0; background: #B3261E; color: #FFFFFF">게시 중지</button>
+              </div>
+            </form>
+          @elseif (! in_array($f['state'], ['suspended'], true) && ! $f['legacyOff'])
+            <span style="font-size: 12px; color: #66625B">노출 중 · 노출 예정 · 작가가 멈춘 광고만 게시 중지할 수 있어요.</span>
+          @endif
+        </div>
         <form method="POST" action="{{ $f['action'] }}" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 14px">
           @csrf
           <div style="display: flex; flex-wrap: wrap; gap: 14px">

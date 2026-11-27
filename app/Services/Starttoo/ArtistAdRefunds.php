@@ -50,8 +50,9 @@ class ArtistAdRefunds
         // 이미 끝낸 광고: 끝낸 시각(마지막 변경). 멈춰 있는 광고: 멈춘 뒤로는 쓰지 않은 시간이다.
         $ref = $ended ? Carbon::parse($ad->updated_at) : ($at ?? now());
         $usedRef = $ref;
-        if (!$ended && $ad->paused_at) {
-            $pausedAt = Carbon::parse($ad->paused_at);
+        // 게시 중지(운영자)도 멈춘 뒤로는 쓰지 않은 시간이다
+        if (!$ended && ($ad->paused_at || ($ad->suspended_at ?? null))) {
+            $pausedAt = Carbon::parse($ad->suspended_at ?? $ad->paused_at);
             $usedRef = $start && $start->gt($pausedAt) ? $start : $pausedAt;
         }
 
@@ -127,7 +128,7 @@ class ArtistAdRefunds
     {
         return match (app(ArtistAds::class)->state($ad)) {
             'reviewing' => '심사 중', 'rejected' => '반려', 'ended' => '종료',
-            'paused' => '멈춤', 'scheduled' => '노출 예정', default => '노출 중',
+            'paused' => '멈춤', 'suspended' => '게시 중지(운영자)', 'scheduled' => '노출 예정', default => '노출 중',
         };
     }
 

@@ -47,7 +47,7 @@ class Notifications
     /** fit_result: AI 피팅 · 타투 도구 결과(variant = 종류:상태). 목록에는 notices=2 를 보낸 앱에만 준다. */
     /** report_result: 내가 낸 신고의 처리 결과(variant = resolved · dismissed, 대상 = 신고 번호) */
     /** sanction: 운영 콘솔 신고 처리로 받은 제재(variant = warning · suspend · ban, 대상 = 제재 이력 번호) */
-    /** ad_review: 작가 광고 심사 결과(variant = approved · rejected · changed · ended 운영자 종료, 대상 = 광고 번호). 목록에는 notices=6 을 보낸 앱에만 준다. */
+    /** ad_review: 작가 광고 심사 결과(variant = approved · rejected · changed · suspended 운영자 게시 중지 · resumed 게시 재개, 대상 = 광고 번호). 목록에는 notices=6 을 보낸 앱에만 준다. */
     /** inquiry_answer: 1:1 문의에 운영자 답변(variant = answered, 대상 = 문의 번호). 목록에는 notices=7 을 보낸 앱에만 준다. */
     public const NOTICE_KINDS = ['artist_review', 'fit_result', 'report_result', 'sanction', 'ad_review', 'inquiry_answer'];
 

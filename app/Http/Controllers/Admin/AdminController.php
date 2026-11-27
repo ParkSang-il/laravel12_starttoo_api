@@ -347,12 +347,15 @@ class AdminController extends AdminBaseController
         $canManage = $this->can($request, 'ads.manage');
         $slots = $rows->map(function ($ad) use ($canManage) {
             $live = $ad->active && (!$ad->starts_at || now()->gte($ad->starts_at)) && (!$ad->ends_at || now()->lt($ad->ends_at));
-            // 작가 광고(product): 심사 중 · 반려 · 종료 · 작가가 멈춤. 운영자는 「수정」으로 전부 고칠 수 있고, 스위치로 끄면 종료한다.
+            // 작가 광고(product): 심사 중 · 반려 · 종료 · 게시 중지 · 작가가 멈춤. 운영자는 「수정」으로 전부 고칠 수 있고,
+            // 스위치를 누르면 수정 패널의 「게시 중지(사유) · 재개」로 간다(종료하지 않는다).
             $artistAd = ($ad->product ?? null) !== null;
+            $artistState = $artistAd ? app(\App\Services\Starttoo\ArtistAds::class)->state($ad) : null;
             [$state, $kind] = match (true) {
                 $artistAd && $ad->status === 'reviewing' => ['심사 중', 'blue'],
                 $artistAd && $ad->status === 'rejected' => ['반려', 'red'],
                 $artistAd && $ad->status === 'ended' => ['종료', 'gray'],
+                $artistState === 'suspended' => [$ad->pending ? '게시 중지 · 수정 심사 대기' : '게시 중지', 'red'],
                 $artistAd && $ad->paused_at !== null => ['작가가 멈춤', 'gray'],
                 !$ad->active => ['중지', 'gray'],
                 $ad->ends_at && now()->gte($ad->ends_at) => ['기간 종료', 'gray'],
@@ -362,7 +365,7 @@ class AdminController extends AdminBaseController
             $where = $artistAd
                 ? '작가 광고 · ' . (\App\Services\Starttoo\ArtistAds::PRODUCTS[$ad->product]['name'] ?? $ad->product)
                 : (self::SLOT_LABELS[$ad->slot] ?? $ad->slot);
-            $canSwitch = $canManage && (!$artistAd || ($ad->status === 'running' && $ad->paused_at === null));
+            $canSwitch = $canManage && (!$artistAd || in_array($artistState, ['running', 'scheduled', 'paused', 'suspended'], true));
             return [
                 'where' => $where,
                 'who' => $ad->advertiser . ($ad->artist_nickname ? ' · ' . $ad->artist_nickname : ''),
@@ -373,16 +376,17 @@ class AdminController extends AdminBaseController
                 // 신규 노출(처음 본 회원 수) · 클릭률(클릭 ÷ 신규 노출)
                 'reach' => number_format((int) ($ad->reach ?? 0)),
                 'ctr' => (int) ($ad->reach ?? 0) > 0 ? number_format((int) $ad->clicks / (int) $ad->reach * 100, 1) . '%' : '-',
-                'on' => (bool) $ad->active, 'state' => $state, 'pill' => Ui::pill($kind),
+                // 작가 광고 스위치: 게시 중지가 아니면 켜짐(작가가 멈춘 것은 작가 몫)
+                'on' => $artistAd ? $artistState !== 'suspended' : (bool) $ad->active, 'state' => $state, 'pill' => Ui::pill($kind),
                 'aria' => "{$where} · {$ad->title} 노출", 'canToggle' => $canSwitch,
                 'action' => route('admin.ads.toggle', $ad->id),
-                // 작가 광고를 끄면 종료(다시 켤 수 없음) → 확인을 받는다
-                'confirm' => $artistAd ? "작가 광고 #{$ad->id}를 종료할까요? 다시 켤 수 없고, 작가에게 종료 알림이 가요. 작가는 이 자리에 새로 신청할 수 있어요." : null,
+                // 작가 광고: 스위치 = 수정 패널의 게시 중지 · 재개 칸으로(사유를 적어야 해서)
+                'switchHref' => $artistAd ? Ui::url(['sel' => $ad->id]) . '#suspend' : null,
                 'editHref' => $canManage ? Ui::url(['sel' => $ad->id]) : null,
                 // 작가 광고: 환불 계산 탭으로(그 광고 번호를 넣어 연다)
                 'refundHref' => $artistAd && !in_array($ad->status, ['reviewing', 'rejected'], true) ? route('admin.ads', ['section' => '환불 계산', 'ad' => $ad->id]) : null,
                 'rowStyle' => Ui::rowBg((string) request()->query('sel') === (string) $ad->id),
-                'track' => Ui::switchTrack((bool) $ad->active, !$canSwitch),
+                'track' => Ui::switchTrack($artistAd ? $artistState !== 'suspended' : (bool) $ad->active, !$canSwitch),
                 'knob' => 'width: 20px; height: 20px; border-radius: 50%; background: #FFFFFF; display: block',
                 'live' => $live,
             ];
@@ -426,6 +430,15 @@ class AdminController extends AdminBaseController
                 'hasArtwork' => (bool) $artistEdit->artwork_id,
                 'pending' => (bool) $artistEdit->pending,
                 'days' => $artistEdit->days, 'amount' => (int) $artistEdit->amount,
+                // 게시 중지 · 재개(광고 목록 스위치가 여기로 온다)
+                'state' => $artistEditState = app(\App\Services\Starttoo\ArtistAds::class)->state($artistEdit),
+                'suspendReason' => (string) ($artistEdit->suspend_reason ?? ''),
+                'suspendedAt' => ($artistEdit->suspended_at ?? null) ? Ui::date($artistEdit->suspended_at, 'm.d H:i') : null,
+                // 예전 스위치로 노출만 꺼 둔 광고(상태는 노출 중): 재개로 다시 켠다
+                'legacyOff' => $artistEdit->status === 'running' && !$artistEdit->active && !$artistEdit->paused_at && !($artistEdit->suspended_at ?? null),
+                'suspendAction' => route('admin.ads.artist.suspend', $artistEdit->id),
+                'resumeAction' => route('admin.ads.artist.resume', $artistEdit->id),
+                'reasonMax' => \App\Services\Starttoo\ArtistAds::SUSPEND_REASON_MAX,
             ] : null,
             'productOptions' => array_map(fn ($p) => $p['name'], \App\Services\Starttoo\ArtistAds::PRODUCTS),
             'maxCopy' => \App\Services\Starttoo\ArtistAds::MAX_COPY,
@@ -573,21 +586,46 @@ class AdminController extends AdminBaseController
         return back()->with('status', '작가 광고를 저장했어요 · 바로 반영돼요');
     }
 
+    /** 작가 광고 게시 중지(사유는 작가에게 보인다). 작가가 앱에서 고쳐 다시 심사를 요청하면 승인할 때 재개된다. */
+    public function suspendArtistAd(Request $request, int $id): RedirectResponse
+    {
+        $this->need($request, 'ads.manage');
+        $reason = (string) $request->input('reason', '');
+        $ads = app(\App\Services\Starttoo\ArtistAds::class);
+        try {
+            $ad = $ads->suspend($id, $reason);
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['ad' => $e->getMessage()])->withInput();
+        }
+        $name = \App\Services\Starttoo\ArtistAds::PRODUCTS[$ad->product]['name'] ?? $ad->product;
+        $this->audit($request, '설정', '작가 광고 게시 중지', "광고 #{$id} · {$name} · {$ad->advertiser} · 사유: " . trim($reason), ['suspended' => [false, true]]);
+
+        return back()->with('status', "작가 광고 #{$id}({$name})를 게시 중지했어요 · 작가에게 사유와 함께 알림이 가요");
+    }
+
+    /** 게시 재개(작가 수정 없이 운영자가 바로). 멈춘 기간만큼 종료일이 늘어난다. */
+    public function resumeArtistAd(Request $request, int $id): RedirectResponse
+    {
+        $this->need($request, 'ads.manage');
+        try {
+            $ad = app(\App\Services\Starttoo\ArtistAds::class)->resume($id);
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['ad' => $e->getMessage()]);
+        }
+        $name = \App\Services\Starttoo\ArtistAds::PRODUCTS[$ad->product]['name'] ?? $ad->product;
+        $this->audit($request, '설정', '작가 광고 게시 재개', "광고 #{$id} · {$name} · {$ad->advertiser}", ['suspended' => [true, false]]);
+
+        return back()->with('status', "작가 광고 #{$id}({$name})를 다시 게시했어요");
+    }
+
     public function toggleAd(Request $request, int $id): RedirectResponse
     {
         $this->need($request, 'ads.manage');
         $ad = $this->db()->table('starttoo_ads')->where('id', $id)->first();
         abort_unless($ad, 404);
-        // 작가 광고: 끄면 종료(상태도 끝나야 앱에서 끝난 광고로 보이고 같은 자리에 다시 신청할 수 있다)
+        // 작가 광고는 사유가 필요한 게시 중지 · 재개(suspendArtistAd · resumeArtistAd)로 한다
         if (($ad->product ?? null) !== null) {
-            try {
-                app(\App\Services\Starttoo\ArtistAds::class)->adminEnd($id);
-            } catch (\InvalidArgumentException $e) {
-                return back()->withErrors(['ad' => $e->getMessage()]);
-            }
-            $name = \App\Services\Starttoo\ArtistAds::PRODUCTS[$ad->product]['name'] ?? $ad->product;
-            $this->audit($request, '설정', '작가 광고 종료', "광고 #{$id} · {$name} · {$ad->advertiser} · {$ad->title}", ['status' => [$ad->status, 'ended']]);
-            return back()->with('status', "작가 광고 #{$id}({$name})를 종료했어요 · 작가에게 알림이 가요");
+            return redirect(route('admin.ads', ['sel' => $id]) . '#suspend');
         }
         $on = !$ad->active;
         app(Ads::class)->setActive($id, $on);

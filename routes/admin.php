@@ -56,6 +56,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('ads/artist/{id}/approve', [AdminArtistAdsController::class, 'approve'])->whereNumber('id')->name('ads.artist.approve');
         Route::post('ads/artist/{id}/reject', [AdminArtistAdsController::class, 'reject'])->whereNumber('id')->name('ads.artist.reject');
         Route::post('ads/artist/{id}', [AdminController::class, 'updateArtistAd'])->whereNumber('id')->name('ads.artist.update');
+        Route::post('ads/artist/{id}/suspend', [AdminController::class, 'suspendArtistAd'])->whereNumber('id')->name('ads.artist.suspend');
+        Route::post('ads/artist/{id}/resume', [AdminController::class, 'resumeArtistAd'])->whereNumber('id')->name('ads.artist.resume');
         Route::post('ads/{id}', [AdminController::class, 'updateAd'])->whereNumber('id')->name('ads.update');
 
         // 외부 광고 영업: 광고주 웹(/ads) 문의 → 견적(CPM) → 입금 확인 → 광고 만들기 → 성과 보고
