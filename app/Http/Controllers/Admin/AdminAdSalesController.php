@@ -92,18 +92,22 @@ class AdminAdSalesController extends AdminBaseController
         } elseif (str_starts_with($sel, 'c') && ($c = $this->sales()->contract((int) substr($sel, 1)))) {
             $data['contract'] = $c;
             $data['contractLines'] = $this->sales()->quoteLines($c);
-            $data['contractAds'] = array_map(function ($a) {
+            $rawAds = $this->sales()->contractAds((int) $c->id);
+            // 자리마다 소재가 몇 개인지(2개 이상이면 「이 소재로 노출」로 하나를 고른다)
+            $perSlot = collect($rawAds)->countBy('slot');
+            $data['contractAds'] = array_map(function ($a) use ($c, $perSlot) {
                 return ['id' => $a->id, 'slot' => AdSales::SLOTS[$a->slot]['name'] ?? $a->slot, 'title' => $a->title,
                     'imp' => (int) $a->impressions, 'cap' => (int) $a->impression_cap, 'clicks' => (int) $a->clicks,
                     'active' => (bool) $a->active, 'href' => route('admin.ads', ['sel' => $a->id]),
+                    'image' => $a->image_path ? app(\App\Services\Starttoo\MediaUrls::class)->url($a->image_path, 300) : null,
+                    'choices' => ($perSlot[$a->slot] ?? 0) > 1,
+                    'select' => route('admin.ad-sales.select', [$c->id, $a->id]),
                     'clip' => \App\Services\Starttoo\AdClips::label($a->clip_status ?? null, $a->clip_error ?? null),
                     'clip_failed' => ($a->clip_status ?? null) === 'failed'];
-            }, $this->sales()->contractAds((int) $c->id));
-            // 줄마다 아직 광고에 나누지 않은 보장 노출
-            $data['lineLeft'] = array_map(function ($l) use ($c) {
-                $used = (int) $this->db()->table('starttoo_ads')->where('contract_id', $c->id)->where('slot', $l['slot'])->sum('impression_cap');
-                return max(0, (int) $l['imps'] - $used);
-            }, $c->lines);
+            }, $rawAds);
+            // 줄마다 남은 보장 노출(견적 − 이 자리 소재들이 이미 낸 노출) · 이미 광고가 있는 줄인지
+            $data['lineLeft'] = array_map(fn ($l) => $this->sales()->lineLeft((int) $c->id, $l), $c->lines);
+            $data['lineHasAd'] = array_map(fn ($l) => ($perSlot[$l['slot']] ?? 0) > 0, $c->lines);
             $data['quoteUrl'] = $this->sales()->quoteUrl($c);
             $data['reportUrl'] = $c->report_token ? AdSales::link('advertiser.report', $c->report_token) : null;
             $data['owner'] = $c->advertiser_id ? app(Advertisers::class)->find((int) $c->advertiser_id) : null;
@@ -357,6 +361,13 @@ class AdminAdSalesController extends AdminBaseController
             return back()->with('status', "광고 #{$adId}를 만들었어요 · 영상 변환(보통 1~3분)이 끝나면 {$when} 앱에 나가요. 「AI · 미디어 작업」이 아닌 광고 목록에서 상태를 볼 수 있어요");
         }
         return back()->with('status', "광고 #{$adId}를 만들었어요 · {$when} 앱에 나가고, 시작일에 광고주에게 성과 보고 링크가 가요");
+    }
+
+    /** 계약 같은 자리 소재 중 이것 하나만 노출(나머지는 끈다) */
+    public function selectAd(Request $request, int $id, int $ad): RedirectResponse
+    {
+        return $this->act($request, $id, '계약 광고 소재 선택', fn () => $this->sales()->selectAd($id, $ad),
+            "광고 #{$ad} 소재만 노출하도록 바꿨어요 · 같은 자리의 다른 소재는 껐어요");
     }
 
     // ── 광고주 · 단가표 ────────────────────────

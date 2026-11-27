@@ -258,11 +258,19 @@
               @if ($paidStage || $contractAds)
                 <div style="display: flex; flex-direction: column; gap: 10px; padding-top: 12px; border-top: 1px solid #F0EDE7">
                   <h3 style="margin: 0; font-size: 15px; font-weight: 700">앱 광고</h3>
+                  <span style="{{ $muted }}">자리마다 고른 소재 하나만 앱에 나가요. 소재를 새로 만들거나 「이 소재로 노출」을 누르면 같은 자리의 다른 소재는 꺼지고, 남은 보장 노출을 이어받아요.</span>
                   @forelse ($contractAds as $a)
-                    <div style="display: flex; flex-direction: column; gap: 4px; font-size: 13px">
-                      <span><a href="{{ $a['href'] }}" style="color: #141413; font-weight: 700">#{{ $a['id'] }} {{ $a['title'] }}</a> · {{ $a['slot'] }} @if ($a['clip'])<span style="{{ \App\Support\AdminUi::pill($a['clip_failed'] ? 'red' : 'gray') }}">{{ $a['clip'] }}</span>@endif @unless ($a['active'])<span style="{{ \App\Support\AdminUi::pill('gray') }}">꺼짐</span>@endunless</span>
-                      <span style="height: 6px; border-radius: 3px; background: #ECEAE5; overflow: hidden; display: block"><span style="display: block; height: 100%; width: {{ $a['cap'] ? min(100, floor($a['imp'] / $a['cap'] * 100)) : 0 }}%; background: #141413"></span></span>
-                      <span style="{{ $muted }}">노출 {{ number_format($a['imp']) }} / {{ number_format($a['cap']) }}회 · 클릭 {{ number_format($a['clicks']) }}</span>
+                    <div style="display: flex; gap: 10px; align-items: flex-start; font-size: 13px; {{ $a['active'] ? '' : 'opacity: .7' }}">
+                      @if ($a['image'])<img src="{{ $a['image'] }}" alt="소재 #{{ $a['id'] }}" loading="lazy" style="width: 48px; height: 60px; object-fit: cover; border-radius: 6px; border: 1px solid #E4E0D8; flex: none">@endif
+                      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+                        <span><a href="{{ $a['href'] }}" style="color: #141413; font-weight: 700">#{{ $a['id'] }} {{ $a['title'] }}</a> · {{ $a['slot'] }} @if ($a['clip'])<span style="{{ \App\Support\AdminUi::pill($a['clip_failed'] ? 'red' : 'gray') }}">{{ $a['clip'] }}</span>@endif
+                          @if ($a['active'])<span style="{{ \App\Support\AdminUi::pill('green') }}">노출 소재</span>@else<span style="{{ \App\Support\AdminUi::pill('gray') }}">꺼짐</span>@endif</span>
+                        <span style="height: 6px; border-radius: 3px; background: #ECEAE5; overflow: hidden; display: block"><span style="display: block; height: 100%; width: {{ $a['cap'] ? min(100, floor($a['imp'] / $a['cap'] * 100)) : 0 }}%; background: #141413"></span></span>
+                        <span style="{{ $muted }}">노출 {{ number_format($a['imp']) }} / {{ number_format($a['cap']) }}회 · 클릭 {{ number_format($a['clicks']) }}</span>
+                      </div>
+                      @if ($canManage && !$a['active'] && !$a['clip_failed'] && in_array($c->status, ['contracted', 'live'], true))
+                        <form method="POST" action="{{ $a['select'] }}" style="flex: none">@csrf<button type="submit" data-confirm="#{{ $a['id'] }} 소재만 노출할까요? 같은 자리의 다른 소재는 꺼져요." style="{{ $ghost }}">이 소재로 노출</button></form>
+                      @endif
                     </div>
                   @empty
                     <span style="{{ $muted }}">아직 만든 광고가 없어요. 아래에서 견적 줄마다 광고를 만들어주세요. 광고가 있어야 시작일에 노출 · 성과 보고 메일이 시작돼요.</span>
@@ -271,7 +279,10 @@
                     @foreach ($c->lines as $i => $l)
                       @if ($lineLeft[$i] > 0)
                         <details @if ((string) old('line') === (string) $i) open @endif>
-                          <summary style="{{ $ghost }}; list-style: none">{{ $contractLines[$i]['name'] }} 광고 만들기 · 남은 보장 {{ number_format($lineLeft[$i]) }}회</summary>
+                          <summary style="{{ $ghost }}; list-style: none">{{ $contractLines[$i]['name'] }} {{ ($lineHasAd[$i] ?? false) ? '소재 바꾸기' : '광고 만들기' }} · 남은 보장 {{ number_format($lineLeft[$i]) }}회</summary>
+                          @if ($lineHasAd[$i] ?? false)
+                            <span style="{{ $muted }}; display: block; margin-top: 6px">새 소재로 만들면 지금 나가는 소재는 꺼지고 새 소재 하나만 나가요{{ in_array($l['slot'], \App\Services\Starttoo\AdClips::SLOTS, true) ? '(영상은 변환이 끝난 뒤부터)' : '' }}.</span>
+                          @endif
                           <form method="POST" action="{{ route('admin.ad-sales.ad', $c->id) }}" enctype="multipart/form-data" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px">@csrf
                             <input type="hidden" name="line" value="{{ $i }}">
                             <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">광고 문구 <span style="font-weight: 400; color: #66625B">· 80자까지, 앱 카드에 그대로 보여요</span></span><input name="title" required maxlength="80" value="{{ old('title') }}" style="{{ $input }}"></label>
@@ -312,7 +323,6 @@
                             @endif
                             <span data-one-of-note style="display: none; font-size: 12px; color: #C2410C">사진과 영상은 하나만 쓸 수 있어 먼저 고른 파일을 뺐어요.</span>
                             <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">누르면 열 주소 <span style="font-weight: 400; color: #66625B">· 비우면 계약 연결 주소</span></span><input name="link" maxlength="200" placeholder="{{ $c->landing_url ?? 'https://' }}" value="{{ old('link') }}" style="{{ $input }}"></label>
-                            <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">이 광고 보장 노출 <span style="font-weight: 400; color: #66625B">· 소재를 나눌 때만 줄여 적어요</span></span><input type="number" name="cap" min="1000" step="1000" max="{{ $lineLeft[$i] }}" placeholder="{{ $lineLeft[$i] }}" value="{{ old('cap') }}" style="{{ $input }}; max-width: 200px"></label>
                             <span style="{{ $muted }}">노출 기간은 계약 기간({{ $c->starts_at->format('m.d') }} ~ {{ $c->ends_at->format('m.d') }})이고, 보장 노출을 채우면 그만 나가요. 문구 · 사진은 「광고 · 프리미엄」에서 고칠 수 있어요.</span>
                             <div><button type="submit" style="{{ $btn }}">광고 만들기</button></div>
                           </form>

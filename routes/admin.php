@@ -74,6 +74,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('ad-sales/contracts/{id}/rotate/{kind}', [AdminAdSalesController::class, 'rotate'])->whereNumber('id')->name('ad-sales.rotate');
         Route::post('ad-sales/contracts/{id}/report-mail', [AdminAdSalesController::class, 'reportMail'])->whereNumber('id')->name('ad-sales.report-mail');
         Route::post('ad-sales/contracts/{id}/ads', [AdminAdSalesController::class, 'createAd'])->whereNumber('id')->name('ad-sales.ad');
+        Route::post('ad-sales/contracts/{id}/ads/{ad}/select', [AdminAdSalesController::class, 'selectAd'])->whereNumber(['id', 'ad'])->name('ad-sales.select');
         Route::post('ad-sales/contracts/{id}/end', [AdminAdSalesController::class, 'end'])->whereNumber('id')->name('ad-sales.end');
         Route::post('ad-sales/contracts/{id}/cancel', [AdminAdSalesController::class, 'cancel'])->whereNumber('id')->name('ad-sales.cancel');
         Route::post('ad-sales/contracts/{id}/memo', [AdminAdSalesController::class, 'memo'])->whereNumber('id')->name('ad-sales.memo');

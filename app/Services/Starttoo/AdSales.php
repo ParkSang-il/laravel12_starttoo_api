@@ -455,6 +455,8 @@ class AdSales
     /**
      * 콘솔 「광고로 만들기」: 계약의 한 줄(자리 · 보장 노출)로 운영자 광고를 만든다.
      * 노출 기간 = 계약 기간, 보장 노출을 채우면 그만 나간다(impression_cap).
+     * 한 줄(자리)에는 운영자가 고른 소재 하나만 노출한다: 같은 줄에 광고가 이미 있으면 그 광고들은 끄고
+     * 새 광고가 남은 보장 노출(견적 − 앞 소재들이 이미 낸 노출)을 이어받는다.
      */
     public function createAd(int $id, int $line, array $in): int
     {
@@ -462,11 +464,8 @@ class AdSales
         if (!in_array($c->status, ['contracted', 'live'], true)) throw new \InvalidArgumentException('입금을 확인한 계약만 광고를 만들 수 있어요.');
         $l = $c->lines[$line] ?? null;
         if (!$l) throw new \InvalidArgumentException('견적 줄을 찾을 수 없어요.');
-        // 같은 줄로 이미 만든 광고 보장 노출을 뺀 나머지만 새 광고에 준다(소재를 나눠 여러 개 만들 수 있다)
-        $used = (int) $this->db()->table('starttoo_ads')->where('contract_id', $id)->where('slot', $l['slot'])->sum('impression_cap');
-        $cap = isset($in['cap']) && $in['cap'] !== '' ? (int) $in['cap'] : (int) $l['imps'] - $used;
-        if ($cap <= 0) throw new \InvalidArgumentException('이 자리의 보장 노출을 이미 다른 광고에 모두 나눴어요.');
-        if ($used + $cap > (int) $l['imps']) throw new \InvalidArgumentException('보장 노출 합계가 견적(' . number_format($l['imps']) . '회)보다 많아요.');
+        $cap = $this->lineLeft($id, $l);
+        if ($cap <= 0) throw new \InvalidArgumentException('이 자리의 보장 노출을 이미 모두 채웠어요.');
         // 무빙 피드는 사진 또는 영상 중 하나(clip = 업로드 파일 또는 로컬 디스크 경로)
         $clip = $in['clip'] ?? null;
         if ($clip && !in_array($l['slot'], AdClips::SLOTS, true)) throw new \InvalidArgumentException('영상 광고는 무빙 피드 자리만 만들 수 있어요.');
@@ -476,9 +475,42 @@ class AdSales
             'clip' => (bool) $clip,
             'from' => $c->starts_at->toDateString(), 'until' => $c->ends_at->toDateString(),
         ]);
+        // 같은 줄의 다른 소재는 끈다(새 소재 하나만 나간다)
+        $this->db()->table('starttoo_ads')->where('contract_id', $id)->where('slot', $l['slot'])->where('id', '!=', $adId)
+            ->update(['active' => false, 'updated_at' => now()]);
         $this->db()->table('starttoo_ads')->where('id', $adId)->update(['contract_id' => $id, 'impression_cap' => $cap]);
         if ($clip) app(AdClips::class)->attach($adId, $clip);
         return $adId;
+    }
+
+    /** 이 줄(자리)에 아직 남은 보장 노출 = 견적 − 이 계약 같은 자리 광고들이 이미 낸 노출 */
+    public function lineLeft(int $contractId, array $line): int
+    {
+        $done = (int) $this->db()->table('starttoo_ads')->where('contract_id', $contractId)->where('slot', $line['slot'])->sum('impressions');
+        return max(0, (int) $line['imps'] - $done);
+    }
+
+    /**
+     * 콘솔 「이 소재로 노출」: 계약 같은 자리 광고 중 이것 하나만 켜고 나머지는 끈다.
+     * 켠 광고는 남은 보장 노출을 이어받는다(지금까지 낸 노출 + 남은 보장).
+     */
+    public function selectAd(int $id, int $adId): object
+    {
+        $c = $this->mustContract($id);
+        if (!in_array($c->status, ['contracted', 'live'], true)) throw new \InvalidArgumentException('진행 중인 계약만 소재를 바꿀 수 있어요.');
+        $ad = $this->db()->table('starttoo_ads')->where('id', $adId)->where('contract_id', $id)->first();
+        if (!$ad) throw new \InvalidArgumentException('이 계약의 광고가 아니에요.');
+        if (($ad->clip_status ?? null) === 'failed') throw new \InvalidArgumentException('영상 변환에 실패한 소재는 노출할 수 없어요.');
+        $line = collect($c->lines)->firstWhere('slot', $ad->slot);
+        if (!$line) throw new \InvalidArgumentException('견적에 없는 자리예요.');
+        $left = $this->lineLeft($id, $line);
+        if ($left <= 0) throw new \InvalidArgumentException('이 자리의 보장 노출을 이미 모두 채웠어요.');
+        $this->db()->table('starttoo_ads')->where('contract_id', $id)->where('slot', $ad->slot)->where('id', '!=', $adId)
+            ->update(['active' => false, 'updated_at' => now()]);
+        $this->db()->table('starttoo_ads')->where('id', $adId)->update([
+            'active' => true, 'impression_cap' => (int) $ad->impressions + $left, 'updated_at' => now(),
+        ]);
+        return $ad;
     }
 
     /** 계약에 연결된 광고 */
@@ -540,8 +572,9 @@ class AdSales
         foreach ($this->db()->table('starttoo_ad_contracts')->where('status', 'live')->get() as $row) {
             $done = Carbon::parse($row->ends_at)->lt(today());
             if (!$done) {
-                $ads = $this->contractAds((int) $row->id);
-                $done = $ads && collect($ads)->every(fn ($a) => $a->impression_cap && (int) $a->impressions >= (int) $a->impression_cap);
+                // 자리마다 지금 노출 중인 소재 하나만 본다(바꾸기 전 소재는 꺼져 있다)
+                $ads = collect($this->contractAds((int) $row->id))->where('active', true);
+                $done = $ads->isNotEmpty() && $ads->every(fn ($a) => $a->impression_cap && (int) $a->impressions >= (int) $a->impression_cap);
             }
             if ($done) { $this->end((int) $row->id); $ended++; }
         }

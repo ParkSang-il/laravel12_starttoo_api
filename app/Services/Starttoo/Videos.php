@@ -264,7 +264,7 @@ class Videos
     // ── 무빙 피드(VID-06 홈 무빙 탭 · VID-06B 작가 무빙 이어 보기) ─────────
 
     /**
-     * 게시된 무빙을 최신순으로 10개씩. 작품 · 게시물 피드와 같은 공개 범위 · 차단 · 숨김 규칙(카드는 기존 피드 조회로 만든다).
+     * 게시된 무빙을 최신순으로 limit 개씩(기본 10, 앱은 2). 작품 · 게시물 피드와 같은 공개 범위 · 차단 · 숨김 규칙(카드는 기존 피드 조회로 만든다).
      * in: cursor · artist(회원 번호, 그 작가 무빙만) · from(영상 id, 작가 이어 보기 시작 위치)
      * 응답: items(디자인 한 칸 모양) · next_cursor · (artist 일 때) total · index(from 의 순서)
      */
@@ -295,6 +295,8 @@ class Videos
         $base = fn () => $this->feedBase($viewer, $artist);
         $q = $base();
         $columns = ['v.*', 'u.nickname', 'u.avatar_path', 'u.interest_region'];
+        // 한 번에 받을 개수(limit 1~10, 없으면 10). 앱 무빙 화면은 2개씩 받아 넘길 때마다 이어 받는다
+        $per = isset($in['limit']) && ctype_digit((string) $in['limit']) ? max(1, min(10, (int) $in['limit'])) : 10;
 
         $raw = null;
         if (!empty($in['cursor']) && is_string($in['cursor'])) {
@@ -309,11 +311,11 @@ class Videos
             $sid = $mine ? (string) $raw['s'] : $ranking->newSession($viewer);
             $offset = $mine ? max(0, (int) ($raw['o'] ?? 0)) : 0;
             $session = $ranking->videoSession($viewer, $sid);
-            $ids = array_slice($session['keys'], $offset, 10);
+            $ids = array_slice($session['keys'], $offset, $per);
             $rows = $ids ? (clone $q)->whereIn('v.id', $ids)->get($columns)
                 ->sortBy(fn ($r) => array_search($r->id, $ids, true))->values() : collect();
-            $next = $offset + 10 < count($session['keys'])
-                ? self::encodeCursor(['v' => 3, 's' => $sid, 'o' => $offset + 10, 'viewer' => $viewer])
+            $next = $offset + $per < count($session['keys'])
+                ? self::encodeCursor(['v' => 3, 's' => $sid, 'o' => $offset + $per, 'viewer' => $viewer])
                 : ($session['floor'] ? self::encodeCursor(['at' => $session['floor']['at'], 'id' => $session['floor']['id']]) : null);
             return ['items' => $this->shortItems($viewer, $rows), 'next_cursor' => $next];
         }
@@ -334,9 +336,9 @@ class Videos
             $q->where(fn ($w) => $w->where('v.published_at', '<', $cursor['at'])
                 ->orWhere(fn ($s) => $s->where('v.published_at', $cursor['at'])->where('v.id', $op, $cursor['id'])));
         }
-        $rows = $q->orderByDesc('v.published_at')->orderByDesc('v.id')->limit(11)->get($columns);
-        $more = $rows->count() > 10;
-        $rows = $rows->take(10)->values();
+        $rows = $q->orderByDesc('v.published_at')->orderByDesc('v.id')->limit($per + 1)->get($columns);
+        $more = $rows->count() > $per;
+        $rows = $rows->take($per)->values();
         $last = $rows->last();
         $next = $more && $last ? self::encodeCursor(['at' => (string) $last->published_at, 'id' => $last->id]) : null;
         $out = ['items' => $this->shortItems($viewer, $rows), 'next_cursor' => $next];
