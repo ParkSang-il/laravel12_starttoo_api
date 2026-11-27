@@ -56,6 +56,14 @@ Artisan::command('starttoo:purge-auth', function () {
     return 0;
 });
 \Illuminate\Support\Facades\Schedule::command('starttoo:purge-auth')->everyMinute()->withoutOverlapping();
+
+// 무빙(동영상) 정리: 24시간 안에 다 못 올린 업로드 · 게시물이 지워진 영상 파일 · 보관 기간 지난 원본 · 준비 끝 7일 알림
+Artisan::command('starttoo:videos-sweep', function () {
+    $out = app(ProjectDatabase::class)->run('starttoo', fn () => app(\App\Services\Starttoo\Videos::class)->sweep());
+    $this->info(json_encode($out));
+    return 0;
+});
+\Illuminate\Support\Facades\Schedule::command('starttoo:videos-sweep')->hourly()->withoutOverlapping(30);
 require __DIR__.'/starttoo_console.php';
 require __DIR__.'/starttoo_push_console.php';
 require __DIR__.'/starttoo_admin_console.php';

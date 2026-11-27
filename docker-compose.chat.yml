@@ -56,8 +56,9 @@ services:
   chat-queue-media:
     <<: *chat-php
     container_name: starttoo_chat_queue_media
-    command: ["php", "artisan", "queue:work", "database", "--queue=chat-media", "--sleep=3", "--tries=3", "--backoff=5", "--timeout=330", "--max-time=3600"]
-    stop_grace_period: 360s
+    # video-transcode: 무빙(동영상) 변환(작업 제한 600초, ffmpeg · ffprobe 필요). chat-media 를 먼저 처리한다
+    command: ["php", "artisan", "queue:work", "database", "--queue=chat-media,video-transcode", "--sleep=3", "--tries=3", "--backoff=5", "--timeout=330", "--max-time=3600"]
+    stop_grace_period: 620s
 
   chat-scheduler:
     <<: *chat-php

@@ -12,12 +12,12 @@
 </head>
 <body>
 <header class="adv-top" style="background: #0E0E0F; color: #F2EFEA">
-  <div class="adv-wrap" style="min-height: 68px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px">
-    <a href="{{ route('advertiser.products') }}" style="display: flex; align-items: baseline; gap: 10px; color: #F2EFEA; text-decoration: none">
+  <div class="adv-wrap adv-top-in" style="min-height: 68px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px">
+    <a href="{{ route('advertiser.products') }}" class="adv-brand" style="display: flex; align-items: baseline; gap: 10px; color: #F2EFEA; text-decoration: none">
       <span class="adv-display" style="font-weight: 800; font-size: 20px">STARTTOO<span style="color: #FF5A36">.</span></span>
       <span style="font-size: 13px; color: #A19D96">광고 · 제휴</span>
     </a>
-    <nav aria-label="광고 메뉴" style="display: flex; flex-wrap: wrap; gap: 4px; flex: 1">
+    <nav aria-label="광고 메뉴" class="adv-menu" style="display: flex; flex-wrap: wrap; gap: 4px; flex: 1">
       <a href="{{ route('advertiser.products') }}" class="adv-nav" @if (request()->routeIs('advertiser.products')) aria-current="page" @endif>상품 소개</a>
       <a href="{{ route('advertiser.inquiry') }}" class="adv-nav" @if (request()->routeIs('advertiser.inquiry*')) aria-current="page" @endif>광고 문의</a>
       @if ($advertiserMe ?? null)
@@ -26,12 +26,12 @@
     </nav>
     @yield('top-right')
     @if ($advertiserMe ?? null)
-      <form method="POST" action="{{ route('advertiser.logout') }}" style="display: flex; align-items: center; gap: 10px">@csrf
-        <span style="font-size: 13px; color: #BDB8B0">{{ $advertiserMe->company }}</span>
+      <form method="POST" action="{{ route('advertiser.logout') }}" class="adv-acct" style="display: flex; align-items: center; gap: 10px">@csrf
+        <span class="adv-acct-name" style="font-size: 13px; color: #BDB8B0">{{ $advertiserMe->company }}</span>
         <button type="submit" style="height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid #3A3632; background: none; color: #F2EFEA; font-size: 13px; font-weight: 700">로그아웃</button>
       </form>
     @elseif (! request()->routeIs('advertiser.login'))
-      <a href="{{ route('advertiser.login') }}" style="height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid #3A3632; color: #F2EFEA; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; text-decoration: none">광고주 로그인</a>
+      <a href="{{ route('advertiser.login') }}" class="adv-acct" style="height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid #3A3632; color: #F2EFEA; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; text-decoration: none">광고주 로그인</a>
     @endif
   </div>
 </header>

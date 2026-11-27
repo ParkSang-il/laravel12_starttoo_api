@@ -22,6 +22,7 @@ require __DIR__.'/starttoo_ads.php';
 require __DIR__.'/starttoo_announcements.php';
 require __DIR__.'/starttoo_inquiries.php';
 require __DIR__.'/starttoo_app.php';
+require __DIR__.'/starttoo_videos.php';
 
 Route::prefix('v1/projects/{projectCode}')
     ->where(['projectCode' => '[a-z][a-z0-9-]{1,49}'])

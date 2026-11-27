@@ -83,4 +83,18 @@ return [
     // 운영 콘솔 AI 사용량: AI 이미지 1회 추정 단가(원) · 월 예산(원). 0 이면 비용 · 예산 칸을 「미설정」으로 보여 준다
     'ai_unit_cost' => (int) env('STARTTOO_AI_UNIT_COST', 0),
     'ai_monthly_budget' => (int) env('STARTTOO_AI_MONTHLY_BUDGET', 0),
+
+    // 무빙(동영상) — docs/video.md. 저장은 사진과 같은 starttoo 디스크(네이버 Object Storage)의 video/ 아래.
+    // 재생 주소: HLS 는 조각 파일을 상대 경로로 부르므로 서명 URL 이 아닌 CDN 주소가 필요하다(이미지 Optimizer 가 아닌 일반 CDN).
+    // 비우면 무빙 업로드를 막는다(VIDEO_DISABLED).
+    'video_cdn_url' => env('STARTTOO_VIDEO_CDN_URL', ''),
+    'video_ffmpeg' => env('STARTTOO_FFMPEG', 'ffmpeg'),
+    'video_ffprobe' => env('STARTTOO_FFPROBE', 'ffprobe'),
+    'video_min_seconds' => (int) env('STARTTOO_VIDEO_MIN_SECONDS', 3),
+    'video_max_seconds' => (int) env('STARTTOO_VIDEO_MAX_SECONDS', 90),
+    'video_max_mb' => (int) env('STARTTOO_VIDEO_MAX_MB', 700),
+    // 하루 업로드 개수(아티스트) · 신고 몇 건이면 자동 숨김(held) · 원본 보관 일수
+    'video_daily_limit' => (int) env('STARTTOO_VIDEO_DAILY_LIMIT', 20),
+    'video_auto_hold_reports' => (int) env('STARTTOO_VIDEO_AUTO_HOLD_REPORTS', 3),
+    'video_source_keep_days' => (int) env('STARTTOO_VIDEO_SOURCE_KEEP_DAYS', 30),
 ];

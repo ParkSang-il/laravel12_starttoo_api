@@ -19,7 +19,7 @@
       <span class="pd-kicker">STARTTOO ADS</span>
       <h1 class="pd-h1">타투를 고르는 순간,<br><em>브랜드가 보입니다</em></h1>
       <p class="pd-lead">STARTTOO는 작품을 둘러보고, 가상으로 피팅해 보고, 작가에게 상담을 요청하는 타투 플랫폼이에요. 애프터케어 · 뷰티 · 패션 브랜드를 관심이 가장 높은 순간에 보여 드려요.</p>
-      <div style="display: flex; flex-wrap: wrap; gap: 10px">
+      <div class="pd-ctas" style="display: flex; flex-wrap: wrap; gap: 10px">
         <a href="{{ route('advertiser.inquiry') }}" class="adv-btn is-accent">광고 문의하기</a>
         <a href="#slots" class="pd-btn-line">광고 자리 보기</a>
       </div>
@@ -65,7 +65,7 @@
             @if ($daily[$key] ?? null)<div class="pd-fact"><span>하루 평균 노출 · 최근 30일</span><b>약 {{ number_format($daily[$key]) }}회</b></div>@endif
             <div class="pd-fact"><span>소재</span><b style="font-size: 14px">{{ $s['spec'] }}</b></div>
           </div>
-          <div><a href="{{ route('advertiser.inquiry') }}" class="adv-btn is-sm">이 자리로 문의하기</a></div>
+          <div class="pd-ctas"><a href="{{ route('advertiser.inquiry') }}" class="adv-btn is-sm">이 자리로 문의하기</a></div>
         </div>
       </article>
     @empty
@@ -184,7 +184,7 @@
       <h2 class="pd-h2">브랜드에 맞는 자리를 같이 찾아 드릴게요</h2>
       <span style="font-size: 15px; color: #BDB8B0; line-height: 1.7">문의를 남기면 영업일 2일 안에 견적서를 보내 드려요.</span>
     </div>
-    <div style="display: flex; flex-wrap: wrap; gap: 10px">
+    <div class="pd-ctas" style="display: flex; flex-wrap: wrap; gap: 10px">
       <a href="{{ route('advertiser.inquiry') }}" class="adv-btn is-accent">광고 문의하기</a>
       <a href="mailto:{{ config('advertiser.ops_email') }}" class="pd-btn-line">{{ config('advertiser.ops_email') }}</a>
     </div>

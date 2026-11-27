@@ -228,11 +228,14 @@ class Reports
      */
     private function autoHide(string $type, string $targetId): void
     {
-        if (in_array($type, ['user', 'consultation'], true) || !app(Settings::class)->bool('report_auto_hide')) return;
+        if (in_array($type, ['user', 'consultation'], true)) return;
+        // 무빙(동영상) 게시물은 콘솔 설정과 관계없이 기준(기본 3건)에 닿으면 검토 중(held)으로 숨긴다(기획서 「검수 · 정책」)
+        $video = app(Videos::class)->isVideoTarget($type, $targetId);
+        if (!$video && !app(Settings::class)->bool('report_auto_hide')) return;
         $db = app(ProjectDatabase::class)->database();
         $reporters = $db->table('starttoo_reports')->where('target_type', $type)->where('target_id', $targetId)
             ->where('status', 'pending')->distinct()->count('reporter_id');
-        if ($reporters < Settings::AUTO_HIDE_REPORTS) return;
+        if ($reporters < ($video ? max(1, (int) config('starttoo.video_auto_hold_reports')) : Settings::AUTO_HIDE_REPORTS)) return;
         $table = self::table($type);
         $target = $db->table($table)->where('id', $targetId)->lockForUpdate()->first();
         if (!$target || ($target->moderation_hidden ?? true)) return;
@@ -242,6 +245,7 @@ class Reports
         $db->table('starttoo_safety_audits')->insert(['actor_type' => 'system', 'target_type' => $type, 'target_id' => $targetId,
             'action' => 'auto_hide', 'reason' => "미처리 신고 {$reporters}건 누적",
             'changes' => json_encode(['moderation_hidden' => [false, true]], JSON_THROW_ON_ERROR)]);
+        if ($video) app(Videos::class)->heldByReports($type, $targetId);
     }
 
     private function fail(int $status, string $code, string $message): never

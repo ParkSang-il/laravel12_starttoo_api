@@ -129,6 +129,29 @@ class Artworks
     public function create(string $token, array $input, AuthSessions $sessions): array
     {
         $identity = $this->ready($token, $sessions);
+        [$valid, $values] = $this->validatedInput($input);
+        if (Validator::make($input, [
+            'media_ids' => ['required', 'array', 'min:1', 'max:10'],
+            'media_ids.*' => ['required', 'uuid', 'distinct'],
+        ])->fails() || !array_is_list($input['media_ids'])) {
+            $this->fail(422, 'INVALID_ARTWORK_PHOTOS', '사진을 1~10장 선택해주세요.');
+        }
+        $mediaIds = array_values($input['media_ids']);
+        $userId = (int) $identity['account']['id'];
+        $id = $this->insertFor($userId, $valid, $values, $mediaIds, function () use ($token, $sessions) {
+            $this->ready($token, $sessions);
+        }, function () use ($token, $sessions) {
+            $sessions->authenticate($token, true);
+        });
+        return $this->detail($id, $userId);
+    }
+
+    /**
+     * 작품 입력 검증(사진 제외). 무빙(동영상)도 게시 정보를 같은 규칙으로 미리 검증해 둔다.
+     * @return array{0: array, 1: array} [검증 값, 저장할 필드 값]
+     */
+    public function validatedInput(array $input): array
+    {
         $options = $this->options();
         foreach (['title', 'description'] as $field) {
             if (is_string($input[$field] ?? null)) $input[$field] = trim($input[$field]);
@@ -151,13 +174,6 @@ class Artworks
         if ($validator->fails() || !array_is_list($input['styles'] ?? [])) {
             $this->fail(422, 'INVALID_ARTWORK', '스타일과 작품 입력 정보를 확인해주세요.');
         }
-        if (Validator::make($input, [
-            'media_ids' => ['required', 'array', 'min:1', 'max:10'],
-            'media_ids.*' => ['required', 'uuid', 'distinct'],
-        ])->fails() || !array_is_list($input['media_ids'])) {
-            $this->fail(422, 'INVALID_ARTWORK_PHOTOS', '사진을 1~10장 선택해주세요.');
-        }
-        $mediaIds = array_values($input['media_ids']);
         $valid = $validator->validated();
         // 필드 순서를 고정하고 원본 사진 해시와 순서까지 포함한다.
         $values = ['kind' => $valid['kind'], 'title' => $valid['title'] ?? '', 'description' => $valid['description'] ?? '',
@@ -167,19 +183,27 @@ class Artworks
             'duration_minutes' => $valid['kind'] === 'work' && isset($valid['duration_minutes']) ? (int) $valid['duration_minutes'] : null,
             'price' => $valid['kind'] === 'design' && isset($valid['price']) ? (int) $valid['price'] : null,
             'show_in_shop' => (bool) $valid['show_in_shop']];
+        return [$valid, $values];
+    }
+
+    /**
+     * 작품 저장(본인이 미리 올린 사진 media_ids 첨부). 앱 등록과 무빙 게시(변환 작업)가 같이 쓴다.
+     * $recheck: 잠근 뒤 다시 확인(세션 등) · $after: 커밋 직전 처리. 저장된(또는 같은 요청으로 이미 있던) 작품 id 를 돌려준다.
+     */
+    public function insertFor(int $userId, array $valid, array $values, array $mediaIds, ?callable $recheck = null, ?callable $after = null): string
+    {
         // 필드 순서를 고정하고 사진 순서까지 포함한다. 같은 키의 다른 내용은 409로 거절한다.
         $hash = hash('sha256', json_encode([$values, $mediaIds], JSON_THROW_ON_ERROR));
-        $userId = (int) $identity['account']['id'];
         $db = app(ProjectDatabase::class)->database();
         $find = fn () => $db->table('starttoo_artworks')->where('user_id', $userId)->where('request_key', $valid['request_key'])->first();
         $existing = $find();
         if ($existing) {
             $this->checkRetry($existing, $hash);
-            return $this->detail($existing->id, $userId);
+            return $existing->id;
         }
-        $id = $db->transaction(function () use ($db, $token, $sessions, $userId, $valid, $values, $hash, $mediaIds, $find) {
+        return $db->transaction(function () use ($db, $recheck, $after, $userId, $valid, $values, $hash, $mediaIds, $find) {
             $db->table('starttoo_users')->where('id', $userId)->lockForUpdate()->first();
-            $this->ready($token, $sessions);
+            if ($recheck) $recheck();
             $existing = $find();
             if ($existing) {
                 $this->checkRetry($existing, $hash);
@@ -198,10 +222,9 @@ class Artworks
                 $db->table('starttoo_artwork_images')->insert(['artwork_id' => $id, 'position' => $position, 'path' => $paths[$mediaId]]);
             }
             if (($values['visibility'] ?? 'public') === 'public') app(FollowerNotifications::class)->created((int) $userId, 'artwork', $id);
-            $sessions->authenticate($token, true);
+            if ($after) $after();
             return $id;
         }, 3);
-        return $this->detail($id, $userId);
     }
 
     /**
@@ -283,6 +306,8 @@ class Artworks
             'size_text' => $row->size_text ?? null,
             // 2-10 예약 가능 도안: 예약 가능·상담 중·작업 완료
             'design_status' => $row->kind === 'design' ? ($row->design_status ?? 'available') : null,
+            // 무빙(동영상): 첫 사진 = 포스터. 새 앱은 사진 자리에서 영상을 재생한다(없으면 null)
+            'video' => app(Videos::class)->forTarget('artwork', (string) $row->id),
             'created_at' => $row->created_at,
             'author' => ['id' => $author->id, 'nickname' => $author->nickname ?? $author->display_name,
                 'following' => $following ?? in_array((int) $author->id, app(Follows::class)->following([(int) $author->id], $viewerId), true),

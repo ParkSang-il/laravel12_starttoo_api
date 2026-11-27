@@ -48,6 +48,7 @@ class Posts
                 'tags' => json_decode($row->tags, true, 512, JSON_THROW_ON_ERROR),
                 'version' => (int) $row->version, 'viewer_id' => $viewerId,
                 'can_edit' => $viewerId === (int) $row->user_id, 'moderation_hidden' => false,
+                'video' => app(Videos::class)->forTarget('post', (string) $row->id),
                 'created_at' => $row->created_at,
                 'author' => ['id' => (int) $row->user_id, 'nickname' => $row->author_nickname ?? $row->author_display_name,
                     'avatar_url' => app(MediaUrls::class)->url($row->author_avatar, 300),
@@ -85,6 +86,7 @@ class Posts
             'version' => (int) $row->version, 'viewer_id' => $viewerId,
             'can_edit' => $viewerId === (int) $row->user_id,
             'moderation_hidden' => (bool) ($row->moderation_hidden || $author->moderation_hidden),
+            'video' => app(Videos::class)->forTarget('post', (string) $row->id),
             'created_at' => $row->created_at,
             'author' => ['id' => (int) $author->id, 'nickname' => $author->nickname ?? $author->display_name,
                 'avatar_url' => app(MediaUrls::class)->url($author->avatar_path, 300),
@@ -93,6 +95,32 @@ class Posts
             'images' => $db->table('starttoo_post_images')->where('post_id', $id)->orderBy('position')->get()
                 ->map(fn ($image) => ['id' => (int) $image->id, 'url' => app(MediaUrls::class)->url($image->path, 500)])->all(),
         ];
+    }
+
+    /**
+     * 무빙(동영상) 게시: 변환 작업이 회원 대신 새 게시물을 만든다(포스터 = 첫 사진).
+     * 앱의 새 게시물 저장과 같은 해시 · 중복 요청 규칙. 이미 있으면 그 id.
+     */
+    public function insertFor(int $userId, string $requestKey, string $content, array $mediaIds): string
+    {
+        $content = trim($content);
+        if (mb_strlen($content) > 2000) $this->fail(422, 'INVALID_POST', '본문은 2000자 이하로 입력해주세요.');
+        $hash = hash('sha256', json_encode([null, $content, null, $mediaIds], JSON_THROW_ON_ERROR));
+        $db = app(ProjectDatabase::class)->database();
+        return $db->transaction(function () use ($db, $userId, $requestKey, $content, $mediaIds, $hash) {
+            $db->table('starttoo_users')->where('id', $userId)->lockForUpdate()->first();
+            $retry = $db->table('starttoo_posts')->where('user_id', $userId)->where('request_key', $requestKey)->first();
+            if ($retry) return $retry->id;
+            $paths = app(ArtworkUploads::class)->claim($userId, $mediaIds);
+            $id = (string) Str::uuid();
+            $db->table('starttoo_posts')->insert(['content' => $content, 'tags' => json_encode(ArtworkHashtags::extract($content), JSON_THROW_ON_ERROR),
+                'updated_at' => now(), 'id' => $id, 'user_id' => $userId, 'request_key' => $requestKey, 'payload_hash' => $hash, 'created_at' => now()]);
+            foreach ($mediaIds as $position => $mediaId) {
+                $db->table('starttoo_post_images')->insert(['post_id' => $id, 'position' => $position, 'path' => $paths[$mediaId]]);
+            }
+            app(FollowerNotifications::class)->created($userId, 'post', $id);
+            return $id;
+        }, 3);
     }
 
     public function save(?string $id, string $token, array $input, AuthSessions $sessions): array
