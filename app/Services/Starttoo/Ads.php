@@ -213,7 +213,7 @@ class Ads
             $path = app(ArtworkPhotos::class)->storeBytes((string) $in['image_bytes']);
         }
         if ($path === null && in_array($slot, self::IMAGE_REQUIRED, true)) {
-            throw new \InvalidArgumentException('홈 피드 광고는 사진 카드라 이미지가 꼭 필요해요.');
+            throw new \InvalidArgumentException('이 자리 광고는 사진이 꼭 필요해요. 광고 문의 첨부를 고르거나 사진을 올려주세요.');
         }
         return [
             'slot' => $slot, 'advertiser' => $advertiser, 'title' => $title, 'image_path' => $path,

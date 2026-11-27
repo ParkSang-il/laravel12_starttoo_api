@@ -275,7 +275,27 @@
                           <form method="POST" action="{{ route('admin.ad-sales.ad', $c->id) }}" enctype="multipart/form-data" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px">@csrf
                             <input type="hidden" name="line" value="{{ $i }}">
                             <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">광고 문구 <span style="font-weight: 400; color: #66625B">· 80자까지, 앱 카드에 그대로 보여요</span></span><input name="title" required maxlength="80" value="{{ old('title') }}" style="{{ $input }}"></label>
-                            <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">사진 <span style="font-weight: 400; color: #66625B">· {{ \App\Services\Starttoo\AdSales::SLOTS[$l['slot']]['spec'] ?? '' }}</span></span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" style="font-size: 13px"></label>
+                            {{-- 사진: 광고 문의 첨부 이미지를 고르면 그대로 쓴다(첫 이미지를 미리 골라 둠) · 새 사진을 올리면 그게 우선 --}}
+                            @if (!empty($inquiryImages))
+                              <fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
+                                <legend style="{{ $label }}; margin-bottom: 4px">광고 문의 첨부에서 고르기 <span style="font-weight: 400; color: #66625B">· {{ \App\Services\Starttoo\AdSales::SLOTS[$l['slot']]['spec'] ?? '' }}</span></legend>
+                                <div style="display: flex; flex-wrap: wrap; gap: 8px">
+                                  @foreach ($inquiryImages as $k => $img)
+                                    <label style="display: flex; flex-direction: column; gap: 4px; width: 96px; cursor: pointer; font-size: 11px; color: #66625B">
+                                      <span style="position: relative; display: block; width: 96px; height: 120px; border-radius: 8px; overflow: hidden; background: #F0EDE7">
+                                        <img src="{{ $img['preview'] }}" alt="{{ $img['name'] }}" loading="lazy" style="width: 100%; height: 100%; object-fit: cover">
+                                        <input type="radio" name="attachment" value="{{ $img['n'] }}" @checked((string) old('attachment', $k === 0 ? (string) $img['n'] : '') === (string) $img['n']) style="position: absolute; top: 6px; left: 6px; width: 18px; height: 18px; accent-color: #FF5A36">
+                                      </span>
+                                      <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ $img['name'] }} · {{ $img['size'] }}</span>
+                                    </label>
+                                  @endforeach
+                                  <label style="display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; width: 96px; height: 120px; border-radius: 8px; border: 1px dashed #D9D4CB; cursor: pointer; font-size: 12px; color: #66625B; text-align: center">
+                                    <input type="radio" name="attachment" value="" @checked((string) old('attachment', 'x') === '') style="width: 18px; height: 18px; accent-color: #FF5A36">사진 없이 · 직접 올리기
+                                  </label>
+                                </div>
+                              </fieldset>
+                            @endif
+                            <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">{{ empty($inquiryImages) ? '사진' : '새 사진 올리기' }} <span style="font-weight: 400; color: #66625B">· {{ empty($inquiryImages) ? (\App\Services\Starttoo\AdSales::SLOTS[$l['slot']]['spec'] ?? '') : '올리면 위에서 고른 첨부 대신 이 사진을 써요' }}</span></span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" style="font-size: 13px"></label>
                             <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">누르면 열 주소 <span style="font-weight: 400; color: #66625B">· 비우면 계약 연결 주소</span></span><input name="link" maxlength="200" placeholder="{{ $c->landing_url ?? 'https://' }}" value="{{ old('link') }}" style="{{ $input }}"></label>
                             <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">이 광고 보장 노출 <span style="font-weight: 400; color: #66625B">· 소재를 나눌 때만 줄여 적어요</span></span><input type="number" name="cap" min="1000" step="1000" max="{{ $lineLeft[$i] }}" placeholder="{{ $lineLeft[$i] }}" value="{{ old('cap') }}" style="{{ $input }}; max-width: 200px"></label>
                             <span style="{{ $muted }}">노출 기간은 계약 기간({{ $c->starts_at->format('m.d') }} ~ {{ $c->ends_at->format('m.d') }})이고, 보장 노출을 채우면 그만 나가요. 문구 · 사진은 「광고 · 프리미엄」에서 고칠 수 있어요.</span>

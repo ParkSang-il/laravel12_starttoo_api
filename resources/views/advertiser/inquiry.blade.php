@@ -228,9 +228,32 @@
     function leaveGuard(e) { if (busy) { e.preventDefault(); e.returnValue = ''; } }
     window.addEventListener('beforeunload', leaveGuard);
 
+    // 보내기 전 필수 항목 확인(파일을 다 올린 뒤에 서버가 거절하지 않게). 첫 빈 칸으로 이동해 알려 준다
+    var labels = { company: '회사명', contact_name: '담당자', email: '이메일', phone: '연락처' };
+    function missing() {
+      for (var n in labels) {
+        var el = form.querySelector('[name="' + n + '"]');
+        if (el && !el.value.trim()) return { el: el, msg: labels[n] + '을(를) 적어주세요.' };
+        if (el && n === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(el.value.trim())) return { el: el, msg: '이메일 주소를 확인해주세요.' };
+      }
+      var slots = form.querySelectorAll('input[name="slots[]"]');
+      if (slots.length && !form.querySelector('input[name="slots[]"]:checked')) return { el: slots[0], msg: '원하는 자리를 하나 이상 골라주세요.' };
+      var privacy = form.querySelector('input[name="privacy"]');
+      if (privacy && !privacy.checked) return { el: privacy, msg: '개인정보 수집 · 이용에 동의해야 문의를 보낼 수 있어요.' };
+      return null;
+    }
+
     form.addEventListener('submit', function (e) {
       if (busy) { e.preventDefault(); return; }
       err.style.display = 'none';
+      var miss = missing();
+      if (miss) {
+        e.preventDefault();
+        fail(miss.msg);
+        miss.el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        miss.el.focus({ preventScroll: true });
+        return;
+      }
       var input = form.querySelector('input[type=file]');
       var files = input ? Array.from(input.files) : [];
       // 올리기 전에 미리 확인(큰 파일을 다 올린 뒤에 거절되지 않게)

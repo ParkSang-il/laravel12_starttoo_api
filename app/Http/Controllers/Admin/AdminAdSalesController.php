@@ -105,6 +105,8 @@ class AdminAdSalesController extends AdminBaseController
             $data['quoteUrl'] = $this->sales()->quoteUrl($c);
             $data['reportUrl'] = $c->report_token ? AdSales::link('advertiser.report', $c->report_token) : null;
             $data['owner'] = $c->advertiser_id ? app(Advertisers::class)->find((int) $c->advertiser_id) : null;
+            // 광고 만들기: 이 계약의 광고 문의 첨부 중 이미지(앱 광고 사진으로 바로 쓴다)
+            $data['inquiryImages'] = $this->inquiryImages($c);
         } elseif ($sel === 'new') {
             $data['newQuote'] = true;
             $data['quoteDefaults'] = $this->quoteDefaults(null);
@@ -199,8 +201,30 @@ class AdminAdSalesController extends AdminBaseController
     {
         $f = $this->sales()->inquiryFile($id, $n);
         abort_unless($f && Storage::disk('local')->exists($f['path']), 404);
+        // 광고 만들기 화면의 이미지 미리보기(?preview=1): 화면 안에 보여 주기만(내려받기 기록은 남기지 않음)
+        if ($request->query('preview') === '1' && $this->isImageName($f['name'])) {
+            return response()->file(Storage::disk('local')->path($f['path']), ['Cache-Control' => 'private, max-age=600']);
+        }
         $this->audit($request, '설정', '광고 문의 첨부 내려받기', "문의 #{$id} · {$f['name']}");
         return Storage::disk('local')->download($f['path'], $f['name']);
+    }
+
+    private function isImageName(string $name): bool
+    {
+        return in_array(strtolower(pathinfo($name, PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'png', 'webp', 'gif'], true);
+    }
+
+    /** 계약의 광고 문의 첨부 중 이미지: [{n, name, size, preview}] (영상은 앱 광고 사진으로 못 써서 뺀다) */
+    private function inquiryImages(object $c): array
+    {
+        if (!$c->inquiry_id || !($inq = $this->sales()->inquiry((int) $c->inquiry_id))) return [];
+        $out = [];
+        foreach ((array) $inq->files as $n => $f) {
+            if (!$this->isImageName((string) ($f['name'] ?? '')) || !Storage::disk('local')->exists($f['path'] ?? '')) continue;
+            $out[] = ['n' => $n, 'name' => $f['name'], 'size' => round(((int) ($f['size'] ?? 0)) / 1048576, 1) . 'MB',
+                'preview' => route('admin.ad-sales.file', [$inq->id, $n]) . '?preview=1'];
+        }
+        return $out;
     }
 
     // ── 계약 ───────────────────────────────────
@@ -285,11 +309,22 @@ class AdminAdSalesController extends AdminBaseController
             'link' => ['nullable', 'string', 'max:200'],
             'cap' => ['nullable', 'integer', 'min:1000', 'max:100000000'],
             'image' => ['nullable', 'image', 'max:10240'],
+            // 광고 문의 첨부 이미지 번호(새 사진을 올리지 않았을 때 이걸 쓴다)
+            'attachment' => ['nullable', 'integer', 'min:0', 'max:20'],
         ], ['title.required' => '광고 문구를 적어주세요.'], ['title' => '광고 문구', 'cap' => '보장 노출']);
+        $bytes = $request->file('image') ? (string) file_get_contents($request->file('image')->getRealPath()) : '';
+        if ($bytes === '' && isset($data['attachment'])) {
+            $c = $this->sales()->contract($id);
+            $f = $c && $c->inquiry_id ? $this->sales()->inquiryFile((int) $c->inquiry_id, (int) $data['attachment']) : null;
+            if (!$f || !$this->isImageName((string) $f['name']) || !Storage::disk('local')->exists($f['path'])) {
+                return back()->withErrors(['contract' => '고른 첨부 이미지를 찾지 못했어요. 사진을 직접 올려주세요.'])->withInput();
+            }
+            $bytes = (string) Storage::disk('local')->get($f['path']);
+        }
         try {
             $adId = $this->sales()->createAd($id, (int) $data['line'], [
                 'title' => $data['title'], 'link' => $data['link'] ?? null, 'cap' => $data['cap'] ?? null,
-                'image_bytes' => $request->file('image') ? (string) file_get_contents($request->file('image')->getRealPath()) : '',
+                'image_bytes' => $bytes,
             ]);
         } catch (\InvalidArgumentException $e) {
             return back()->withErrors(['contract' => $e->getMessage()])->withInput();
