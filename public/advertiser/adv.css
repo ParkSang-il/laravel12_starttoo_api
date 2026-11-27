@@ -1,0 +1,62 @@
+/* STARTTOO 광고주 웹 — 디자인 AW-01 ~ AW-03 공통 */
+:root { --ink: #141413; --bg: #F4F2EE; --line: #E4E0D8; --field: #D9D4CB; --sub: #66625B; --muted: #77736B; --accent: #FF5A36; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: 'Noto Sans KR', system-ui, sans-serif; }
+a { color: var(--ink); } a:hover { color: #B93415; }
+button, input, select, textarea { font-family: inherit; }
+button { cursor: pointer; }
+input::placeholder, textarea::placeholder { color: #8A867F; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible,
+.adv-choice input:focus-visible + .adv-face { outline: 2px solid var(--ink); outline-offset: 2px; }
+.adv-wrap { max-width: 1200px; margin: 0 auto; padding-left: clamp(16px, 4vw, 40px); padding-right: clamp(16px, 4vw, 40px); }
+.adv-card { background: #FFFFFF; border: 1px solid var(--line); border-radius: 18px; }
+.adv-input { height: 48px; border-radius: 10px; border: 1px solid var(--field); padding: 0 14px; font-size: 15px; color: var(--ink); background: #FFFFFF; width: 100%; }
+.adv-input.is-invalid { border-color: #A3301A; }
+.adv-textarea { border-radius: 10px; border: 1px solid var(--field); padding: 12px 14px; font-size: 15px; line-height: 1.6; resize: vertical; width: 100%; }
+.adv-label { font-size: 14px; font-weight: 700; color: #3A3731; }
+.adv-err { font-size: 12px; color: #A3301A; }
+.adv-btn { height: 52px; padding: 0 24px; border-radius: 12px; border: 0; background: var(--ink); color: #FFFFFF; font-size: 16px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
+.adv-btn.is-accent { background: var(--accent); color: var(--ink); }
+.adv-btn.is-ghost { background: #FFFFFF; color: var(--ink); border: 1px solid var(--field); font-size: 15px; }
+.adv-btn.is-sm { height: 44px; font-size: 14px; padding: 0 16px; }
+.adv-btn:hover { color: #FFFFFF; filter: brightness(1.08); } .adv-btn.is-ghost:hover, .adv-btn.is-accent:hover { color: var(--ink); }
+
+/* 칩 · 자리 카드: 진짜 checkbox / radio 위에 모양만 입힘 */
+.adv-choice { position: relative; display: inline-flex; }
+.adv-choice input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.adv-face { min-height: 40px; padding: 8px 14px; border-radius: 10px; font-size: 14px; font-weight: 700; background: #FFFFFF; color: #3A3731; border: 1px solid var(--field); display: inline-flex; align-items: center; cursor: pointer; }
+.adv-choice input:checked + .adv-face { background: var(--ink); color: #FFFFFF; border-color: var(--ink); }
+.adv-slot .adv-face { width: 100%; padding: 12px; gap: 12px; text-align: left; }
+.adv-slot .adv-face small { display: block; font-size: 12px; font-weight: 400; line-height: 1.45; color: var(--sub); margin-top: 3px; }
+.adv-slot input:checked + .adv-face small { color: #CFCAC1; }
+.adv-slot .adv-thumb { position: relative; width: 38px; height: 56px; border-radius: 6px; flex-shrink: 0; background: var(--bg); border: 1px solid var(--line); }
+.adv-slot .adv-thumb i { position: absolute; left: 5px; right: 5px; border-radius: 2px; background: #CFCAC1; }
+.adv-slot input:checked + .adv-face .adv-thumb { background: #2A2A2E; border-color: #2A2A2E; }
+.adv-slot input:checked + .adv-face .adv-thumb i { background: var(--accent); }
+
+/* 동의 체크 */
+.adv-agree { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.adv-agree input { width: 22px; height: 22px; margin: 2px 0 0; accent-color: var(--ink); flex-shrink: 0; }
+
+/* 파일 드롭 */
+.adv-drop { position: relative; min-height: 112px; border-radius: 12px; border: 1.5px dashed #CFCAC1; background: #FBFAF8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 16px; text-align: center; cursor: pointer; }
+.adv-drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+.adv-pill { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 13px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.adv-pill.green { background: #E3F4E9; color: #1D6B3A; } .adv-pill.amber { background: #FFF1D6; color: #7A4F00; }
+.adv-pill.blue { background: #E3EEFF; color: #1F4F99; } .adv-pill.gray { background: #ECEAE5; color: #55524C; } .adv-pill.red { background: #FDE4DE; color: #A3301A; }
+.adv-th { text-align: left; padding: 12px 14px; font-size: 12px; font-weight: 500; color: var(--sub); border-bottom: 1px solid var(--line); white-space: nowrap; }
+.adv-td { padding: 14px; font-size: 14px; border-bottom: 1px solid #F0EDE7; vertical-align: top; }
+.adv-num { font-variant-numeric: tabular-nums; }
+.adv-display { font-family: Unbounded, 'Arial Black', sans-serif; font-weight: 700; letter-spacing: -0.5px; }
+.adv-sticky { position: sticky; top: 24px; }
+.adv-nav { height: 40px; padding: 0 12px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 500; color: #BDB8B0; text-decoration: none; }
+.adv-nav[aria-current] { font-weight: 700; color: #FFFFFF; }
+.adv-nav:hover { color: #FFFFFF; }
+@media (max-width: 960px) { .adv-sticky { position: static; } }
+
+@media print {
+  body { background: #FFFFFF; }
+  .adv-noprint, header.adv-top, footer.adv-foot { display: none !important; }
+  .adv-card { border: 0; }
+}

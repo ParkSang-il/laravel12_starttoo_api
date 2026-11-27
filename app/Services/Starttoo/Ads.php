@@ -91,6 +91,8 @@ class Ads
             ->where(fn ($w) => $w->whereNull('status')->orWhere('status', 'running'))->whereNull('paused_at')
             ->where(fn ($w) => $w->whereNull('starts_at')->orWhere('starts_at', '<=', now()))
             ->where(fn ($w) => $w->whereNull('ends_at')->orWhere('ends_at', '>', now()))
+            // 외부 광고 계약(CPM): 보장 노출을 채우면 그만 보여 준다
+            ->where(fn ($w) => $w->whereNull('impression_cap')->orWhereColumn('impressions', '<', 'impression_cap'))
             ->when($exclude, fn ($w) => $w->whereNotIn('id', $exclude))
             ->inRandomOrder()->limit(in_array($slot, ['search_top', 'region_top'], true) ? 50 : 10)->get();
         foreach ($rows as $ad) {

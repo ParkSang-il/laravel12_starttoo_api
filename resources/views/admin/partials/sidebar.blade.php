@@ -23,6 +23,7 @@
     ['label' => '비즈니스', 'items' => [
       ['route' => 'admin.payments', 'label' => '예약 · 결제', 'badge' => null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18v16H3zM3 10h18M8 3v4M16 3v4"/></svg>'],
       ['route' => 'admin.ads', 'label' => '광고 · 프리미엄', 'badge' => null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4h3l6 4V6L7 10zM17 9a4 4 0 0 1 0 6"/></svg>'],
+      ['route' => 'admin.ad-sales', 'label' => '광고 문의 · 계약', 'badge' => $badges['adSales'] ?? null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10l4 4v14H3V3zM7 3v5h10M8 13h8M8 17h5"/></svg>'],
     ]],
     ['label' => '시스템', 'items' => [
       ['route' => 'admin.app-version', 'label' => '앱 버전 · 강제 업데이트', 'badge' => null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 2h10v20H7zM11 18h2M12 6v7M9 10l3 3 3-3"/></svg>'],

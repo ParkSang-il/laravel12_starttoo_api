@@ -15,7 +15,11 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         // 운영 콘솔(/admin): 세션 · CSRF 가 있는 web 미들웨어
-        then: fn () => \Illuminate\Support\Facades\Route::middleware('web')->group(base_path('routes/admin.php')),
+        // 외부 광고주 웹(/ads): 같은 web 미들웨어, 로그인은 운영 콘솔 · 앱 회원과 따로
+        then: function () {
+            \Illuminate\Support\Facades\Route::middleware('web')->group(base_path('routes/admin.php'));
+            \Illuminate\Support\Facades\Route::middleware('web')->group(base_path('routes/advertiser.php'));
+        },
     )
     ->withBroadcasting(__DIR__.'/../routes/channels.php', [
         'prefix' => 'api/v1/projects/{projectCode}',
@@ -44,6 +48,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'project.account' => EnsureProjectAccount::class,
             'broadcast.request' => ValidateBroadcastAuthRequest::class,
             'admin.console' => \App\Http\Middleware\AdminConsole::class,
+            'advertiser.web' => \App\Http\Middleware\AdvertiserWeb::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

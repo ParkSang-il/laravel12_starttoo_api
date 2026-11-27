@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminAdSalesController;
 use App\Http\Controllers\Admin\AdminAiController;
 use App\Http\Controllers\Admin\AdminAppVersionController;
 use App\Http\Controllers\Admin\AdminArtistAdsController;
@@ -55,6 +56,26 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('ads/artist/{id}/approve', [AdminArtistAdsController::class, 'approve'])->whereNumber('id')->name('ads.artist.approve');
         Route::post('ads/artist/{id}/reject', [AdminArtistAdsController::class, 'reject'])->whereNumber('id')->name('ads.artist.reject');
         Route::post('ads/{id}', [AdminController::class, 'updateAd'])->whereNumber('id')->name('ads.update');
+
+        // 외부 광고 영업: 광고주 웹(/ads) 문의 → 견적(CPM) → 입금 확인 → 광고 만들기 → 성과 보고
+        Route::get('ad-sales', [AdminAdSalesController::class, 'index'])->name('ad-sales');
+        Route::post('ad-sales/quote', [AdminAdSalesController::class, 'quote'])->name('ad-sales.quote.new');
+        Route::post('ad-sales/rates', [AdminAdSalesController::class, 'rates'])->name('ad-sales.rates');
+        Route::post('ad-sales/inquiries/{id}/quote', [AdminAdSalesController::class, 'quote'])->whereNumber('id')->name('ad-sales.quote');
+        Route::post('ad-sales/inquiries/{id}/reject', [AdminAdSalesController::class, 'reject'])->whereNumber('id')->name('ad-sales.reject');
+        Route::post('ad-sales/inquiries/{id}/close', [AdminAdSalesController::class, 'close'])->whereNumber('id')->name('ad-sales.close');
+        Route::get('ad-sales/inquiries/{id}/files/{n}', [AdminAdSalesController::class, 'file'])->whereNumber(['id', 'n'])->name('ad-sales.file');
+        Route::post('ad-sales/contracts/{id}/resend', [AdminAdSalesController::class, 'resend'])->whereNumber('id')->name('ad-sales.resend');
+        Route::post('ad-sales/contracts/{id}/paid', [AdminAdSalesController::class, 'paid'])->whereNumber('id')->name('ad-sales.paid');
+        Route::post('ad-sales/contracts/{id}/tax', [AdminAdSalesController::class, 'tax'])->whereNumber('id')->name('ad-sales.tax');
+        Route::post('ad-sales/contracts/{id}/rotate/{kind}', [AdminAdSalesController::class, 'rotate'])->whereNumber('id')->name('ad-sales.rotate');
+        Route::post('ad-sales/contracts/{id}/report-mail', [AdminAdSalesController::class, 'reportMail'])->whereNumber('id')->name('ad-sales.report-mail');
+        Route::post('ad-sales/contracts/{id}/ads', [AdminAdSalesController::class, 'createAd'])->whereNumber('id')->name('ad-sales.ad');
+        Route::post('ad-sales/contracts/{id}/end', [AdminAdSalesController::class, 'end'])->whereNumber('id')->name('ad-sales.end');
+        Route::post('ad-sales/contracts/{id}/cancel', [AdminAdSalesController::class, 'cancel'])->whereNumber('id')->name('ad-sales.cancel');
+        Route::post('ad-sales/contracts/{id}/memo', [AdminAdSalesController::class, 'memo'])->whereNumber('id')->name('ad-sales.memo');
+        Route::get('ad-sales/contracts/{id}/cert', [AdminAdSalesController::class, 'cert'])->whereNumber('id')->name('ad-sales.cert');
+        Route::post('ad-sales/advertisers/{id}/link', [AdminAdSalesController::class, 'advertiserLink'])->whereNumber('id')->name('ad-sales.advertiser.link');
 
         Route::get('settings', [AdminController::class, 'settings'])->name('settings');
         Route::get('settings/logs/export', [AdminController::class, 'exportLogs'])->name('settings.logs.export');

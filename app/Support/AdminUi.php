@@ -152,6 +152,10 @@ final class AdminUi
                 // 답변을 기다리는 1:1 문의(테이블이 생기기 전에는 0)
                 'inquiries' => \Illuminate\Support\Facades\Schema::connection($db->getName())->hasTable('starttoo_inquiries')
                     ? $db->table('starttoo_inquiries')->where('status', 'waiting')->count() : 0,
+                // 외부 광고: 새 문의 + 입금 확인이 필요한 계약(테이블이 생기기 전에는 0)
+                'adSales' => \Illuminate\Support\Facades\Schema::connection($db->getName())->hasTable('starttoo_ad_contracts')
+                    ? $db->table('starttoo_ad_inquiries')->where('status', 'new')->count()
+                        + $db->table('starttoo_ad_contracts')->where('status', 'payment_reported')->count() : 0,
             ];
         });
     }

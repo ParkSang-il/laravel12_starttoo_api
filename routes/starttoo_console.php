@@ -486,3 +486,14 @@ Artisan::command('starttoo:fit-models {--gender=female} {--part=} {--face=} {--t
     $this->info(($this->option('dry') ? '[미리보기] ' : '')."조건 {$r['combos']}개 · 사진 {$r['queued']}장 생성 대기");
     return 0;
 })->purpose('가상 피팅 모델 사진 생성');
+
+// 외부 광고 계약: 시작일 → 노출 중(성과 보고 메일) · 종료일 지남 / 보장 노출 다 채움 → 종료(최종 보고 메일) · 보관 기간 지난 문의 정리
+Artisan::command('starttoo:ad-contracts', function () {
+    $r = app(ProjectDatabase::class)->run('starttoo', function () {
+        $sales = app(\App\Services\Starttoo\AdSales::class);
+        return $sales->sweep() + ['purged' => $sales->purgeOldInquiries()];
+    });
+    $this->info("노출 시작 {$r['started']}건 · 종료 {$r['ended']}건 · 지운 문의 {$r['purged']}건");
+    return 0;
+})->purpose('외부 광고 계약 시작 · 종료 · 문의 정리');
+\Illuminate\Support\Facades\Schedule::command('starttoo:ad-contracts')->hourly()->withoutOverlapping();
