@@ -64,6 +64,14 @@ Artisan::command('starttoo:videos-sweep', function () {
     return 0;
 });
 \Illuminate\Support\Facades\Schedule::command('starttoo:videos-sweep')->hourly()->withoutOverlapping(30);
+
+// 홈 추천 기록 정리: 90일 지난 노출 · 체류 원본, 30일 지난 본 기록(docs/feed-ranking.md)
+Artisan::command('starttoo:feed-events-prune', function () {
+    $out = app(ProjectDatabase::class)->run('starttoo', fn () => app(\App\Services\Starttoo\FeedEvents::class)->prune());
+    $this->info(json_encode($out));
+    return 0;
+});
+\Illuminate\Support\Facades\Schedule::command('starttoo:feed-events-prune')->dailyAt('04:30')->withoutOverlapping(60);
 require __DIR__.'/starttoo_console.php';
 require __DIR__.'/starttoo_push_console.php';
 require __DIR__.'/starttoo_admin_console.php';

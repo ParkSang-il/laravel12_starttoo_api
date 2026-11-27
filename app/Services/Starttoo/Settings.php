@@ -15,6 +15,7 @@ class Settings
     public const POLICIES = [
         'guest_browsing' => ['label' => '비회원 피드 공개', 'desc' => '로그인 없이 공개 피드 · 작가 검색 허용'],
         'report_auto_hide' => ['label' => '신고 누적 자동 숨김', 'desc' => '서로 다른 회원 신고 5회 이상이면 검토 전까지 숨김'],
+        'feed_ranking' => ['label' => '홈 피드 추천 순서', 'desc' => '회원별 관심 · 반응으로 홈 피드 순서를 정함(끄면 최신순)'],
     ];
     public const AUTO_HIDE_REPORTS = 5;
 
@@ -58,6 +59,7 @@ class Settings
         return match ($key) {
             'guest_browsing' => (bool) config('starttoo.guest_browsing_enabled'),
             'report_auto_hide' => false,
+            'feed_ranking' => true,
             'ai_budget_block' => false,
             default => false,
         };

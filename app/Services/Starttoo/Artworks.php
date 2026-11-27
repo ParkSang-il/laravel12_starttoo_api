@@ -129,6 +129,8 @@ class Artworks
     public function create(string $token, array $input, AuthSessions $sessions): array
     {
         $identity = $this->ready($token, $sessions);
+        // 작품 · 예약 가능 도안은 승인된 아티스트만 올린다(일반 회원은 게시물 · 일반 무빙)
+        $this->requireArtist((int) $identity['account']['id']);
         [$valid, $values] = $this->validatedInput($input);
         if (Validator::make($input, [
             'media_ids' => ['required', 'array', 'min:1', 'max:10'],
@@ -144,6 +146,15 @@ class Artworks
             $sessions->authenticate($token, true);
         });
         return $this->detail($id, $userId);
+    }
+
+    /** 작품 · 도안 등록 권한: 승인된 아티스트만(403 ARTWORK_ARTIST_ONLY) */
+    public function requireArtist(int $userId): void
+    {
+        $status = app(ProjectDatabase::class)->database()->table('starttoo_users')->where('id', $userId)->value('artist_status');
+        if ($status !== 'approved') {
+            $this->fail(403, 'ARTWORK_ARTIST_ONLY', '작품 · 예약 가능 도안은 아티스트 인증 후 올릴 수 있어요. 일반 게시물로 올려주세요.');
+        }
     }
 
     /**

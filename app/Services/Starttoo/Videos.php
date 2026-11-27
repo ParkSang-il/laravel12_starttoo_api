@@ -52,8 +52,10 @@ class Videos
     {
         if (trim((string) config('starttoo.video_cdn_url')) === '') $this->fail(503, 'VIDEO_DISABLED', '무빙은 아직 준비 중이에요.');
         $user = $this->db()->table('starttoo_users')->where('id', $userId)->first(['artist_status']);
-        // 1차: 승인된 아티스트만 올린다
-        if (($user->artist_status ?? null) !== 'approved') $this->fail(403, 'VIDEO_ARTIST_ONLY', '무빙은 아티스트만 올릴 수 있어요.');
+        // 작품 · 예약 가능 도안 무빙은 승인된 아티스트만, 일반(게시물) 무빙은 모든 회원
+        if (($in['target'] ?? null) !== 'post' && ($user->artist_status ?? null) !== 'approved') {
+            $this->fail(403, 'VIDEO_ARTIST_ONLY', '작품 무빙은 아티스트만 올릴 수 있어요. 일반 무빙으로 올려주세요.');
+        }
         $maxBytes = (int) config('starttoo.video_max_mb') * 1024 * 1024;
         $v = Validator::make($in, [
             'request_key' => ['required', 'uuid'],

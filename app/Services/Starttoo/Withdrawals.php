@@ -58,6 +58,8 @@ class Withdrawals
                 ]);
             }
             $db->table('starttoo_push_devices')->where('user_id', $userId)->delete();
+            // 홈 추천용 행동 기록(노출 · 체류 · 본 카드)
+            app(FeedEvents::class)->forget($userId);
             $db->table('starttoo_auth_sessions')->where('user_id', $userId)->whereNull('revoked_at')
                 ->update(['revoked_at' => $now, 'previous_result' => null, 'updated_at' => $now]);
         });
