@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\AdminArtistAdsController;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminCommsController;
 use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Admin\AdminInquiryController;
 use App\Http\Controllers\Admin\AdminModerationController;
 use Illuminate\Support\Facades\Route;
 
@@ -73,6 +74,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('chats', [AdminCommsController::class, 'chats'])->name('chats');
         Route::post('chats/{id}/open', [AdminCommsController::class, 'openChat'])->whereNumber('id')->name('chats.open');
         Route::post('chats/{id}/warn', [AdminCommsController::class, 'warnChat'])->whereNumber('id')->name('chats.warn');
+        // M-15 1:1 문의(답변하면 회원에게 앱 알림)
+        Route::get('inquiries', [AdminInquiryController::class, 'index'])->name('inquiries');
+        Route::post('inquiries/{id}/answer', [AdminInquiryController::class, 'answer'])->whereNumber('id')->name('inquiries.answer');
 
         // M-16 · M-17 소통
         Route::get('push', [AdminCommsController::class, 'push'])->name('push');

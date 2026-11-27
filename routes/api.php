@@ -20,6 +20,7 @@ require __DIR__.'/starttoo_reviews.php';
 require __DIR__.'/starttoo_community.php';
 require __DIR__.'/starttoo_ads.php';
 require __DIR__.'/starttoo_announcements.php';
+require __DIR__.'/starttoo_inquiries.php';
 require __DIR__.'/starttoo_app.php';
 
 Route::prefix('v1/projects/{projectCode}')

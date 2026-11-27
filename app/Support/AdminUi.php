@@ -149,6 +149,9 @@ final class AdminUi
                 'chats' => $db->table('starttoo_reports')->where('status', 'pending')->whereIn('target_type', ['consultation', 'message'])->count(),
                 // 오늘 실패한 AI 생성(원인 확인용)
                 'aiJobs' => $db->table('starttoo_fit_results')->where('status', 'failed')->where('cost_units', '>', 0)->where('created_at', '>=', today())->count(),
+                // 답변을 기다리는 1:1 문의(테이블이 생기기 전에는 0)
+                'inquiries' => \Illuminate\Support\Facades\Schema::connection($db->getName())->hasTable('starttoo_inquiries')
+                    ? $db->table('starttoo_inquiries')->where('status', 'waiting')->count() : 0,
             ];
         });
     }
