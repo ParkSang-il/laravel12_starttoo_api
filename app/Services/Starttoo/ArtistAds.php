@@ -33,7 +33,7 @@ class ArtistAds
     ];
     public const DAYS = [7, 14, 30];
     public const EXTEND_DAYS = [7, 14];
-    // 한 줄 문구: 광고 카드는 두 줄(약 20자 × 2)까지 보여 40자. DB title 은 80자
+    // 두 줄 문구(줄바꿈 1번 가능): 광고 카드는 두 줄(약 20자 × 2)까지 보여 40자. DB title 은 80자
     public const MAX_COPY = 40;
     public const MAX_KEYWORDS = 3;
     public const VAT_RATE = 0.1;
@@ -460,8 +460,11 @@ class ArtistAds
             'keywords.*' => ['string', 'min:1', 'max:20'],
         ]);
         if ($v->fails()) $this->fail(422, 'INVALID_AD', '광고 내용을 확인해주세요.');
-        $copy = trim((string) $input['copy']);
-        if ($copy === '') $this->fail(422, 'INVALID_AD', '한 줄 문구를 적어주세요.');
+        // 두 줄 문구: 줄바꿈은 한 번까지. 줄마다 앞뒤 공백 · 빈 줄은 정리한다
+        $lines = array_values(array_filter(array_map('trim', preg_split('/\R/u', (string) $input['copy']) ?: []), fn ($l) => $l !== ''));
+        if (count($lines) > 2) $this->fail(422, 'INVALID_AD', '문구는 두 줄까지 쓸 수 있어요.');
+        $copy = implode("\n", $lines);
+        if ($copy === '') $this->fail(422, 'INVALID_AD', '두 줄 문구를 적어주세요.');
         $keywords = array_values(array_unique(array_filter(array_map(fn ($k) => trim((string) $k), $input['keywords'] ?? []))));
         if ($p['keywords'] && !$keywords) $this->fail(422, 'INVALID_AD', '검색 키워드를 1개 이상 골라주세요.');
         $base = ['title' => $copy, 'keywords' => $p['keywords'] ? json_encode($keywords, JSON_UNESCAPED_UNICODE) : null];
