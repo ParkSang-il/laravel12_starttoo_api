@@ -3,12 +3,14 @@
 
 @section('content')
 @php
-  $kind = fn ($slot) => $slot === 'community_top' ? 'community' : 'feed';
+  $kind = fn ($slot) => match ($slot) { 'community_top' => 'community', 'moving_inline' => 'moving', default => 'feed' };
+  $where = fn ($slot) => match ($slot) { 'community_top' => '커뮤니티', 'moving_inline' => '무빙', default => '홈' };
   // FAQ 계산 예시에 쓸 단가(받는 자리가 없으면 단가표 기본값)
   $exCpm = (int) (array_values($slots)[0]['cpm'] ?? \App\Services\Starttoo\AdSales::SLOTS['feed_inline']['cpm']);
   $bullets = [
     'feed_inline' => ['작품을 넘겨 보는 홈 피드 한가운데, 게시물과 같은 크기의 세로 사진 카드', '사진 아래 「자세히 보기」 줄을 누르면 브랜드 페이지가 바로 열려요', '같은 피드에서는 한 번 본 광고를 다시 보여 주지 않아 피로감이 적어요'],
     'community_top' => ['후기 · 질문 게시판을 여는 순간 가장 먼저 보이는 맨 위 카드', '실시간 인기글과 나란히 좌우로 넘기는 자리라 자연스럽게 눈에 들어와요', '문구 중심 카드라 사진이 없어도 진행할 수 있어요'],
+    'moving_inline' => ['작업 과정 · 완성 영상을 위로 넘겨 보는 무빙 피드에서 무빙 5개마다 나오는 전체 화면 한 장', '화면을 가득 채우는 세로 이미지라 집중도가 가장 높은 자리예요', '아래 「자세히 보기」를 누르면 브랜드 페이지가 바로 열려요 · 같은 피드에서 한 번 본 광고는 다시 나오지 않아요'],
   ];
 @endphp
 
@@ -52,7 +54,7 @@
           @include('advertiser.partials.phone', ['kind' => $kind($key), 'shot' => $shots[$key] ?? null])
         </div>
         <div class="pd-slot-info">
-          <span class="adv-pill gray" style="align-self: flex-start">{{ $loop->iteration < 10 ? '0' . $loop->iteration : $loop->iteration }} · {{ $key === 'community_top' ? '커뮤니티' : '홈' }}</span>
+          <span class="adv-pill gray" style="align-self: flex-start">{{ $loop->iteration < 10 ? '0' . $loop->iteration : $loop->iteration }} · {{ $where($key) }}</span>
           <div style="display: flex; flex-direction: column; gap: 6px">
             <h3 style="margin: 0; font-size: clamp(24px, 2.6vw, 32px); font-weight: 900; letter-spacing: -0.5px">{{ $s['name'] }}</h3>
             <span style="font-size: 15px; color: #55524C; line-height: 1.6">{{ $s['desc'] }}</span>
