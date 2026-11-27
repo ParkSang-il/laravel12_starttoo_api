@@ -75,6 +75,12 @@
               <img src="{{ $q['image'] }}" alt="{{ ($q['own_image'] ?? false) ? '직접 올린 광고 사진' : '광고 작품' }}" style="width: 72px; height: 90px; object-fit: cover; border-radius: 8px; border: 1px solid #E4E0D8">
               @if ($q['own_image'] ?? false)<span style="{{ \App\Support\AdminUi::pill('amber') }}">직접 올린 사진</span>@endif
             </a>
+            {{-- 무빙 피드 광고: 포스터 아래 영상 주소(HLS · Safari 에서 바로 재생) --}}
+            @if ($q['video_url'] ?? null)
+              <a href="{{ $q['video_url'] }}" target="_blank" rel="noopener" style="{{ \App\Support\AdminUi::pill('blue') }}; align-self: flex-end; text-decoration: none">무빙 재생</a>
+            @endif
+          @elseif ($q['video_missing'] ?? false)
+            <div style="width: 72px; height: 90px; border-radius: 8px; background: #FDE4DE; color: #A3301A; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; text-align: center; padding: 6px; flex: none">무빙이 지워졌거나 비공개</div>
           @else
             <div style="width: 72px; height: 90px; border-radius: 8px; background: #F0EDE7; flex: none"></div>
           @endif

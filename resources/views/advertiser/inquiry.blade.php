@@ -109,8 +109,8 @@
         <label class="adv-drop">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#55524C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4"/></svg>
           <span style="font-size: 14px; font-weight: 700">이미지 · 영상 올리기</span>
-          <span style="font-size: 12px; color: #77736B">세로 1080×1350 권장 · JPG · PNG · MP4 · 영상 50MB · 이미지 20MB · 5개까지 · 여러 번 나눠 골라도 돼요 · 나중에 메일로 보내도 돼요</span>
-          <input type="file" name="files[]" multiple accept="image/jpeg,image/png,image/webp,image/gif,video/mp4" aria-labelledby="files-label">
+          <span style="font-size: 12px; color: #77736B">세로 1080×1350 권장 · JPG · PNG · MP4 · MOV · 영상 50MB · 이미지 20MB · 5개까지 · 여러 번 나눠 골라도 돼요 · 나중에 메일로 보내도 돼요</span>
+          <input type="file" name="files[]" multiple accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/x-m4v,.mp4,.mov,.m4v" aria-labelledby="files-label">
         </label>
         {{-- 고른 파일 목록(고를 때마다 쌓이고, 하나씩 뺄 수 있다) --}}
         <ul data-file-list style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px"></ul>
@@ -152,7 +152,7 @@
 <script>
   // 광고 소재: 파일을 고를 때마다 목록에 쌓는다(브라우저 기본은 다시 고르면 앞 선택이 바뀐다). 5개까지 · 하나씩 빼기
   var MAX_FILES = 5, MAX_VIDEO = 50 * 1024 * 1024, MAX_IMAGE = 20 * 1024 * 1024;
-  function isVideo(f) { return /^video\//.test(f.type) || /\.mp4$/i.test(f.name); }
+  function isVideo(f) { return /^video\//.test(f.type) || /\.(mp4|mov|m4v)$/i.test(f.name); }
   function sizeLimit(f) { return isVideo(f) ? MAX_VIDEO : MAX_IMAGE; }
   (function () {
     var inp = document.querySelector('.adv-drop input[type=file]');

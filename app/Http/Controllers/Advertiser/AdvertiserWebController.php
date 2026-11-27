@@ -78,13 +78,24 @@ class AdvertiserWebController extends Controller
             'budget' => ['nullable', Rule::in(config('advertiser.budgets'))],
             'landing_url' => ['nullable', 'url:https', 'max:500'],
             'files' => ['nullable', 'array', 'max:5'],
-            // 영상(MP4) 50MB · 이미지 20MB
-            'files.*' => ['file', 'max:51200', 'mimes:jpg,jpeg,png,webp,gif,mp4',
+            // 영상(MP4 · MOV) 50MB · 이미지(JPG · PNG · WEBP · GIF) 20MB.
+            // mimes 규칙은 파일 내용으로 확장자를 추정해, 폰 · 화면녹화 MP4(내용은 QuickTime · M4V)를 거절했다.
+            // → 확장자 + 실제 형식(이미지 · 영상 계열)을 함께 본다.
+            'files.*' => ['file', 'max:51200',
                 function (string $attr, $file, \Closure $fail) {
-                    if ($file instanceof \Illuminate\Http\UploadedFile && $file->getClientOriginalExtension() !== ''
-                        && strtolower($file->getClientOriginalExtension()) !== 'mp4' && $file->getSize() > 20 * 1024 * 1024) {
-                        $fail('이미지는 20MB까지 올릴 수 있어요.');
+                    if (!$file instanceof \Illuminate\Http\UploadedFile) return;
+                    $ext = strtolower($file->getClientOriginalExtension());
+                    $mime = strtolower((string) $file->getMimeType());
+                    $images = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+                    $videos = ['mp4', 'm4v', 'mov'];
+                    $isImage = in_array($ext, $images, true) && str_starts_with($mime, 'image/');
+                    $isVideo = in_array($ext, $videos, true)
+                        && (str_starts_with($mime, 'video/') || in_array($mime, ['application/mp4', 'application/octet-stream'], true));
+                    if (!$isImage && !$isVideo) {
+                        $fail('JPG · PNG · WEBP · GIF · MP4 · MOV 파일만 올릴 수 있어요.');
+                        return;
                     }
+                    if ($isImage && $file->getSize() > 20 * 1024 * 1024) $fail('이미지는 20MB까지 올릴 수 있어요.');
                 }],
             'memo' => ['nullable', 'string', 'max:2000'],
             'privacy' => ['accepted'],
@@ -98,7 +109,7 @@ class AdvertiserWebController extends Controller
             // PHP 가 파일을 받기 전에 거절(서버 업로드 한도 초과 · 전송 중 끊김)
             'files.*.uploaded' => '파일을 올리지 못했어요. 영상 50MB · 이미지 20MB 이하인지 확인하고 다시 보내주세요. 더 큰 영상은 나중에 메일로 보내도 돼요.',
             'files.*.file' => '파일을 올리지 못했어요. 다시 골라 보내주세요.',
-            'files.*.mimes' => 'JPG · PNG · WEBP · GIF · MP4 파일만 올릴 수 있어요.',
+            'files.*.mimes' => 'JPG · PNG · WEBP · GIF · MP4 · MOV 파일만 올릴 수 있어요.',
             'wish_start.after_or_equal' => '시작일은 오늘 이후로 골라주세요.',
         ], ['company' => '회사명', 'contact_name' => '담당자', 'email' => '이메일', 'phone' => '연락처', 'landing_url' => '연결 주소']);
 

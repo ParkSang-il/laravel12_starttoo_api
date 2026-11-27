@@ -135,6 +135,8 @@ class Ads
                 'rating' => $extra['rating'] ?? null,
                 'review_count' => $extra['review_count'] ?? null,
                 'consult_open' => $extra['consult_open'] ?? null,
+                // 무빙 피드 작가 광고: 광고 칸에서 재생할 무빙(hls_url · poster_url · duration_ms · muted)
+                'video' => $extra['video'] ?? null,
             ]];
         }
         return ['ad' => null];
