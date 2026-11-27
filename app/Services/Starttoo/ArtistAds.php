@@ -5,7 +5,6 @@ namespace App\Services\Starttoo;
 use App\Services\ProjectDatabase;
 use Carbon\Carbon;
 use Illuminate\Http\Exceptions\HttpResponseException;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
@@ -39,8 +38,6 @@ class ArtistAds
     public const VAT_RATE = 0.1;
     /** 광고를 누른 뒤 이 기간 안에 상담을 요청하면 광고 성과로 센다 */
     public const LEAD_DAYS = 7;
-    /** 직접 올리는 광고 사진 최대 크기 */
-    public const IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 
     private function db() { return app(ProjectDatabase::class)->database(); }
 
@@ -387,8 +384,8 @@ class ArtistAds
     // ── 작가: 신청 · 변경 ─────────────────────────────
 
     /** 6-08 심사 요청. 같은 상품의 심사 중 · 노출 중 광고가 있으면 받지 않는다. */
-    /** $image: 작가가 직접 올린(앱 편집기로 다듬은) 광고 사진. 있으면 작품 대신 이 사진을 쓴다 */
-    public function create(int $artist, array $input, ?UploadedFile $image = null): array
+    /** image_media_id: 작가가 직접 올린(앱 편집기로 다듬은) 광고 사진. 있으면 작품 대신 이 사진을 쓴다 */
+    public function create(int $artist, array $input): array
     {
         $config = $this->config();
         $id = (string) ($input['product'] ?? '');
@@ -400,8 +397,8 @@ class ArtistAds
             ->where(fn ($q) => $q->where('status', 'reviewing')->orWhere(fn ($r) => $r->where('status', 'running')
                 ->where(fn ($e) => $e->whereNull('ends_at')->orWhere('ends_at', '>', now()))))->exists();
         if ($exists) $this->fail(409, 'AD_EXISTS', '이 위치에 심사 중이거나 노출 중인 광고가 있어요.');
-        // 사진 저장은 다른 검사를 모두 통과한 뒤에(거절될 요청에 파일을 남기지 않게)
-        $values = $this->content($artist, $p, $input, $image, null) + $agreed;
+        // 올린 사진 연결(claim)은 다른 검사를 모두 통과한 뒤에
+        $values = $this->content($artist, $p, $input, null) + $agreed;
         $days = $p['unit'] === 'day' ? $this->days($input['days'] ?? null) : null;
         $price = $this->price($id, $artist, $config);
         $adId = $this->db()->table('starttoo_ads')->insertGetId($values + [
@@ -414,7 +411,7 @@ class ArtistAds
     }
 
     /** 반려된 광고를 고쳐 다시 요청 · 노출 중 광고의 문구 · 작품 바꾸기(다시 심사) */
-    public function edit(int $artist, int $id, array $input, ?UploadedFile $image = null): array
+    public function edit(int $artist, int $id, array $input): array
     {
         $ad = $this->mine($artist, $id);
         $p = $this->config()[$ad->product];
@@ -424,7 +421,7 @@ class ArtistAds
         }
         // 다시 요청 · 변경 요청도 그때의 광고 운영 정책에 동의해야 한다
         $agreed = $this->agreement($input);
-        $values = $this->content($artist, $p, $input, $image, $ad);
+        $values = $this->content($artist, $p, $input, $ad);
         if ($state === 'rejected') {
             $days = $p['unit'] === 'day' ? $this->days($input['days'] ?? $ad->days) : null;
             $price = $this->price($ad->product, $artist);
@@ -444,16 +441,18 @@ class ArtistAds
     /** 문구 · 작품 · 키워드 검사 → 저장 값 */
     /**
      * 광고 내용: 문구 · 키워드 + 광고 사진(셋 중 하나)
-     *  - 새로 올린 사진($image): 작품 없이 이 사진을 쓴다
+     *  - image_media_id: 앱에서 편집해 올린 사진(artworks/media 업로드 id). 작품 없이 이 사진을 쓴다
      *  - keep_image: 고치는 광고($current)에 이미 올린 사진을 그대로 쓴다
      *  - artwork_id: 공개한 내 작품의 첫 사진을 쓴다(올린 사진은 비운다)
      * 돌려주는 image_path 는 광고에 둘 사진 경로(작품이면 null)
      */
-    private function content(int $artist, array $p, array $input, ?UploadedFile $image = null, ?object $current = null): array
+    private function content(int $artist, array $p, array $input, ?object $current = null): array
     {
-        $keep = !$image && ($input['keep_image'] ?? false) === true && $current && $current->image_path;
-        $own = $image !== null || $keep;
+        $media = is_string($input['image_media_id'] ?? null) && $input['image_media_id'] !== '' ? $input['image_media_id'] : null;
+        $keep = !$media && ($input['keep_image'] ?? false) === true && $current && $current->image_path;
+        $own = $media !== null || $keep;
         $v = Validator::make($input, [
+            'image_media_id' => ['nullable', 'uuid'],
             'artwork_id' => [$own ? 'nullable' : 'required', 'uuid'],
             'copy' => ['required', 'string', 'max:'.self::MAX_COPY],
             'keywords' => ['array', 'max:'.self::MAX_KEYWORDS],
@@ -465,12 +464,9 @@ class ArtistAds
         $keywords = array_values(array_unique(array_filter(array_map(fn ($k) => trim((string) $k), $input['keywords'] ?? []))));
         if ($p['keywords'] && !$keywords) $this->fail(422, 'INVALID_AD', '검색 키워드를 1개 이상 골라주세요.');
         $base = ['title' => $copy, 'keywords' => $p['keywords'] ? json_encode($keywords, JSON_UNESCAPED_UNICODE) : null];
-        if ($image) {
-            if (!$image->isValid() || !in_array($image->getMimeType(), ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'], true)
-                || $image->getSize() > self::IMAGE_MAX_BYTES) {
-                $this->fail(422, 'INVALID_AD_IMAGE', '광고 사진을 확인해주세요(JPG · PNG · 20MB까지).');
-            }
-            return $base + ['artwork_id' => null, 'image_path' => app(ArtworkPhotos::class)->store($artist, $image)];
+        if ($media) {
+            // 작품 · 상점 커버와 같은 업로드(변환 · 크기 검사를 마친 사진만, 한 번만 쓸 수 있다)
+            return $base + ['artwork_id' => null, 'image_path' => app(ArtworkUploads::class)->claim($artist, [$media])[$media]];
         }
         if ($keep) return $base + ['artwork_id' => null, 'image_path' => $current->image_path];
         $art = $this->db()->table('starttoo_artworks')->where('id', $input['artwork_id'])->where('user_id', $artist)
