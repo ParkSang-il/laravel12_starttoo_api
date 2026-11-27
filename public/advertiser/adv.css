@@ -154,6 +154,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .pd-faq details { border-bottom: 1px solid #E4E0D8; padding: 18px 4px; } .pd-faq summary { cursor: pointer; font-size: 16px; font-weight: 700; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
 .pd-faq summary::after { content: '+'; font-size: 22px; line-height: 1; color: #FF5A36; } .pd-faq details[open] summary::after { content: '−'; }
 .pd-faq p { margin: 10px 0 0; font-size: 14px; color: #55524C; line-height: 1.75; }
+.pd-faq ul, .pd-faq ol { margin: 12px 0 0; padding-left: 20px; font-size: 14px; color: #55524C; line-height: 1.75; display: flex; flex-direction: column; gap: 6px; }
+.pd-faq li b, .pd-faq p b { color: #141413; }
+.pd-calc { margin-top: 12px; padding: 14px 18px; border-radius: 14px; background: #141413; color: #BDB8B0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.pd-calc b { font-family: Unbounded, sans-serif; font-size: 20px; color: #F2EFEA; } .pd-calc small { font-family: 'Noto Sans KR', sans-serif; font-size: 12px; font-weight: 400; color: #A19D96; margin-left: 6px; }
 .pd-final { margin-top: 96px; border-radius: 28px; padding: clamp(32px, 5vw, 64px); background: #0E0E0F; color: #F2EFEA; position: relative; overflow: hidden; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; }
 .pd-final::before { content: ''; position: absolute; width: 520px; height: 520px; left: -140px; bottom: -320px; border-radius: 50%; background: radial-gradient(closest-side, rgba(255,90,54,.45), rgba(255,90,54,0)); }
 .pd-final > * { position: relative; }

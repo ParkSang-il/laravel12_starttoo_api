@@ -21,7 +21,7 @@
     <div style="display: flex; flex-direction: column; gap: 14px">
       <span class="adv-display" style="font-size: 12px; letter-spacing: 1px; color: #B93415">ADVERTISE</span>
       <h1 style="margin: 0; font-size: clamp(30px, 3.4vw, 42px); font-weight: 900; letter-spacing: -1px; line-height: 1.2">타투를 고르는 순간에<br>브랜드를 보여주세요</h1>
-      <p style="margin: 0; font-size: 16px; color: #55524C; line-height: 1.7">STARTTOO는 작품을 둘러보고, 가상으로 피팅해보고, 작가에게 상담을 요청하는 타투 플랫폼이에요. 아프터케어 · 뷰티 · 패션 브랜드에 잘 맞아요.</p>
+      <p style="margin: 0; font-size: 16px; color: #55524C; line-height: 1.7">STARTTOO는 작품을 둘러보고, 가상으로 피팅해보고, 작가에게 상담을 요청하는 타투 플랫폼이에요. 애프터케어 · 뷰티 · 패션 브랜드에 잘 맞아요.</p>
     </div>
     @if ($stats)
       <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
