@@ -103,7 +103,7 @@ class AdminAdSalesController extends AdminBaseController
                 return max(0, (int) $l['imps'] - $used);
             }, $c->lines);
             $data['quoteUrl'] = $this->sales()->quoteUrl($c);
-            $data['reportUrl'] = $c->report_token ? route('advertiser.report', $c->report_token) : null;
+            $data['reportUrl'] = $c->report_token ? AdSales::link('advertiser.report', $c->report_token) : null;
             $data['owner'] = $c->advertiser_id ? app(Advertisers::class)->find((int) $c->advertiser_id) : null;
         } elseif ($sel === 'new') {
             $data['newQuote'] = true;

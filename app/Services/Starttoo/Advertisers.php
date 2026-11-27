@@ -112,7 +112,7 @@ class Advertisers
             'expires_at' => now()->addMinutes((int) config('advertiser.password_link_minutes', 60)),
             'created_at' => now(),
         ]);
-        return route('advertiser.password.reset', $token);
+        return AdSales::link('advertiser.password.reset', $token);
     }
 
     /** 링크가 살아 있으면 그 계정(쓰지는 않음) */

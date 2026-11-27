@@ -26,10 +26,17 @@ class AdvertiserWebController extends Controller
 
     public function products(): View
     {
+        // 실제 앱 캡처를 public/advertiser/screens/{slot}.png 로 올려 두면 모형 대신 보여 준다
+        $shots = [];
+        foreach (array_keys(AdSales::SLOTS) as $slot) {
+            $file = "advertiser/screens/$slot.png";
+            $shots[$slot] = is_file(public_path($file)) ? asset($file) . '?v=' . filemtime(public_path($file)) : null;
+        }
         return view('advertiser.products', [
             'slots' => $this->sales()->openSlots(),
             'daily' => $this->sales()->slotDaily(),
             'stats' => $this->sales()->siteStats(),
+            'shots' => $shots,
         ]);
     }
 

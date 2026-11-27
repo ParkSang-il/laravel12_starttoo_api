@@ -159,7 +159,7 @@ class AdSales
             "연결 주소: {$inq->landing_url}",
             '첨부: ' . count($inq->files) . '개',
             '', (string) $inq->memo, '',
-            '운영 콘솔: ' . route('admin.ad-sales', ['sel' => 'i' . $inq->id]),
+            '운영 콘솔: ' . self::link('admin.ad-sales', ['sel' => 'i' . $inq->id]),
         ]);
         return $inq;
     }
@@ -249,7 +249,13 @@ class AdSales
         return $r ? $this->hydrate($r) : null;
     }
 
-    public function quoteUrl(object $c): string { return route('advertiser.quote', $c->quote_token); }
+    /** 광고주 · 콘솔 링크(config advertiser.url 기준 — 서버 APP_URL 과 상관없이 www.starttoo.com) */
+    public static function link(string $name, mixed $params = []): string
+    {
+        return config('advertiser.url') . route($name, $params, false);
+    }
+
+    public function quoteUrl(object $c): string { return self::link('advertiser.quote', $c->quote_token); }
 
     public function reportUrl(object $c): string
     {
@@ -257,7 +263,7 @@ class AdSales
             $c->report_token = Str::random(48);
             $this->db()->table('starttoo_ad_contracts')->where('id', $c->id)->update(['report_token' => $c->report_token, 'updated_at' => now()]);
         }
-        return route('advertiser.report', $c->report_token);
+        return self::link('advertiser.report', $c->report_token);
     }
 
     /**
@@ -360,7 +366,7 @@ class AdSales
         $this->db()->table('starttoo_ad_contracts')->where('id', $c->id)->where('status', 'quote_sent')
             ->update(['status' => 'awaiting_payment', 'accepted_at' => now(), 'updated_at' => now()]);
         $this->mailOps("[견적 수락] {$c->company} · {$c->quote_no}", [$c->title, '합계 ₩' . number_format($c->total), '',
-            '운영 콘솔: ' . route('admin.ad-sales', ['tab' => '계약', 'sel' => 'c' . $c->id])]);
+            '운영 콘솔: ' . self::link('admin.ad-sales', ['tab' => '계약', 'sel' => 'c' . $c->id])]);
     }
 
     public function requestChange(object $c, string $text): void
@@ -369,7 +375,7 @@ class AdSales
         $this->db()->table('starttoo_ad_contracts')->where('id', $c->id)
             ->update(['change_request' => $text, 'change_requested_at' => now(), 'updated_at' => now()]);
         $this->mailOps("[견적 수정 요청] {$c->company} · {$c->quote_no}", [$text, '',
-            '운영 콘솔: ' . route('admin.ad-sales', ['tab' => '계약', 'sel' => 'c' . $c->id])]);
+            '운영 콘솔: ' . self::link('admin.ad-sales', ['tab' => '계약', 'sel' => 'c' . $c->id])]);
     }
 
     public function reportPayment(object $c, array $d, ?UploadedFile $cert): void
@@ -384,7 +390,7 @@ class AdSales
         ]);
         if ($c->advertiser_id) app(Advertisers::class)->rememberTax((int) $c->advertiser_id, ['biz_no' => $biz] + $d);
         $this->mailOps("[입금 알림] {$c->company} · {$c->quote_no}", ['입금 확인 후 콘솔에서 [입금 확인]을 눌러주세요.', '합계 ₩' . number_format($c->total), '',
-            '운영 콘솔: ' . route('admin.ad-sales', ['tab' => '계약', 'sel' => 'c' . $c->id])]);
+            '운영 콘솔: ' . self::link('admin.ad-sales', ['tab' => '계약', 'sel' => 'c' . $c->id])]);
     }
 
     /** 콘솔: 입금 확인 → 계약 완료(광고주가 입금 알림을 안 눌렀어도 확인할 수 있다) */
@@ -482,7 +488,7 @@ class AdSales
             $sent = $this->mail($c->email, "[STARTTOO 광고] 최종 성과 보고 · {$c->title}", [
                 "{$c->company} {$c->contact_name}님, 광고가 끝났어요.",
                 '', '노출 ' . number_format($r['totImp']) . '회 · 클릭 ' . number_format($r['totClk']) . '회', '',
-                '최종 성과 보고: ' . $this->reportUrl($c), '', '다시 집행을 원하시면 ' . route('advertiser.inquiry') . ' 에서 문의해주세요.',
+                '최종 성과 보고: ' . $this->reportUrl($c), '', '다시 집행을 원하시면 ' . self::link('advertiser.inquiry') . ' 에서 문의해주세요.',
             ]);
             if ($sent) $this->db()->table('starttoo_ad_contracts')->where('id', $id)->update(['final_mailed_at' => now()]);
         }

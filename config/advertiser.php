@@ -7,26 +7,32 @@
 
 return [
     // 새 문의 · 견적 수락 · 입금 알림을 받을 운영 메일
-    'ops_email' => env('ADVERTISER_OPS_EMAIL', 'ads@starttoo.kr'),
+    // .env 에 키만 있고 값이 비어 있어도(빈 문자열) 기본값을 쓴다
+
+    // 메일 · 콘솔에 넣는 광고주 링크의 주소 앞부분. 서버 APP_URL(다른 프로젝트와 공유)과 따로 둔다.
+    // 스케줄러(성과 보고 · 최종 보고 메일)처럼 요청이 없는 곳에서도 이 주소로 링크를 만든다.
+    'url' => rtrim(env('ADVERTISER_URL') ?: 'https://www.starttoo.com', '/'),
+
+    'ops_email' => env('ADVERTISER_OPS_EMAIL') ?: 'ads@starttoo.kr',
 
     // 화면 하단 · 견적서 '보내는 곳'
     'company' => [
-        'name' => env('ADVERTISER_COMPANY_NAME', '(주)스타투'),
-        'ceo' => env('ADVERTISER_COMPANY_CEO', '○○○'),
-        'biz_no' => env('ADVERTISER_COMPANY_BIZ_NO', '000-00-00000'),
-        'mail_order_no' => env('ADVERTISER_COMPANY_MAIL_ORDER_NO', '0000-서울마포-0000'),
-        'contact' => env('ADVERTISER_COMPANY_CONTACT', 'ads@starttoo.kr · 평일 10:00 ~ 18:00'),
+        'name' => env('ADVERTISER_COMPANY_NAME') ?: '(주)스타투',
+        'ceo' => env('ADVERTISER_COMPANY_CEO') ?: '○○○',
+        'biz_no' => env('ADVERTISER_COMPANY_BIZ_NO') ?: '000-00-00000',
+        'mail_order_no' => env('ADVERTISER_COMPANY_MAIL_ORDER_NO') ?: '0000-서울마포-0000',
+        'contact' => env('ADVERTISER_COMPANY_CONTACT') ?: 'ads@starttoo.kr · 평일 10:00 ~ 18:00',
     ],
 
     // 견적 수락 후에만 보여주는 입금 계좌
     'bank' => [
-        'name' => env('ADVERTISER_BANK_NAME', '○○은행'),
-        'account' => env('ADVERTISER_BANK_ACCOUNT', '000-000000-00-000'),
-        'holder' => env('ADVERTISER_BANK_HOLDER', '(주)스타투'),
+        'name' => env('ADVERTISER_BANK_NAME') ?: '○○은행',
+        'account' => env('ADVERTISER_BANK_ACCOUNT') ?: '000-000000-00-000',
+        'holder' => env('ADVERTISER_BANK_HOLDER') ?: '(주)스타투',
     ],
 
     // 화면 하단 링크(비워 두면 숨김)
-    'privacy_url' => env('ADVERTISER_PRIVACY_URL'),
+    'privacy_url' => env('ADVERTISER_PRIVACY_URL') ?: null,
 
     'durations' => ['1주', '2주', '4주', '상담 후 결정'],
     'budgets' => ['100만 원 미만', '100~300만 원', '300~500만 원', '500만 원 이상', '아직 몰라요'],
