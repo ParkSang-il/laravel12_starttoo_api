@@ -149,6 +149,12 @@ final class AdminUi
                 'chats' => $db->table('starttoo_reports')->where('status', 'pending')->whereIn('target_type', ['consultation', 'message'])->count(),
                 // 오늘 실패한 AI 생성(원인 확인용)
                 'aiJobs' => $db->table('starttoo_fit_results')->where('status', 'failed')->where('cost_units', '>', 0)->where('created_at', '>=', today())->count(),
+                // 숨김 처리 후 재검토를 기다리는 콘텐츠(삭제 확정 전 · 대시보드 「숨김 처리 콘텐츠 재검토」와 같은 기준)
+                'contents' => collect(['starttoo_artworks', 'starttoo_posts', 'starttoo_reviews', 'starttoo_community_posts'])
+                    ->sum(fn ($t) => $db->table($t)->where('moderation_hidden', true)->whereNull('moderation_removed_at')->count()),
+                // 작가 광고 심사 대기: 새 신청 + 변경 요청(작가 광고 심사 목록과 같은 기준)
+                'adReview' => $db->table('starttoo_ads')->whereNotNull('product')
+                    ->where(fn ($q) => $q->where('status', 'reviewing')->orWhereNotNull('pending'))->count(),
                 // 답변을 기다리는 1:1 문의(테이블이 생기기 전에는 0)
                 'inquiries' => \Illuminate\Support\Facades\Schema::connection($db->getName())->hasTable('starttoo_inquiries')
                     ? $db->table('starttoo_inquiries')->where('status', 'waiting')->count() : 0,

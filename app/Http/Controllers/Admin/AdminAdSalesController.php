@@ -95,7 +95,9 @@ class AdminAdSalesController extends AdminBaseController
             $data['contractAds'] = array_map(function ($a) {
                 return ['id' => $a->id, 'slot' => AdSales::SLOTS[$a->slot]['name'] ?? $a->slot, 'title' => $a->title,
                     'imp' => (int) $a->impressions, 'cap' => (int) $a->impression_cap, 'clicks' => (int) $a->clicks,
-                    'active' => (bool) $a->active, 'href' => route('admin.ads', ['sel' => $a->id])];
+                    'active' => (bool) $a->active, 'href' => route('admin.ads', ['sel' => $a->id]),
+                    'clip' => \App\Services\Starttoo\AdClips::label($a->clip_status ?? null, $a->clip_error ?? null),
+                    'clip_failed' => ($a->clip_status ?? null) === 'failed'];
             }, $this->sales()->contractAds((int) $c->id));
             // 줄마다 아직 광고에 나누지 않은 보장 노출
             $data['lineLeft'] = array_map(function ($l) use ($c) {
@@ -202,7 +204,7 @@ class AdminAdSalesController extends AdminBaseController
         $f = $this->sales()->inquiryFile($id, $n);
         abort_unless($f && Storage::disk('local')->exists($f['path']), 404);
         // 광고 만들기 화면의 이미지 미리보기(?preview=1): 화면 안에 보여 주기만(내려받기 기록은 남기지 않음)
-        if ($request->query('preview') === '1' && $this->isImageName($f['name'])) {
+        if ($request->query('preview') === '1' && ($this->isImageName($f['name']) || $this->isVideoName($f['name']))) {
             return response()->file(Storage::disk('local')->path($f['path']), ['Cache-Control' => 'private, max-age=600']);
         }
         $this->audit($request, '설정', '광고 문의 첨부 내려받기', "문의 #{$id} · {$f['name']}");
@@ -214,14 +216,23 @@ class AdminAdSalesController extends AdminBaseController
         return in_array(strtolower(pathinfo($name, PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'png', 'webp', 'gif'], true);
     }
 
-    /** 계약의 광고 문의 첨부 중 이미지: [{n, name, size, preview}] (영상은 앱 광고 사진으로 못 써서 뺀다) */
+    private function isVideoName(string $name): bool
+    {
+        return in_array(strtolower(pathinfo($name, PATHINFO_EXTENSION)), ['mp4', 'mov', 'm4v'], true);
+    }
+
+    /**
+     * 계약의 광고 문의 첨부: [{n, name, size, preview, video}]. 이미지는 모든 자리, 영상은 무빙 피드 자리에서만 고른다(화면이 거른다).
+     */
     private function inquiryImages(object $c): array
     {
         if (!$c->inquiry_id || !($inq = $this->sales()->inquiry((int) $c->inquiry_id))) return [];
         $out = [];
         foreach ((array) $inq->files as $n => $f) {
-            if (!$this->isImageName((string) ($f['name'] ?? '')) || !Storage::disk('local')->exists($f['path'] ?? '')) continue;
-            $out[] = ['n' => $n, 'name' => $f['name'], 'size' => round(((int) ($f['size'] ?? 0)) / 1048576, 1) . 'MB',
+            $name = (string) ($f['name'] ?? '');
+            $video = $this->isVideoName($name);
+            if ((!$video && !$this->isImageName($name)) || !Storage::disk('local')->exists($f['path'] ?? '')) continue;
+            $out[] = ['n' => $n, 'name' => $name, 'size' => round(((int) ($f['size'] ?? 0)) / 1048576, 1) . 'MB', 'video' => $video,
                 'preview' => route('admin.ad-sales.file', [$inq->id, $n]) . '?preview=1'];
         }
         return $out;
@@ -309,22 +320,32 @@ class AdminAdSalesController extends AdminBaseController
             'link' => ['nullable', 'string', 'max:200'],
             'cap' => ['nullable', 'integer', 'min:1000', 'max:100000000'],
             'image' => ['nullable', 'image', 'max:10240'],
-            // 광고 문의 첨부 이미지 번호(새 사진을 올리지 않았을 때 이걸 쓴다)
+            // 무빙 피드: 사진 대신 영상(MP4 · MOV 50MB) — 사진과 영상 중 하나만
+            'video' => ['nullable', 'file', 'max:51200', function (string $a, $f, \Closure $fail) {
+                if ($f && !$this->isVideoName($f->getClientOriginalName())) $fail('영상은 MP4 · MOV 파일만 올릴 수 있어요.');
+            }],
+            // 광고 문의 첨부 번호(새 파일을 올리지 않았을 때 이걸 쓴다 · 이미지 또는 무빙 피드는 영상)
             'attachment' => ['nullable', 'integer', 'min:0', 'max:20'],
         ], ['title.required' => '광고 문구를 적어주세요.'], ['title' => '광고 문구', 'cap' => '보장 노출']);
+        if ($request->file('image') && $request->file('video')) {
+            return back()->withErrors(['contract' => '사진과 영상 중 하나만 올려주세요.'])->withInput();
+        }
         $bytes = $request->file('image') ? (string) file_get_contents($request->file('image')->getRealPath()) : '';
-        if ($bytes === '' && isset($data['attachment'])) {
+        $clip = $request->file('video');
+        if ($bytes === '' && !$clip && isset($data['attachment'])) {
             $c = $this->sales()->contract($id);
             $f = $c && $c->inquiry_id ? $this->sales()->inquiryFile((int) $c->inquiry_id, (int) $data['attachment']) : null;
-            if (!$f || !$this->isImageName((string) $f['name']) || !Storage::disk('local')->exists($f['path'])) {
-                return back()->withErrors(['contract' => '고른 첨부 이미지를 찾지 못했어요. 사진을 직접 올려주세요.'])->withInput();
+            if (!$f || !Storage::disk('local')->exists($f['path'])
+                || (!$this->isImageName((string) $f['name']) && !$this->isVideoName((string) $f['name']))) {
+                return back()->withErrors(['contract' => '고른 첨부를 찾지 못했어요. 사진이나 영상을 직접 올려주세요.'])->withInput();
             }
-            $bytes = (string) Storage::disk('local')->get($f['path']);
+            if ($this->isVideoName((string) $f['name'])) $clip = $f['path'];
+            else $bytes = (string) Storage::disk('local')->get($f['path']);
         }
         try {
             $adId = $this->sales()->createAd($id, (int) $data['line'], [
                 'title' => $data['title'], 'link' => $data['link'] ?? null, 'cap' => $data['cap'] ?? null,
-                'image_bytes' => $bytes,
+                'image_bytes' => $bytes, 'clip' => $clip,
             ]);
         } catch (\InvalidArgumentException $e) {
             return back()->withErrors(['contract' => $e->getMessage()])->withInput();
@@ -332,6 +353,9 @@ class AdminAdSalesController extends AdminBaseController
         $c = $this->sales()->contract($id);
         $this->audit($request, '설정', '계약 광고 만들기', "광고 #{$adId} · {$c->quote_no} · {$c->company}");
         $when = $c->starts_at->isFuture() ? $c->starts_at->format('m.d') . '부터' : '지금부터';
+        if ($clip) {
+            return back()->with('status', "광고 #{$adId}를 만들었어요 · 영상 변환(보통 1~3분)이 끝나면 {$when} 앱에 나가요. 「AI · 미디어 작업」이 아닌 광고 목록에서 상태를 볼 수 있어요");
+        }
         return back()->with('status', "광고 #{$adId}를 만들었어요 · {$when} 앱에 나가고, 시작일에 광고주에게 성과 보고 링크가 가요");
     }
 

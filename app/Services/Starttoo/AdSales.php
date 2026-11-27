@@ -467,12 +467,17 @@ class AdSales
         $cap = isset($in['cap']) && $in['cap'] !== '' ? (int) $in['cap'] : (int) $l['imps'] - $used;
         if ($cap <= 0) throw new \InvalidArgumentException('이 자리의 보장 노출을 이미 다른 광고에 모두 나눴어요.');
         if ($used + $cap > (int) $l['imps']) throw new \InvalidArgumentException('보장 노출 합계가 견적(' . number_format($l['imps']) . '회)보다 많아요.');
+        // 무빙 피드는 사진 또는 영상 중 하나(clip = 업로드 파일 또는 로컬 디스크 경로)
+        $clip = $in['clip'] ?? null;
+        if ($clip && !in_array($l['slot'], AdClips::SLOTS, true)) throw new \InvalidArgumentException('영상 광고는 무빙 피드 자리만 만들 수 있어요.');
         $adId = app(Ads::class)->add([
             'slot' => $l['slot'], 'advertiser' => mb_substr($c->company, 0, 60), 'title' => $in['title'],
-            'link' => $in['link'] ?: $c->landing_url, 'image_bytes' => $in['image_bytes'] ?? '',
+            'link' => $in['link'] ?: $c->landing_url, 'image_bytes' => $clip ? '' : ($in['image_bytes'] ?? ''),
+            'clip' => (bool) $clip,
             'from' => $c->starts_at->toDateString(), 'until' => $c->ends_at->toDateString(),
         ]);
         $this->db()->table('starttoo_ads')->where('id', $adId)->update(['contract_id' => $id, 'impression_cap' => $cap]);
+        if ($clip) app(AdClips::class)->attach($adId, $clip);
         return $adId;
     }
 

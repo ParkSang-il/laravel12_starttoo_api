@@ -36,6 +36,7 @@ class AdminController extends AdminBaseController
         $queue = [
             ['label' => '아티스트 신청 심사', 'count' => $badges['artistReview'] . '건', 'pill' => Ui::pill('amber'), 'href' => route('admin.artist-review')],
             ['label' => '미처리 신고', 'count' => $badges['reports'] . '건', 'pill' => Ui::pill('red'), 'href' => route('admin.reports')],
+            ['label' => '작가 광고 심사', 'count' => ($badges['adReview'] ?? 0) . '건', 'pill' => Ui::pill('amber'), 'href' => route('admin.ads', ['section' => '작가 광고 심사'])],
             ['label' => '예약 변경 요청', 'count' => $data['changeRequests'] . '건', 'pill' => Ui::pill('amber'), 'href' => route('admin.payments', ['tab' => '변경 요청'])],
             ['label' => '숨김 처리 콘텐츠 재검토', 'count' => $data['hidden'] . '건', 'pill' => Ui::pill('gray'), 'href' => route('admin.contents', ['state' => '숨김'])],
             ['label' => '오늘 AI 생성 실패', 'count' => ($badges['aiJobs'] ?? 0) . '건', 'pill' => Ui::pill('red'), 'href' => route('admin.ai-jobs', ['tab' => '실패'])],
@@ -457,9 +458,11 @@ class AdminController extends AdminBaseController
                 'artist' => $edit->artist_id ? (string) $edit->artist_id : '', 'link' => (string) $edit->link,
                 'from' => $fmt($edit->starts_at), 'until' => $fmt($edit->ends_at),
                 'image' => $edit->image_path ? app(\App\Services\Starttoo\MediaUrls::class)->url($edit->image_path, 600) : null,
+                // 무빙 피드 영상 광고: 상태 문구(변환 중 · 영상 · 실패)
+                'clip' => \App\Services\Starttoo\AdClips::label($edit->clip_status ?? null, $edit->clip_error ?? null),
             ] : [
                 'title' => '새 광고', 'action' => route('admin.ads.store'), 'save' => '등록',
-                'slot' => array_key_first(self::SLOT_LABELS), 'advertiser' => '', 'text' => '', 'artist' => '', 'link' => '', 'from' => '', 'until' => '', 'image' => null,
+                'slot' => array_key_first(self::SLOT_LABELS), 'advertiser' => '', 'text' => '', 'artist' => '', 'link' => '', 'from' => '', 'until' => '', 'image' => null, 'clip' => null,
             ],
         ]);
     }
@@ -502,7 +505,20 @@ class AdminController extends AdminBaseController
             'until' => ['nullable', 'date'],
             'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
             'remove_image' => ['nullable', 'boolean'],
-        ], ['artist.regex' => '작가 회원 번호를 확인해주세요(예: 12 또는 U-12).', 'image.max' => '이미지는 8MB까지 올릴 수 있어요.']);
+            // 무빙 피드만: 사진 대신 영상(MP4 · MOV 50MB), 사진 · 영상 중 하나
+            'video' => ['nullable', 'file', 'max:51200', function (string $a, $f, \Closure $fail) {
+                if ($f && !in_array(strtolower($f->getClientOriginalExtension()), ['mp4', 'mov', 'm4v'], true)) $fail('영상은 MP4 · MOV 파일만 올릴 수 있어요.');
+            }],
+        ], ['artist.regex' => '작가 회원 번호를 확인해주세요(예: 12 또는 U-12).', 'image.max' => '이미지는 8MB까지 올릴 수 있어요.',
+            'video.max' => '영상은 50MB까지 올릴 수 있어요.']);
+        if ($request->hasFile('video')) {
+            if (!in_array($data['slot'], \App\Services\Starttoo\AdClips::SLOTS, true)) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['video' => '영상 광고는 무빙 피드 자리만 만들 수 있어요.']);
+            }
+            if ($request->hasFile('image')) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['video' => '사진과 영상 중 하나만 올려주세요.']);
+            }
+        }
         return [
             'slot' => $data['slot'], 'advertiser' => $data['advertiser'], 'title' => $data['title'],
             'artist' => ($data['artist'] ?? '') !== '' ? (int) preg_replace('/\D/', '', $data['artist']) : null,
@@ -517,8 +533,10 @@ class AdminController extends AdminBaseController
     {
         $this->need($request, 'ads.manage');
         $in = $this->adInput($request);
+        $video = $request->file('video');
         try {
-            $id = app(Ads::class)->add($in);
+            $id = app(Ads::class)->add($in + ['clip' => (bool) $video]);
+            if ($video) app(\App\Services\Starttoo\AdClips::class)->attach($id, $video);
         } catch (\InvalidArgumentException $e) {
             return back()->withErrors(['ad' => $e->getMessage()])->withInput();
         } catch (\Throwable $e) {
@@ -527,7 +545,9 @@ class AdminController extends AdminBaseController
         }
         $this->audit($request, '설정', '광고 등록', "광고 #{$id} · {$in['advertiser']} · {$in['title']}");
 
-        return redirect(route('admin.ads', ['sel' => $id]))->with('status', '광고를 등록했어요 · 바로 노출돼요');
+        return redirect(route('admin.ads', ['sel' => $id]))->with('status', $video
+            ? '광고를 등록했어요 · 영상 변환(보통 1~3분)이 끝나면 노출돼요'
+            : '광고를 등록했어요 · 바로 노출돼요');
     }
 
     public function updateAd(Request $request, int $id): RedirectResponse
@@ -536,8 +556,14 @@ class AdminController extends AdminBaseController
         $in = $this->adInput($request);
         $before = $this->db()->table('starttoo_ads')->where('id', $id)->first();
         abort_unless($before, 404);
+        $video = $request->file('video');
+        $clips = app(\App\Services\Starttoo\AdClips::class);
+        // 사진 · 영상 중 하나: 새 사진을 올리거나 무빙 피드가 아닌 자리로 옮기면 영상을 뗀다
+        $dropClip = $before->clip_status && !$video && ($request->hasFile('image') || !in_array($in['slot'], $clips::SLOTS, true));
         try {
-            app(Ads::class)->update($id, $in);
+            app(Ads::class)->update($id, $in + ['clip' => $video || ($before->clip_status && !$dropClip)]);
+            if ($dropClip) $clips->detach($id);
+            if ($video) $clips->attach($id, $video);
         } catch (\InvalidArgumentException $e) {
             return back()->withErrors(['ad' => $e->getMessage()])->withInput();
         } catch (\Throwable $e) {

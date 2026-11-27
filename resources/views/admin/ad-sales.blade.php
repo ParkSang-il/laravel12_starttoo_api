@@ -260,7 +260,7 @@
                   <h3 style="margin: 0; font-size: 15px; font-weight: 700">앱 광고</h3>
                   @forelse ($contractAds as $a)
                     <div style="display: flex; flex-direction: column; gap: 4px; font-size: 13px">
-                      <span><a href="{{ $a['href'] }}" style="color: #141413; font-weight: 700">#{{ $a['id'] }} {{ $a['title'] }}</a> · {{ $a['slot'] }} @unless ($a['active'])<span style="{{ \App\Support\AdminUi::pill('gray') }}">꺼짐</span>@endunless</span>
+                      <span><a href="{{ $a['href'] }}" style="color: #141413; font-weight: 700">#{{ $a['id'] }} {{ $a['title'] }}</a> · {{ $a['slot'] }} @if ($a['clip'])<span style="{{ \App\Support\AdminUi::pill($a['clip_failed'] ? 'red' : 'gray') }}">{{ $a['clip'] }}</span>@endif @unless ($a['active'])<span style="{{ \App\Support\AdminUi::pill('gray') }}">꺼짐</span>@endunless</span>
                       <span style="height: 6px; border-radius: 3px; background: #ECEAE5; overflow: hidden; display: block"><span style="display: block; height: 100%; width: {{ $a['cap'] ? min(100, floor($a['imp'] / $a['cap'] * 100)) : 0 }}%; background: #141413"></span></span>
                       <span style="{{ $muted }}">노출 {{ number_format($a['imp']) }} / {{ number_format($a['cap']) }}회 · 클릭 {{ number_format($a['clicks']) }}</span>
                     </div>
@@ -275,27 +275,42 @@
                           <form method="POST" action="{{ route('admin.ad-sales.ad', $c->id) }}" enctype="multipart/form-data" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px">@csrf
                             <input type="hidden" name="line" value="{{ $i }}">
                             <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">광고 문구 <span style="font-weight: 400; color: #66625B">· 80자까지, 앱 카드에 그대로 보여요</span></span><input name="title" required maxlength="80" value="{{ old('title') }}" style="{{ $input }}"></label>
-                            {{-- 사진: 광고 문의 첨부 이미지를 고르면 그대로 쓴다(첫 이미지를 미리 골라 둠) · 새 사진을 올리면 그게 우선 --}}
-                            @if (!empty($inquiryImages))
+                            {{-- 소재: 광고 문의 첨부를 고르면 그대로 쓴다(첫 첨부를 미리 골라 둠) · 새 파일을 올리면 그게 우선.
+                                 무빙 피드 자리는 사진 또는 영상 중 하나(영상 첨부도 고를 수 있다), 다른 자리는 사진만 --}}
+                            @php
+                              $allowVideo = in_array($l['slot'], \App\Services\Starttoo\AdClips::SLOTS, true);
+                              $picks = array_values(array_filter($inquiryImages ?? [], fn ($x) => !$x['video'] || $allowVideo));
+                              $what = $allowVideo ? '사진 · 영상' : '사진';
+                            @endphp
+                            @if ($picks)
                               <fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
-                                <legend style="{{ $label }}; margin-bottom: 4px">광고 문의 첨부에서 고르기 <span style="font-weight: 400; color: #66625B">· {{ \App\Services\Starttoo\AdSales::SLOTS[$l['slot']]['spec'] ?? '' }}</span></legend>
+                                <legend style="{{ $label }}; margin-bottom: 4px">광고 문의 첨부에서 고르기 <span style="font-weight: 400; color: #66625B">· {{ \App\Services\Starttoo\AdSales::SLOTS[$l['slot']]['spec'] ?? '' }}{{ $allowVideo ? ' · 사진 또는 영상 하나' : '' }}</span></legend>
                                 <div style="display: flex; flex-wrap: wrap; gap: 8px">
-                                  @foreach ($inquiryImages as $k => $img)
+                                  @foreach ($picks as $k => $img)
                                     <label style="display: flex; flex-direction: column; gap: 4px; width: 96px; cursor: pointer; font-size: 11px; color: #66625B">
                                       <span style="position: relative; display: block; width: 96px; height: 120px; border-radius: 8px; overflow: hidden; background: #F0EDE7">
-                                        <img src="{{ $img['preview'] }}" alt="{{ $img['name'] }}" loading="lazy" style="width: 100%; height: 100%; object-fit: cover">
+                                        @if ($img['video'])
+                                          <video src="{{ $img['preview'] }}" muted playsinline preload="metadata" style="width: 100%; height: 100%; object-fit: cover"></video>
+                                          <span style="position: absolute; right: 6px; bottom: 6px; padding: 1px 6px; border-radius: 4px; background: rgba(20,20,19,.75); color: #fff; font-size: 10px; font-weight: 700">영상</span>
+                                        @else
+                                          <img src="{{ $img['preview'] }}" alt="{{ $img['name'] }}" loading="lazy" style="width: 100%; height: 100%; object-fit: cover">
+                                        @endif
                                         <input type="radio" name="attachment" value="{{ $img['n'] }}" @checked((string) old('attachment', $k === 0 ? (string) $img['n'] : '') === (string) $img['n']) style="position: absolute; top: 6px; left: 6px; width: 18px; height: 18px; accent-color: #FF5A36">
                                       </span>
                                       <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ $img['name'] }} · {{ $img['size'] }}</span>
                                     </label>
                                   @endforeach
                                   <label style="display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; width: 96px; height: 120px; border-radius: 8px; border: 1px dashed #D9D4CB; cursor: pointer; font-size: 12px; color: #66625B; text-align: center">
-                                    <input type="radio" name="attachment" value="" @checked((string) old('attachment', 'x') === '') style="width: 18px; height: 18px; accent-color: #FF5A36">사진 없이 · 직접 올리기
+                                    <input type="radio" name="attachment" value="" @checked((string) old('attachment', 'x') === '') style="width: 18px; height: 18px; accent-color: #FF5A36">첨부 안 씀 · 직접 올리기
                                   </label>
                                 </div>
                               </fieldset>
                             @endif
-                            <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">{{ empty($inquiryImages) ? '사진' : '새 사진 올리기' }} <span style="font-weight: 400; color: #66625B">· {{ empty($inquiryImages) ? (\App\Services\Starttoo\AdSales::SLOTS[$l['slot']]['spec'] ?? '') : '올리면 위에서 고른 첨부 대신 이 사진을 써요' }}</span></span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" style="font-size: 13px"></label>
+                            <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">{{ $picks ? '새 사진 올리기' : '사진' }} <span style="font-weight: 400; color: #66625B">· {{ $picks ? '올리면 위에서 고른 첨부 대신 이 파일을 써요' : (\App\Services\Starttoo\AdSales::SLOTS[$l['slot']]['spec'] ?? '') }}</span></span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" data-one-of style="font-size: 13px"></label>
+                            @if ($allowVideo)
+                              <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">{{ $picks ? '새 영상 올리기' : '또는 영상' }} <span style="font-weight: 400; color: #66625B">· MP4 · MOV 50MB · 세로 9:16 · 사진과 영상 중 하나만 · 변환(1~3분)이 끝나면 나가요</span></span><input type="file" name="video" accept="video/mp4,video/quicktime,.mp4,.mov,.m4v" data-one-of style="font-size: 13px"></label>
+                            @endif
+                            <span data-one-of-note style="display: none; font-size: 12px; color: #C2410C">사진과 영상은 하나만 쓸 수 있어 먼저 고른 파일을 뺐어요.</span>
                             <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">누르면 열 주소 <span style="font-weight: 400; color: #66625B">· 비우면 계약 연결 주소</span></span><input name="link" maxlength="200" placeholder="{{ $c->landing_url ?? 'https://' }}" value="{{ old('link') }}" style="{{ $input }}"></label>
                             <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">이 광고 보장 노출 <span style="font-weight: 400; color: #66625B">· 소재를 나눌 때만 줄여 적어요</span></span><input type="number" name="cap" min="1000" step="1000" max="{{ $lineLeft[$i] }}" placeholder="{{ $lineLeft[$i] }}" value="{{ old('cap') }}" style="{{ $input }}; max-width: 200px"></label>
                             <span style="{{ $muted }}">노출 기간은 계약 기간({{ $c->starts_at->format('m.d') }} ~ {{ $c->ends_at->format('m.d') }})이고, 보장 노출을 채우면 그만 나가요. 문구 · 사진은 「광고 · 프리미엄」에서 고칠 수 있어요.</span>
@@ -335,4 +350,17 @@
       </section>
     @endif
   </div>
+  <script>
+    // 무빙 피드 광고 만들기: 사진 · 영상은 하나만(나중에 고른 파일만 남긴다)
+    document.addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t.matches || !t.matches('input[type=file][data-one-of]') || !t.files.length) return;
+      var form = t.form, cleared = false;
+      form.querySelectorAll('input[type=file][data-one-of]').forEach(function (o) {
+        if (o !== t && o.value) { o.value = ''; cleared = true; }
+      });
+      var note = form.querySelector('[data-one-of-note]');
+      if (note) note.style.display = cleared ? 'block' : 'none';
+    });
+  </script>
 @endsection

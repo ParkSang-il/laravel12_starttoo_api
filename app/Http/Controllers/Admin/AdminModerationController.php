@@ -346,6 +346,7 @@ class AdminModerationController extends AdminBaseController
             'fit_block' => '피팅 차단', 'fit_allow' => '피팅 허용'][$data['action']];
         if ($changed) {
             Cache::forget('starttoo:admin:dashboard');
+            Ui::forgetBadges();
             $this->audit($request, '콘텐츠', $what, mb_strimwidth(implode(', ', $changed), 0, 200, '…'), ['ids' => $changed]);
         }
         $skipped = count(array_unique($data['ids'])) - count($changed);

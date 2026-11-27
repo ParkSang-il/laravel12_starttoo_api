@@ -96,6 +96,8 @@ class Ads
             ->where(fn ($w) => $w->whereNull('ends_at')->orWhere('ends_at', '>', now()))
             // 외부 광고 계약(CPM): 보장 노출을 채우면 그만 보여 준다
             ->where(fn ($w) => $w->whereNull('impression_cap')->orWhereColumn('impressions', '<', 'impression_cap'))
+            // 운영자 · 외부 광고 영상(AdClips): 변환이 끝난 것만(변환 중 · 실패는 건너뛴다)
+            ->where(fn ($w) => $w->whereNull('clip_status')->orWhere('clip_status', 'ready'))
             ->when($exclude, fn ($w) => $w->whereNotIn('id', $exclude))
             ->inRandomOrder()->limit(in_array($slot, ['search_top', 'region_top'], true) ? 50 : 10)->get();
         foreach ($rows as $ad) {
@@ -136,7 +138,7 @@ class Ads
                 'review_count' => $extra['review_count'] ?? null,
                 'consult_open' => $extra['consult_open'] ?? null,
                 // 무빙 피드 작가 광고: 광고 칸에서 재생할 무빙(hls_url · poster_url · duration_ms · muted)
-                'video' => $extra['video'] ?? null,
+                'video' => $extra['video'] ?? app(AdClips::class)->playback($ad),
             ]];
         }
         return ['ad' => null];
@@ -212,7 +214,8 @@ class Ads
         } elseif (($in['image_bytes'] ?? '') !== '') {
             $path = app(ArtworkPhotos::class)->storeBytes((string) $in['image_bytes']);
         }
-        if ($path === null && in_array($slot, self::IMAGE_REQUIRED, true)) {
+        // 영상 광고(clip: 무빙 피드)는 변환이 끝나면 포스터가 사진이 된다 → 지금 사진이 없어도 된다
+        if ($path === null && in_array($slot, self::IMAGE_REQUIRED, true) && empty($in['clip'])) {
             throw new \InvalidArgumentException('이 자리 광고는 사진이 꼭 필요해요. 광고 문의 첨부를 고르거나 사진을 올려주세요.');
         }
         return [

@@ -338,10 +338,32 @@
               <img src="{{ $form['image'] }}" alt="지금 광고 이미지" style="width: 200px; border-radius: 10px; border: 1px solid #E4E0D8">
             @endif
             <label style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">광고 이미지 <span style="font-weight: 400; color: #66625B">· JPG · PNG · WEBP, 8MB까지, 가로로 긴 사진(1200px 정도)</span></span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" style="font-size: 13px"></label>
-            @if ($form['image'])
+            @if ($form['image'] && !$form['clip'])
               <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700"><input type="hidden" name="remove_image" value="0"><input type="checkbox" name="remove_image" value="1" style="width: 18px; height: 18px; margin: 0; accent-color: #141413">이미지 빼기</label>
             @endif
           </div>
+          {{-- 무빙 피드 자리만: 사진 대신 영상 하나(올리면 변환이 끝난 뒤 노출) --}}
+          <div data-video-field style="display: flex; flex-direction: column; gap: 6px">
+            <label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">또는 광고 영상 <span style="font-weight: 400; color: #66625B">· 무빙 피드만 · MP4 · MOV 50MB · 세로 9:16 · 사진과 영상 중 하나만</span></span><input type="file" name="video" accept="video/mp4,video/quicktime,.mp4,.mov,.m4v" style="font-size: 13px"></label>
+            @if ($form['clip'])
+              <span style="font-size: 12px; color: #66625B">지금: <b style="color: #141413">{{ $form['clip'] }}</b> · 위 사진은 영상 첫 화면이에요. 새 사진을 올리면 영상 대신 사진 광고가 돼요.</span>
+            @endif
+            @error('video')<span style="font-size: 12px; color: #A3301A">{{ $message }}</span>@enderror
+          </div>
+          <script>
+            (function () {
+              var form = document.currentScript.closest('form');
+              var slot = form.querySelector('select[name=slot]');
+              var box = form.querySelector('[data-video-field]');
+              var img = form.querySelector('input[name=image]');
+              var vid = form.querySelector('input[name=video]');
+              function sync() { var on = slot.value === 'moving_inline'; box.style.display = on ? 'flex' : 'none'; if (!on) vid.value = ''; }
+              slot.addEventListener('change', sync); sync();
+              // 사진 · 영상은 하나만: 나중에 고른 파일만 남긴다
+              img.addEventListener('change', function () { if (img.value) vid.value = ''; });
+              vid.addEventListener('change', function () { if (vid.value) img.value = ''; });
+            })();
+          </script>
           <div style="display: flex; gap: 8px; align-items: center">
             <span style="flex: 1; font-size: 12px; color: #66625B; line-height: 1.5">작가 번호를 넣으면 링크는 쓰지 않아요. 「홈 피드」 광고는 사진 카드라 이미지가 꼭 필요해요. 등록하면 바로 노출되고(시작일이 있으면 그날부터), 목록의 스위치로 끌 수 있어요.</span>
             <button type="submit" style="height: 40px; padding: 0 20px; border-radius: 10px; font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; border: 0; background: #141413; color: #FFFFFF">{{ $form['save'] }}</button>

@@ -93,6 +93,7 @@ class AdminArtistAdsController extends AdminBaseController
         } catch (\InvalidArgumentException $e) {
             return back()->withErrors(['ad' => $e->getMessage()]);
         }
+        Ui::forgetBadges();
         $this->audit($request, '설정', '작가 광고 승인', "광고 #{$id} · {$ad->advertiser} · {$ad->title}");
         return back()->with('status', "광고 #{$id}를 승인했어요 · 작가에게 알림을 보냈어요");
     }
@@ -106,6 +107,7 @@ class AdminArtistAdsController extends AdminBaseController
         } catch (\InvalidArgumentException $e) {
             return back()->withErrors(['ad' => $e->getMessage()]);
         }
+        Ui::forgetBadges();
         $this->audit($request, '설정', '작가 광고 반려', "광고 #{$id} · {$ad->advertiser}", ['reason' => $data['reason']]);
         return back()->with('status', "광고 #{$id}를 반려했어요 · 작가에게 사유와 함께 알림을 보냈어요");
     }

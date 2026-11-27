@@ -5,7 +5,7 @@
       ['route' => 'admin.dashboard', 'label' => '운영 대시보드', 'badge' => null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/></svg>'],
       ['route' => 'admin.members', 'label' => '회원 관리', 'badge' => null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21c1-4 4-6 7-6s6 2 7 6M17 11a3 3 0 1 0 0-6M22 20c-.6-2.6-2.2-4.2-4-4.8"/></svg>'],
       ['route' => 'admin.artist-review', 'label' => '아티스트 심사', 'badge' => $badges['artistReview'] ?? null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6zM8.5 12l2.5 2.5 4.5-5"/></svg>'],
-      ['route' => 'admin.contents', 'label' => '게시물 · 작품', 'badge' => null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18v16H3zM21 17l-5-5-9 8M9 10a2 2 0 1 0 0-.01"/></svg>'],
+      ['route' => 'admin.contents', 'label' => '게시물 · 작품', 'badge' => $badges['contents'] ?? null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18v16H3zM21 17l-5-5-9 8M9 10a2 2 0 1 0 0-.01"/></svg>'],
       ['route' => 'admin.reports', 'label' => '신고 · 차단', 'badge' => $badges['reports'] ?? null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4h11l-1 4 4 1H5"/></svg>'],
     ]],
     ['label' => 'AI 서비스', 'items' => [
@@ -22,7 +22,7 @@
     ]],
     ['label' => '비즈니스', 'items' => [
       ['route' => 'admin.payments', 'label' => '예약 · 결제', 'badge' => null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18v16H3zM3 10h18M8 3v4M16 3v4"/></svg>'],
-      ['route' => 'admin.ads', 'label' => '광고 · 프리미엄', 'badge' => null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4h3l6 4V6L7 10zM17 9a4 4 0 0 1 0 6"/></svg>'],
+      ['route' => 'admin.ads', 'label' => '광고 · 프리미엄', 'badge' => $badges['adReview'] ?? null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4h3l6 4V6L7 10zM17 9a4 4 0 0 1 0 6"/></svg>'],
       ['route' => 'admin.ad-sales', 'label' => '광고 문의 · 계약', 'badge' => $badges['adSales'] ?? null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10l4 4v14H3V3zM7 3v5h10M8 13h8M8 17h5"/></svg>'],
     ]],
     ['label' => '시스템', 'items' => [
