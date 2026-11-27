@@ -67,6 +67,8 @@ services:
     # ffmpeg(1080p 원본 + HLS 3~4단계 동시 변환 1~2GB) + AI 이미지 처리(PHP 256M) + 여유
     mem_limit: 6g
     memswap_limit: 6g
+    # 서버 16코어 중 절반까지만: 변환이 몰려도 API · 채팅 · DB 몫을 남긴다
+    cpus: 8
 
   chat-scheduler:
     <<: *chat-php
