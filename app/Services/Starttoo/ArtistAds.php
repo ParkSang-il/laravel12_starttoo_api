@@ -33,8 +33,8 @@ class ArtistAds
     ];
     public const DAYS = [7, 14, 30];
     public const EXTEND_DAYS = [7, 14];
-    // 두 줄 문구(줄바꿈 1번 가능): 광고 카드는 두 줄(약 20자 × 2)까지 보여 40자. DB title 은 80자
-    public const MAX_COPY = 40;
+    // 두 줄 문구(줄바꿈 1번 가능) 45자. 광고 카드는 두 줄까지 보여, 줄이 길면 끝이 「…」로 줄어든다. DB title 은 80자
+    public const MAX_COPY = 45;
     public const MAX_KEYWORDS = 3;
     public const VAT_RATE = 0.1;
     /** 광고를 누른 뒤 이 기간 안에 상담을 요청하면 광고 성과로 센다 */

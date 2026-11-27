@@ -30,7 +30,7 @@
           <tbody>
             @forelse ($slots as $s)
               <tr style="{{ $s['rowStyle'] }}">
-                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-weight: 700">{{ $s['where'] }}<span style="display: block; font-size: 12px; font-weight: 400; color: #66625B">{{ $s['title'] }}@if ($s['editHref']) · <a href="{{ $s['editHref'] }}" style="color: #1F4F99; font-weight: 700">수정</a>@endif @if ($s['refundHref']) · <a href="{{ $s['refundHref'] }}" style="color: #1F4F99; font-weight: 700">환불 계산</a>@endif</span></td>
+                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-weight: 700">{{ $s['where'] }}<span style="display: block; font-size: 12px; font-weight: 400; color: #66625B">{{ str_replace("\n", ' / ', $s['title']) }}@if ($s['editHref']) · <a href="{{ $s['editHref'] }}" style="color: #1F4F99; font-weight: 700">수정</a>@endif @if ($s['refundHref']) · <a href="{{ $s['refundHref'] }}" style="color: #1F4F99; font-weight: 700">환불 계산</a>@endif</span></td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">@if ($s['whoHref'])<a href="{{ $s['whoHref'] }}" target="_blank" rel="noopener" title="상점 공개 페이지" style="color: #141413; text-decoration: underline; text-underline-offset: 3px">{{ $s['who'] }}</a>@else{{ $s['who'] }}@endif</td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; color: #66625B">{{ $s['period'] }}</td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-variant-numeric: tabular-nums">{{ $s['imp'] }}</td>
@@ -81,9 +81,10 @@
               <strong style="font-size: 14px">{{ $q['product'] }}</strong>
               <span style="font-size: 12px; color: #66625B">#{{ $q['id'] }} · {{ $q['when'] }} 신청</span>
             </div>
-            <div style="font-size: 15px; font-weight: 700">“{{ $q['title'] }}”</div>
+            {{-- 두 줄 문구: 작가가 넣은 줄바꿈을 앱 카드처럼 그대로 보여 준다 --}}
+            <div style="font-size: 15px; font-weight: 700; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere">“{{ $q['title'] }}”</div>
             @if ($q['before'])
-              <div style="font-size: 12px; color: #66625B">지금 문구: “{{ $q['before'] }}”</div>
+              <div style="font-size: 12px; color: #66625B; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere">지금 문구: “{{ $q['before'] }}”</div>
             @endif
             <div style="font-size: 13px; color: #3A3731">
               @if ($q['shopHref'])<a href="{{ $q['shopHref'] }}" target="_blank" rel="noopener" style="color: #141413; text-decoration: underline; text-underline-offset: 3px">{{ $q['advertiser'] }}</a>@else{{ $q['advertiser'] }}@endif
