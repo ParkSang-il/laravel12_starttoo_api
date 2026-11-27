@@ -39,7 +39,7 @@
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap"><span style="{{ $s['pill'] }}">{{ $s['state'] }}</span></td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">
                   @if ($s['canToggle'])
-                    <form method="POST" action="{{ $s['action'] }}" style="display: contents">@csrf<button type="submit" role="switch" aria-checked="{{ $s['on'] ? 'true' : 'false' }}" aria-label="{{ $s['aria'] }}" style="{{ $s['track'] }}"><span style="{{ $s['knob'] }}"></span></button></form>
+                    <form method="POST" action="{{ $s['action'] }}" style="display: contents">@csrf<button type="submit" role="switch" aria-checked="{{ $s['on'] ? 'true' : 'false' }}" aria-label="{{ $s['aria'] }}" @if ($s['confirm']) data-confirm="{{ $s['confirm'] }}" title="끄면 광고를 종료해요" @endif style="{{ $s['track'] }}"><span style="{{ $s['knob'] }}"></span></button></form>
                   @else
                     <span role="switch" aria-checked="{{ $s['on'] ? 'true' : 'false' }}" aria-disabled="true" aria-label="{{ $s['aria'] }}" style="{{ $s['track'] }}"><span style="{{ $s['knob'] }}"></span></span>
                   @endif
@@ -332,6 +332,49 @@
           <div style="display: flex; gap: 8px; align-items: center">
             <span style="flex: 1; font-size: 12px; color: #66625B; line-height: 1.5">작가 번호를 넣으면 링크는 쓰지 않아요. 「홈 피드」 광고는 사진 카드라 이미지가 꼭 필요해요. 등록하면 바로 노출되고(시작일이 있으면 그날부터), 목록의 스위치로 끌 수 있어요.</span>
             <button type="submit" style="height: 40px; padding: 0 20px; border-radius: 10px; font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; border: 0; background: #141413; color: #FFFFFF">{{ $form['save'] }}</button>
+          </div>
+        </form>
+      </section>
+    @endif
+
+    @if ($artistForm && $section === '광고 목록')
+      {{-- 작가 광고 수정(운영자 광고 수정 패널과 같은 모양). 심사 없이 바로 반영 --}}
+      @php $f = $artistForm; @endphp
+      <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; justify-content: space-between; align-items: center"><h2 style="margin: 0; font-size: 17px; font-weight: 700">{{ $f['title'] }}</h2><a href="{{ $closeHref }}" style="font-size: 13px; color: #66625B">닫기</a></div>
+        @if ($f['pending'])
+          <span style="font-size: 13px; color: #8A5A00; background: #FFF4DC; border-radius: 10px; padding: 10px 12px">작가가 보낸 변경 요청이 심사를 기다리고 있어요. 그 요청을 승인하면 문구 · 사진 · 키워드가 요청 내용으로 바뀌어요.</span>
+        @endif
+        <form method="POST" action="{{ $f['action'] }}" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 14px">
+          @csrf
+          <div style="display: flex; flex-wrap: wrap; gap: 14px">
+            <label style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">광고 상품 · 노출 위치</span>
+              <select name="product" style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%">
+                @foreach ($productOptions as $value => $label)<option value="{{ $value }}" @selected(old('product', $f['product']) === $value)>{{ $label }}</option>@endforeach
+              </select>
+            </label>
+            <label style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">광고주</span><input name="advertiser" required maxlength="60" value="{{ old('advertiser', $f['advertiser']) }}" style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+          </div>
+          <label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">두 줄 문구 <span style="font-weight: 400; color: #66625B">· 줄바꿈 한 번, {{ $maxCopy }}자까지</span></span><textarea name="copy" required rows="2" maxlength="{{ $maxCopy + 1 }}" style="border-radius: 10px; border: 1px solid #D9D4CB; padding: 10px 12px; font-size: 14px; line-height: 1.5; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%; resize: vertical; font-family: inherit">{{ old('copy', $f['copy']) }}</textarea></label>
+          <label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">검색 키워드 <span style="font-weight: 400; color: #66625B">· 검색 결과 상단만, 쉼표로 3개까지</span></span><input name="keywords" maxlength="120" value="{{ old('keywords', $f['keywords']) }}" placeholder="예: 레터링, 미니타투" style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+          <div style="display: flex; flex-wrap: wrap; gap: 14px">
+            <label style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">노출 시작</span><input type="datetime-local" name="from" value="{{ old('from', $f['from']) }}" @required($f['needsPeriod']) @disabled(! $f['needsPeriod']) style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+            <label style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">노출 종료</span><input type="datetime-local" name="until" value="{{ old('until', $f['until']) }}" @required($f['needsPeriod']) @disabled(! $f['needsPeriod']) style="height: 44px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end">
+            @if ($f['image'])
+              <img src="{{ $f['image'] }}" alt="지금 광고 사진" style="width: 200px; border-radius: 10px; border: 1px solid #E4E0D8">
+            @elseif ($f['hasArtwork'])
+              <span style="font-size: 13px; color: #66625B">지금은 고른 작품의 첫 사진으로 나와요.</span>
+            @endif
+            <label style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 700; color: #3A3731">광고 사진 바꾸기 <span style="font-weight: 400; color: #66625B">· JPG · PNG · WEBP, 8MB까지</span></span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" style="font-size: 13px"></label>
+            @if ($f['image'] && $f['hasArtwork'])
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700"><input type="hidden" name="remove_image" value="0"><input type="checkbox" name="remove_image" value="1" style="width: 18px; height: 18px; margin: 0; accent-color: #141413">사진 빼고 작품 사진 쓰기</label>
+            @endif
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center">
+            <span style="flex: 1; font-size: 12px; color: #66625B; line-height: 1.5">저장하면 심사 없이 앱에 바로 반영돼요. 누르면 작가 상점 · 작품으로 이동해서 링크는 따로 없어요. 광고비 {{ '₩' . number_format($f['amount']) }}{{ $f['days'] ? ' · ' . $f['days'] . '일' : '' }}은 바뀌지 않아요(환불 계산 기준). @if (! $f['needsPeriod'])기간은 승인할 때 정해져요.@endif</span>
+            <button type="submit" data-confirm="작가 광고 내용을 바로 바꿀까요? 작가에게는 따로 알림이 가지 않아요." style="height: 40px; padding: 0 20px; border-radius: 10px; font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; border: 0; background: #141413; color: #FFFFFF">저장</button>
           </div>
         </form>
       </section>

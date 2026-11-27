@@ -347,12 +347,12 @@ class AdminController extends AdminBaseController
         $canManage = $this->can($request, 'ads.manage');
         $slots = $rows->map(function ($ad) use ($canManage) {
             $live = $ad->active && (!$ad->starts_at || now()->gte($ad->starts_at)) && (!$ad->ends_at || now()->lt($ad->ends_at));
-            // 작가 광고(product): 심사 중 · 반려 · 작가 종료 · 작가가 멈춤. 내용은 작가가 앱에서 고치고 운영자는 심사만 한다.
+            // 작가 광고(product): 심사 중 · 반려 · 종료 · 작가가 멈춤. 운영자는 「수정」으로 전부 고칠 수 있고, 스위치로 끄면 종료한다.
             $artistAd = ($ad->product ?? null) !== null;
             [$state, $kind] = match (true) {
                 $artistAd && $ad->status === 'reviewing' => ['심사 중', 'blue'],
                 $artistAd && $ad->status === 'rejected' => ['반려', 'red'],
-                $artistAd && $ad->status === 'ended' => ['작가 종료', 'gray'],
+                $artistAd && $ad->status === 'ended' => ['종료', 'gray'],
                 $artistAd && $ad->paused_at !== null => ['작가가 멈춤', 'gray'],
                 !$ad->active => ['중지', 'gray'],
                 $ad->ends_at && now()->gte($ad->ends_at) => ['기간 종료', 'gray'],
@@ -376,7 +376,9 @@ class AdminController extends AdminBaseController
                 'on' => (bool) $ad->active, 'state' => $state, 'pill' => Ui::pill($kind),
                 'aria' => "{$where} · {$ad->title} 노출", 'canToggle' => $canSwitch,
                 'action' => route('admin.ads.toggle', $ad->id),
-                'editHref' => $canManage && !$artistAd ? Ui::url(['sel' => $ad->id]) : null,
+                // 작가 광고를 끄면 종료(다시 켤 수 없음) → 확인을 받는다
+                'confirm' => $artistAd ? "작가 광고 #{$ad->id}를 종료할까요? 다시 켤 수 없고, 작가에게 종료 알림이 가요. 작가는 이 자리에 새로 신청할 수 있어요." : null,
+                'editHref' => $canManage ? Ui::url(['sel' => $ad->id]) : null,
                 // 작가 광고: 환불 계산 탭으로(그 광고 번호를 넣어 연다)
                 'refundHref' => $artistAd && !in_array($ad->status, ['reviewing', 'rejected'], true) ? route('admin.ads', ['section' => '환불 계산', 'ad' => $ad->id]) : null,
                 'rowStyle' => Ui::rowBg((string) request()->query('sel') === (string) $ad->id),
@@ -389,8 +391,11 @@ class AdminController extends AdminBaseController
         // 등록 · 수정 패널: ?sel=광고번호 · ?sel=new
         $isNew = $request->query('sel') === 'new';
         $edit = !$isNew && ctype_digit((string) $request->query('sel', '')) ? $rows->firstWhere('id', (int) $request->query('sel')) : null;
-        if ($edit && ($edit->product ?? null) !== null) $edit = null; // 작가 광고는 운영자가 고치지 않는다
+        // 작가 광고는 따로 만든 수정 패널(상품 · 문구 · 키워드 · 기간 · 사진)
+        $artistEdit = $edit && ($edit->product ?? null) !== null ? $edit : null;
+        if ($artistEdit) $edit = null;
         $fmt = fn ($at) => $at ? Carbon::parse($at)->format('Y-m-d') : '';
+        $fmtAt = fn ($at) => $at ? Carbon::parse($at)->format('Y-m-d\TH:i') : '';
         $admob = app(Ads::class)->admobConfig();
         $artistData = AdminArtistAdsController::viewData($canManage);
         // 설정 항목별 탭(?section=). 등록 · 수정 패널(?sel=)은 광고 목록 탭에서 연다
@@ -409,6 +414,21 @@ class AdminController extends AdminBaseController
             'artists' => $this->db()->table('starttoo_users')->where('artist_status', 'approved')->where('status', 'active')->count(),
             'canManage' => $canManage,
             'showForm' => $canManage && ($isNew || $edit),
+            'artistForm' => $canManage && $artistEdit ? [
+                'title' => "작가 광고 #{$artistEdit->id} 수정",
+                'action' => route('admin.ads.artist.update', $artistEdit->id),
+                'product' => $artistEdit->product, 'advertiser' => $artistEdit->advertiser, 'copy' => $artistEdit->title,
+                'keywords' => implode(', ', json_decode((string) $artistEdit->keywords, true) ?: []),
+                'from' => $fmtAt($artistEdit->starts_at), 'until' => $fmtAt($artistEdit->ends_at),
+                // 심사 전(심사 중 · 반려)은 기간이 아직 없다(승인할 때 정한다)
+                'needsPeriod' => !in_array($artistEdit->status, ['reviewing', 'rejected'], true),
+                'image' => $artistEdit->image_path ? app(\App\Services\Starttoo\MediaUrls::class)->url($artistEdit->image_path, 600) : null,
+                'hasArtwork' => (bool) $artistEdit->artwork_id,
+                'pending' => (bool) $artistEdit->pending,
+                'days' => $artistEdit->days, 'amount' => (int) $artistEdit->amount,
+            ] : null,
+            'productOptions' => array_map(fn ($p) => $p['name'], \App\Services\Starttoo\ArtistAds::PRODUCTS),
+            'maxCopy' => \App\Services\Starttoo\ArtistAds::MAX_COPY,
             'newHref' => Ui::url(['sel' => 'new']),
             'closeHref' => Ui::url(['sel' => null]),
             'slotOptions' => self::SLOT_LABELS,
@@ -511,11 +531,64 @@ class AdminController extends AdminBaseController
         return back()->with('status', '광고를 저장했어요');
     }
 
+    /** 작가 광고 운영자 수정(상품 · 광고주 · 문구 · 키워드 · 기간 · 사진). 심사 없이 바로 반영 */
+    public function updateArtistAd(Request $request, int $id): RedirectResponse
+    {
+        $this->need($request, 'ads.manage');
+        $data = $request->validate([
+            'product' => ['required', 'in:' . implode(',', array_keys(\App\Services\Starttoo\ArtistAds::PRODUCTS))],
+            'advertiser' => ['required', 'string', 'max:60'],
+            'copy' => ['required', 'string', 'max:120'],
+            'keywords' => ['nullable', 'string', 'max:120'],
+            'from' => ['nullable', 'date'],
+            'until' => ['nullable', 'date'],
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
+            'remove_image' => ['nullable', 'boolean'],
+        ], ['image.max' => '이미지는 8MB까지 올릴 수 있어요.']);
+        try {
+            $r = app(\App\Services\Starttoo\ArtistAds::class)->adminUpdate($id, [
+                ...$data,
+                'image_bytes' => $request->hasFile('image') ? (string) file_get_contents($request->file('image')->getRealPath()) : '',
+                'remove_image' => (bool) ($data['remove_image'] ?? false),
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['ad' => $e->getMessage()])->withInput();
+        } catch (\Throwable $e) {
+            report($e);
+            return back()->withErrors(['ad' => '이미지를 처리하지 못했어요. 다른 이미지로 다시 시도해주세요.'])->withInput();
+        }
+        $b = $r['before'];
+        $a = $r['after'];
+        $changes = [];
+        foreach (['product', 'advertiser', 'title', 'keywords', 'image_path'] as $k) {
+            if ((string) $b->$k !== (string) $a[$k]) $changes[$k] = [$b->$k, $a[$k]];
+        }
+        foreach (['starts_at', 'ends_at'] as $k) {
+            $old = $b->$k ? Carbon::parse($b->$k)->format('Y-m-d H:i') : null;
+            $new = $a[$k] ? Carbon::parse($a[$k])->format('Y-m-d H:i') : null;
+            if ($old !== $new) $changes[$k] = [$old, $new];
+        }
+        $this->audit($request, '설정', '작가 광고 수정', "광고 #{$id} · {$a['advertiser']} · " . str_replace("\n", ' / ', $a['title']), $changes);
+
+        return back()->with('status', '작가 광고를 저장했어요 · 바로 반영돼요');
+    }
+
     public function toggleAd(Request $request, int $id): RedirectResponse
     {
         $this->need($request, 'ads.manage');
         $ad = $this->db()->table('starttoo_ads')->where('id', $id)->first();
         abort_unless($ad, 404);
+        // 작가 광고: 끄면 종료(상태도 끝나야 앱에서 끝난 광고로 보이고 같은 자리에 다시 신청할 수 있다)
+        if (($ad->product ?? null) !== null) {
+            try {
+                app(\App\Services\Starttoo\ArtistAds::class)->adminEnd($id);
+            } catch (\InvalidArgumentException $e) {
+                return back()->withErrors(['ad' => $e->getMessage()]);
+            }
+            $name = \App\Services\Starttoo\ArtistAds::PRODUCTS[$ad->product]['name'] ?? $ad->product;
+            $this->audit($request, '설정', '작가 광고 종료', "광고 #{$id} · {$name} · {$ad->advertiser} · {$ad->title}", ['status' => [$ad->status, 'ended']]);
+            return back()->with('status', "작가 광고 #{$id}({$name})를 종료했어요 · 작가에게 알림이 가요");
+        }
         $on = !$ad->active;
         app(Ads::class)->setActive($id, $on);
         $where = self::SLOT_LABELS[$ad->slot] ?? $ad->slot;

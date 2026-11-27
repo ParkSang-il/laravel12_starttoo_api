@@ -534,6 +534,75 @@ class ArtistAds
         return $this->detail($artist, $id);
     }
 
+    // ── 운영 콘솔: 운영자 종료 · 수정 ─────────────────────
+
+    /**
+     * 운영자가 「광고 목록」 노출 스위치로 끈 작가 광고는 종료한다(다시 켤 수 없다).
+     * 종료해야 앱에서도 끝난 광고로 보이고, 작가가 같은 자리에 새로 신청할 수 있다.
+     */
+    public function adminEnd(int $id): object
+    {
+        $ad = $this->db()->table('starttoo_ads')->where('id', $id)->whereNotNull('product')->first();
+        if (!$ad) throw new \InvalidArgumentException('작가 광고를 찾을 수 없어요.');
+        if (in_array($this->state($ad), ['ended', 'reviewing', 'rejected'], true)) throw new \InvalidArgumentException('노출 중인 광고만 끌 수 있어요.');
+        $this->db()->table('starttoo_ads')->where('id', $id)->update(['status' => 'ended', 'active' => false, 'pending' => null,
+            'ends_at' => $ad->starts_at && now()->gte($ad->starts_at) ? now() : $ad->ends_at, 'paused_at' => null, 'updated_at' => now()]);
+        $this->notify($ad, 'ended');
+        return $this->db()->table('starttoo_ads')->where('id', $id)->first();
+    }
+
+    /**
+     * 운영자 수정: 상품(자리) · 광고주 · 두 줄 문구 · 키워드 · 기간 · 사진. 심사 없이 바로 반영한다.
+     * 결제 금액 · 일수(amount · days)는 그대로 둔다(환불 계산 기준).
+     * $in: product, advertiser, copy, keywords(쉼표 구분), from, until(Y-m-d H:i), image_bytes, remove_image
+     */
+    public function adminUpdate(int $id, array $in): array
+    {
+        $ad = $this->db()->table('starttoo_ads')->where('id', $id)->whereNotNull('product')->first();
+        if (!$ad) throw new \InvalidArgumentException('작가 광고를 찾을 수 없어요.');
+        $product = (string) ($in['product'] ?? '');
+        $p = self::PRODUCTS[$product] ?? null;
+        if (!$p) throw new \InvalidArgumentException('광고 상품을 골라주세요.');
+        $advertiser = trim((string) ($in['advertiser'] ?? ''));
+        if ($advertiser === '' || mb_strlen($advertiser) > 60) throw new \InvalidArgumentException('광고주 이름은 1~60자로 적어주세요.');
+        $lines = array_values(array_filter(array_map('trim', preg_split('/\R/u', (string) ($in['copy'] ?? '')) ?: []), fn ($l) => $l !== ''));
+        if (!$lines) throw new \InvalidArgumentException('두 줄 문구를 적어주세요.');
+        if (count($lines) > 2) throw new \InvalidArgumentException('문구는 두 줄까지 쓸 수 있어요.');
+        $copy = implode("\n", $lines);
+        if (mb_strlen($copy) > self::MAX_COPY) throw new \InvalidArgumentException('문구는 '.self::MAX_COPY.'자까지 쓸 수 있어요.');
+        $keywords = array_values(array_unique(array_filter(array_map('trim', explode(',', (string) ($in['keywords'] ?? ''))), fn ($k) => $k !== '')));
+        if ($p['keywords']) {
+            if (!$keywords) throw new \InvalidArgumentException('검색 결과 상단은 검색 키워드가 1개 이상 필요해요.');
+            if (count($keywords) > self::MAX_KEYWORDS) throw new \InvalidArgumentException('검색 키워드는 '.self::MAX_KEYWORDS.'개까지예요.');
+            foreach ($keywords as $k) if (mb_strlen($k) > 20) throw new \InvalidArgumentException('검색 키워드는 20자까지예요.');
+        }
+        $from = ($in['from'] ?? null) ? Carbon::parse($in['from']) : null;
+        $until = ($in['until'] ?? null) ? Carbon::parse($in['until']) : null;
+        $approved = !in_array($ad->status, ['reviewing', 'rejected'], true);
+        if ($approved && (!$from || !$until)) throw new \InvalidArgumentException('승인된 광고는 시작 · 종료 시각이 꼭 필요해요.');
+        if ($from && $until && $until->lte($from)) throw new \InvalidArgumentException('종료 시각이 시작 시각보다 늦어야 해요.');
+
+        $path = $ad->image_path;
+        if (!empty($in['remove_image'])) $path = null;
+        if (($in['image_bytes'] ?? '') !== '') $path = app(ArtworkPhotos::class)->storeBytes((string) $in['image_bytes']);
+        if ($path === null && !$ad->artwork_id) {
+            throw new \InvalidArgumentException('작품을 고르지 않은 광고라 사진이 꼭 필요해요.');
+        }
+        $values = [
+            'product' => $product, 'slot' => $p['slot'], 'advertiser' => $advertiser, 'title' => $copy,
+            'keywords' => $p['keywords'] ? json_encode($keywords, JSON_UNESCAPED_UNICODE) : null,
+            'image_path' => $path,
+            'starts_at' => $approved ? $from : $ad->starts_at, 'ends_at' => $approved ? $until : $ad->ends_at,
+            'updated_at' => now(),
+        ];
+        $this->db()->table('starttoo_ads')->where('id', $id)->update($values);
+        // 바꾼 사진의 예전 파일은 지운다(실패해도 수정은 그대로)
+        if ($ad->image_path && $ad->image_path !== $path) {
+            try { app(ArtworkPhotos::class)->delete([$ad->image_path]); } catch (\Throwable $e) { report($e); }
+        }
+        return ['before' => $ad, 'after' => $values];
+    }
+
     // ── 운영 콘솔: 심사 ─────────────────────────────
 
     /** 승인: 하루 단위는 지금부터 N일, 한 달 단위는 다음 달 1일 ~ 말일. 노출 중 광고의 변경 요청이면 내용만 반영한다. */
