@@ -268,11 +268,10 @@ class Videos
      * in: cursor · artist(회원 번호, 그 작가 무빙만) · from(영상 id, 작가 이어 보기 시작 위치)
      * 응답: items(디자인 한 칸 모양) · next_cursor · (artist 일 때) total · index(from 의 순서)
      */
-    public function shorts(?int $viewer, array $in): array
+    /** 무빙 피드 공개 조건: 게시됨 · 활동 회원 · 공개 작품 / 숨기지 않은 게시물 · 차단 제외($viewer 기준) */
+    public function feedBase(?int $viewer, ?int $artist = null)
     {
-        $db = $this->db();
-        $artist = isset($in['artist']) && ctype_digit((string) $in['artist']) ? (int) $in['artist'] : null;
-        $base = fn () => $db->table('starttoo_videos as v')->join('starttoo_users as u', 'u.id', '=', 'v.user_id')
+        $q = $this->db()->table('starttoo_videos as v')->join('starttoo_users as u', 'u.id', '=', 'v.user_id')
             ->where('v.status', 'published')->where('u.status', 'active')->where('u.moderation_hidden', false)
             ->when($artist, fn ($q) => $q->where('v.user_id', $artist))
             ->where(fn ($w) => $w
@@ -280,14 +279,46 @@ class Videos
                     ->whereColumn('a.id', 'v.published_id')->where('a.visibility', 'public')->where('a.moderation_hidden', false)))
                 ->orWhere(fn ($p) => $p->where('v.published_type', 'post')->whereExists(fn ($e) => $e->selectRaw('1')->from('starttoo_posts as p')
                     ->whereColumn('p.id', 'v.published_id')->where('p.moderation_hidden', false))));
-        $q = $base();
         app(Blocks::class)->filter($q, 'v.user_id', $viewer);
+        return $q;
+    }
 
-        $cursor = null;
+    private static function encodeCursor(array $c): string
+    {
+        return rtrim(strtr(base64_encode(json_encode($c)), '+/', '-_'), '=');
+    }
+
+    public function shorts(?int $viewer, array $in): array
+    {
+        $db = $this->db();
+        $artist = isset($in['artist']) && ctype_digit((string) $in['artist']) ? (int) $in['artist'] : null;
+        $base = fn () => $this->feedBase($viewer, $artist);
+        $q = $base();
+        $columns = ['v.*', 'u.nickname', 'u.avatar_path', 'u.interest_region'];
+
+        $raw = null;
         if (!empty($in['cursor']) && is_string($in['cursor'])) {
-            $c = json_decode((string) base64_decode(strtr($in['cursor'], '-_', '+/'), true), true);
-            if (is_array($c) && isset($c['at'], $c['id']) && Str::isUuid((string) $c['id'])) $cursor = $c;
+            $raw = json_decode((string) base64_decode(strtr($in['cursor'], '-_', '+/'), true), true);
+            if (!is_array($raw)) $raw = null;
         }
+        // 홈 무빙 탭: 홈 피드와 같은 추천 순서(FeedRanking · 콘솔 「홈 피드 추천 순서」 스위치를 같이 따른다).
+        // 첫 페이지에서 세션 순서를 만들고(6시간 보관) 커서 v3 {v, s, o, viewer} 로 이어 준다. 추천 후보(최신 400개)가 끝나면 그보다 오래된 영상을 최신순으로.
+        $ranking = app(FeedRanking::class);
+        if (!$artist && $ranking->enabled() && ($raw === null || ($raw['v'] ?? null) === 3)) {
+            $mine = $raw !== null && ($raw['viewer'] ?? null) === $viewer && is_string($raw['s'] ?? null);
+            $sid = $mine ? (string) $raw['s'] : $ranking->newSession($viewer);
+            $offset = $mine ? max(0, (int) ($raw['o'] ?? 0)) : 0;
+            $session = $ranking->videoSession($viewer, $sid);
+            $ids = array_slice($session['keys'], $offset, 10);
+            $rows = $ids ? (clone $q)->whereIn('v.id', $ids)->get($columns)
+                ->sortBy(fn ($r) => array_search($r->id, $ids, true))->values() : collect();
+            $next = $offset + 10 < count($session['keys'])
+                ? self::encodeCursor(['v' => 3, 's' => $sid, 'o' => $offset + 10, 'viewer' => $viewer])
+                : ($session['floor'] ? self::encodeCursor(['at' => $session['floor']['at'], 'id' => $session['floor']['id']]) : null);
+            return ['items' => $this->shortItems($viewer, $rows), 'next_cursor' => $next];
+        }
+
+        $cursor = is_array($raw) && isset($raw['at'], $raw['id']) && Str::isUuid((string) $raw['id']) ? $raw : null;
         $index = null;
         // 작가 이어 보기: 누른 무빙부터 시작(그보다 최신은 index 로 센다)
         if (!$cursor && $artist && !empty($in['from']) && Str::isUuid((string) $in['from'])) {
@@ -303,11 +334,24 @@ class Videos
             $q->where(fn ($w) => $w->where('v.published_at', '<', $cursor['at'])
                 ->orWhere(fn ($s) => $s->where('v.published_at', $cursor['at'])->where('v.id', $op, $cursor['id'])));
         }
-        $rows = $q->orderByDesc('v.published_at')->orderByDesc('v.id')->limit(11)
-            ->get(['v.*', 'u.nickname', 'u.avatar_path', 'u.interest_region']);
+        $rows = $q->orderByDesc('v.published_at')->orderByDesc('v.id')->limit(11)->get($columns);
         $more = $rows->count() > 10;
         $rows = $rows->take(10)->values();
+        $last = $rows->last();
+        $next = $more && $last ? self::encodeCursor(['at' => (string) $last->published_at, 'id' => $last->id]) : null;
+        $out = ['items' => $this->shortItems($viewer, $rows), 'next_cursor' => $next];
+        if ($artist) {
+            $out['total'] = $base()->count();
+            $out['index'] = $index ?? 0;
+            $out['artist_name'] = (string) $db->table('starttoo_users')->where('id', $artist)->value('nickname');
+        }
+        return $out;
+    }
 
+    /** 무빙 피드 한 칸(디자인 모양)으로: 카드는 기존 작품 · 게시물 피드 조회로 만든다 */
+    private function shortItems(?int $viewer, $rows): array
+    {
+        $db = $this->db();
         // 카드: 기존 작품 · 게시물 피드 조회를 그대로 써서 좋아요 · 저장 · 팔로우 · 댓글 수를 맞춘다
         $artworkIds = $rows->where('published_type', 'artwork')->pluck('published_id')->all();
         $postIds = $rows->where('published_type', 'post')->pluck('published_id')->all();
@@ -353,17 +397,7 @@ class Videos
                 'avatar_url' => app(MediaUrls::class)->url($r->avatar_path, 300),
             ];
         }
-        $last = $rows->last();
-        $next = $more && $last ? rtrim(strtr(base64_encode(json_encode(['at' => (string) $last->published_at, 'id' => $last->id])), '+/', '-_'), '=') : null;
-        $out = ['items' => $items, 'next_cursor' => $next];
-        if ($artist) {
-            $countQ = $base();
-            app(Blocks::class)->filter($countQ, 'v.user_id', $viewer);
-            $out['total'] = $countQ->count();
-            $out['index'] = $index ?? 0;
-            $out['artist_name'] = (string) $db->table('starttoo_users')->where('id', $artist)->value('nickname');
-        }
-        return $out;
+        return $items;
     }
 
     // ── 변환 · 게시(작업이 부른다) ──────────────────────

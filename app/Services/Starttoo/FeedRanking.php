@@ -51,10 +51,75 @@ class FeedRanking
         if (!$candidates) return ['keys' => [], 'floor' => null];
         $last = end($candidates);
         $floor = $more ? ['at' => $last['at'], 'id' => $last['id'], 't' => $last['t']] : null;
-        $taste = $this->taste($viewer);
+        $ordered = $this->order($viewer, $candidates, $this->stats($candidates), $viewer === null ? [] : $this->seen($viewer, $candidates));
+        return ['keys' => array_map(fn ($c) => $c['t'].':'.$c['id'], $ordered), 'floor' => $floor];
+    }
+
+    // ── 무빙 피드(홈 무빙 탭): 홈 피드와 같은 점수 · 섞기, 신호에 영상 시청을 더한다 ──
+
+    /** ['keys' => [영상 id …], 'floor' => 후보 중 가장 오래된 영상 {at, id} | null] */
+    public function videoSession(?int $viewer, string $sid): array
+    {
+        $key = 'starttoo:moving-rank:'.app(ProjectDatabase::class)->code().':'.($viewer ?? 0).':'.$sid;
+        return Cache::remember($key, self::TTL, fn () => $this->buildVideos($viewer));
+    }
+
+    /**
+     * $base: Videos::shorts 와 같은 공개 조건(차단 · 숨김 · 비공개 제외)의 영상 쿼리.
+     * 영상마다 게시된 작품 · 게시물의 스타일 · 태그 · 작가로 점수를 매긴다(좋아요 · 저장 · 댓글도 그 글 기준).
+     */
+    public function buildVideos(?int $viewer, ?\Closure $base = null): array
+    {
+        $base ??= fn () => app(Videos::class)->feedBase($viewer);
+        $rows = $base()->leftJoin('starttoo_artworks as a', fn ($j) => $j->on('a.id', '=', 'v.published_id')->where('v.published_type', 'artwork'))
+            ->leftJoin('starttoo_posts as p', fn ($j) => $j->on('p.id', '=', 'v.published_id')->where('v.published_type', 'post'))
+            ->orderByDesc('v.published_at')->orderByDesc('v.id')->limit(self::POOL + 1)
+            ->get(['v.id as vid', 'v.published_type', 'v.published_id', 'v.published_at', 'v.user_id', 'u.interest_region as region',
+                'a.styles', 'a.tags as a_tags', 'a.kind', 'p.tags as p_tags']);
+        $more = $rows->count() > self::POOL;
+        $rows = $rows->take(self::POOL);
+        if ($rows->isEmpty()) return ['keys' => [], 'floor' => null];
+        $tags = fn ($v) => array_values(array_unique(array_map(fn ($t) => mb_strtolower(ltrim($t, '#')), $this->list($v))));
+        $candidates = [];
+        foreach ($rows as $r) {
+            $art = $r->published_type === 'artwork';
+            $candidates[] = ['t' => (string) $r->published_type, 'id' => (string) $r->published_id, 'vid' => (string) $r->vid,
+                'user' => (int) $r->user_id, 'at' => Carbon::parse($r->published_at)->format('Y-m-d H:i:s'),
+                'styles' => $art ? $this->list($r->styles) : [], 'tags' => $tags($art ? $r->a_tags : $r->p_tags),
+                'design' => $art && $r->kind === 'design', 'region' => $r->region];
+        }
+        // 반응: 그 글의 좋아요 · 저장 · 댓글 · 피드 노출 + 영상 재생(노출) · 3초 시청 · 끝까지 시청(열기) · 상담 · 피팅 버튼(저장급)
         $stats = $this->stats($candidates);
+        $vids = array_column($candidates, 'vid');
+        $byVid = array_column($candidates, null, 'vid');
+        foreach ($this->db()->table('starttoo_video_views')->whereIn('video_id', $vids)->groupBy('video_id')
+            ->selectRaw('video_id, SUM(plays) as plays, SUM(watched_3s) as w3, SUM(completed) as done, SUM(cta_clicks) as cta')->get() as $v) {
+            $c = $byVid[$v->video_id] ?? null;
+            if (!$c) continue;
+            $k = $c['t'].':'.$c['id'];
+            $stats[$k]['views'] += (int) $v->plays;
+            $stats[$k]['opens'] += (int) $v->done + intdiv((int) $v->w3, 2);
+            $stats[$k]['saves'] += (int) $v->cta;
+        }
+        // 이 회원이 이미 본 영상(재생 수)
+        $seen = [];
+        if ($viewer !== null) {
+            foreach ($this->db()->table('starttoo_video_views')->where('user_id', $viewer)->whereIn('video_id', $vids)
+                ->groupBy('video_id')->selectRaw('video_id, SUM(plays) as n')->pluck('n', 'video_id') as $vid => $n) {
+                $c = $byVid[$vid] ?? null;
+                if ($c) $seen[$c['t'].':'.$c['id']] = (int) $n;
+            }
+        }
+        $ordered = $this->order($viewer, $candidates, $stats, $seen);
+        $last = end($candidates);
+        return ['keys' => array_column($ordered, 'vid'), 'floor' => $more ? ['at' => $last['at'], 'id' => $last['vid']] : null];
+    }
+
+    /** 점수 매기기 → 섞기(홈 피드 · 무빙 피드 공통). $stats · $seen 키는 'type:id' */
+    private function order(?int $viewer, array $candidates, array $stats, array $seen): array
+    {
+        $taste = $this->taste($viewer);
         $authors = $this->authorCounts(array_values(array_unique(array_column($candidates, 'user'))));
-        $seen = $viewer === null ? [] : $this->seen($viewer, $candidates);
         $now = now();
         $own = [];
         $scored = [];
@@ -86,8 +151,7 @@ class FeedRanking
         }
         // 점수가 같으면 최신 글 먼저(후보가 이미 최신순이므로 안정 정렬)
         usort($scored, fn ($a, $b) => $b['score'] <=> $a['score']);
-        $ordered = [...$own, ...$this->diversify($scored, (bool) $taste['styles'])];
-        return ['keys' => array_map(fn ($c) => $c['t'].':'.$c['id'], $ordered), 'floor' => $floor];
+        return [...$own, ...$this->diversify($scored, (bool) $taste['styles'])];
     }
 
     /** 공개 피드와 같은 조건의 최신 POOL 개(작품 · 도안 · 게시물). $more: 더 오래된 글이 남아 있을 수 있음 */
@@ -204,6 +268,18 @@ class FeedRanking
             ->where(fn ($q) => $q->where('event', 'open')->orWhere('ms', '>=', 3000))
             ->orderByDesc('id')->limit(500)->get(['target_type', 'target_id', 'event', 'created_at']) as $r) {
             $signals[] = [(string) $r->target_type, (string) $r->target_id, $r->event === 'open' ? 1 : 0.5, $r->created_at];
+        }
+        // 무빙 시청(최근 30일): 상담 · 피팅 버튼 3 · 끝까지 1 · 3초 이상 0.5 → 그 영상이 게시된 글의 스타일 · 태그 · 작가
+        try {
+            foreach ($db->table('starttoo_video_views as w')->join('starttoo_videos as v', 'v.id', '=', 'w.video_id')
+                ->where('w.user_id', $viewer)->where('w.day', '>=', now()->subDays(30)->toDateString())->whereNotNull('v.published_id')
+                ->where(fn ($q) => $q->where('w.watched_3s', '>', 0)->orWhere('w.completed', '>', 0)->orWhere('w.cta_clicks', '>', 0))
+                ->orderByDesc('w.day')->limit(300)->get(['v.published_type', 'v.published_id', 'w.completed', 'w.cta_clicks', 'w.day']) as $r) {
+                $signals[] = [(string) $r->published_type, (string) $r->published_id,
+                    $r->cta_clicks > 0 ? 3 : ($r->completed > 0 ? 1 : 0.5), $r->day];
+            }
+        } catch (\Illuminate\Database\QueryException $e) {
+            // 무빙 테이블 전(000062) 배포
         }
         $meta = [];
         $ids = ['artwork' => [], 'post' => []];
