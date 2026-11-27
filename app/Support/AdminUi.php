@@ -156,7 +156,14 @@ final class AdminUi
                 'adSales' => \Illuminate\Support\Facades\Schema::connection($db->getName())->hasTable('starttoo_ad_contracts')
                     ? $db->table('starttoo_ad_inquiries')->where('status', 'new')->count()
                         + $db->table('starttoo_ad_contracts')->where('status', 'payment_reported')->count() : 0,
-            ];
+            ] + (\Illuminate\Support\Facades\Schema::connection($db->getName())->hasTable('starttoo_videos') ? [
+                // 무빙: 오늘 변환 · 업로드 실패, 신고 누적으로 숨겨진(검토 중) 영상 게시물
+                'videoFailed' => $db->table('starttoo_videos')->whereIn('status', ['encode_failed', 'upload_failed'])->where('created_at', '>=', today())->count(),
+                'videoHeld' => $db->table('starttoo_videos as v')->where('v.status', 'published')
+                    ->where(fn ($w) => $w->whereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_artworks as a')->where('v.published_type', 'artwork')->whereColumn('a.id', 'v.published_id')->where('a.moderation_hidden', true)->whereNull('a.moderation_removed_at'))
+                        ->orWhereExists(fn ($q) => $q->selectRaw('1')->from('starttoo_posts as p')->where('v.published_type', 'post')->whereColumn('p.id', 'v.published_id')->where('p.moderation_hidden', true)->whereNull('p.moderation_removed_at')))
+                    ->count(),
+            ] : ['videoFailed' => 0, 'videoHeld' => 0]);
         });
     }
 

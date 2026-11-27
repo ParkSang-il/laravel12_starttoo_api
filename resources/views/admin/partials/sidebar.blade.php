@@ -10,7 +10,7 @@
     ]],
     ['label' => 'AI 서비스', 'items' => [
       ['route' => 'admin.ai-usage', 'label' => 'AI 사용량 · 비용', 'badge' => null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>'],
-      ['route' => 'admin.ai-jobs', 'label' => 'AI 작업 모니터', 'badge' => $badges['aiJobs'] ?? null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"/></svg>'],
+      ['route' => 'admin.ai-jobs', 'label' => 'AI · 미디어 작업', 'badge' => (($badges['aiJobs'] ?? 0) + ($badges['videoFailed'] ?? 0)) ?: null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"/></svg>'],
       ['route' => 'admin.ai-outputs', 'label' => 'AI 결과물 검수', 'badge' => null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h8v14H3zM13 5h8v14h-8zM15 12l1.5 1.5L19 11"/></svg>'],
       ['route' => 'admin.virtual-models', 'label' => '가상 모델 라이브러리', 'badge' => null, 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 23v-8l-2-5 5-2h6l5 2-2 5v8"/></svg>'],
     ]],

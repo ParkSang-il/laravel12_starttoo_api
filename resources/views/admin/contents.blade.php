@@ -59,6 +59,10 @@
               </label>
             @endif
             <span style="{{ $it['pill'] }}; position: absolute; top: 14px; right: 10px">{{ $it['state'] }}</span>
+            @if ($it['video'])
+              {{-- 무빙: 포스터 위 ▶ 길이, 누르면 영상 재생 화면 --}}
+              <a href="{{ $it['video']['href'] }}" target="_blank" rel="noopener" aria-label="영상 보기 {{ $it['video']['label'] }}" style="position: absolute; left: 10px; bottom: 10px; height: 30px; padding: 0 10px; border-radius: 8px; background: rgba(14,14,15,0.78); color: #FFFFFF; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; text-decoration: none">▶ {{ $it['video']['label'] }}</a>
+            @endif
           </div>
           <div style="padding: 14px; display: flex; flex-direction: column; gap: 6px">
             <span style="font-size: 12px; color: #66625B">{{ $it['kind'] }} · {{ $it['code'] }}@if ($it['publicHref']) · <a href="{{ $it['publicHref'] }}" target="_blank" rel="noopener" style="color: #1F4F99; font-weight: 700">공개 페이지</a>@endif</span>

@@ -147,7 +147,8 @@ class AdminModerationController extends AdminBaseController
 
     // ================================================================ M-05 게시물 · 작품
 
-    private const CONTENT_TABS = ['전체', '작품', '도안', '피팅 도안', '게시물', '리뷰', '커뮤니티'];
+    // 무빙: 영상이 붙은 작품 · 도안 · 게시물(docs/video.md)
+    private const CONTENT_TABS = ['전체', '작품', '도안', '피팅 도안', '무빙', '게시물', '리뷰', '커뮤니티'];
     private const CONTENT_STATES = ['전체', '노출', '숨김', '삭제됨'];
     private const CONTENT_SORTS = ['최신 등록순', '신고 많은순'];
     private const CONTENT_PAGE = 24;
@@ -160,7 +161,10 @@ class AdminModerationController extends AdminBaseController
         $reports = fn (string $type, string $col) => "(select count(*) from starttoo_reports r where r.target_type = '{$type}' and r.target_id = {$col})";
         $pending = fn (string $type, string $col) => "(select count(*) from starttoo_reports r where r.target_type = '{$type}' and r.target_id = {$col} and r.status = 'pending')";
         $parts = [];
-        if (in_array($tab, ['전체', '작품', '도안', '피팅 도안'], true)) {
+        // 무빙 탭: 게시된 영상이 있는 작품 · 게시물만
+        $video = fn (string $type, string $col) => fn ($w) => $w->selectRaw('1')->from('starttoo_videos as vd')
+            ->where('vd.published_type', $type)->whereColumn('vd.published_id', $col)->where('vd.status', 'published');
+        if (in_array($tab, ['전체', '작품', '도안', '피팅 도안', '무빙'], true)) {
             $q = $db->table('starttoo_artworks as a')->join('starttoo_users as u', 'u.id', '=', 'a.user_id')
                 ->selectRaw("'artwork' as ctype, CAST(a.id AS CHAR(36)) as cid, a.title as title, a.user_id as author_id, u.nickname as author, a.created_at as created_at,"
                     . " a.moderation_hidden as hidden, a.moderation_removed_at as removed_at, a.kind as kind, a.fit_blocked as fit_blocked, a.recommend_excluded as recommend_excluded,"
@@ -169,14 +173,16 @@ class AdminModerationController extends AdminBaseController
                     . " {$reports('artwork', 'a.id')} as reports, {$pending('artwork', 'a.id')} as pending");
             if ($tab === '작품') $q->where('a.kind', 'work');
             if (in_array($tab, ['도안', '피팅 도안'], true)) $q->where('a.kind', 'design');
+            if ($tab === '무빙') $q->whereExists($video('artwork', 'a.id'));
             $parts[] = [$q, 'a.title', 'a.id', true, 'a.user_id'];
         }
-        if (in_array($tab, ['전체', '게시물'], true)) {
+        if (in_array($tab, ['전체', '게시물', '무빙'], true)) {
             $q = $db->table('starttoo_posts as p')->join('starttoo_users as u', 'u.id', '=', 'p.user_id')
                 ->selectRaw("'post' as ctype, CAST(p.id AS CHAR(36)) as cid, SUBSTRING(p.content, 1, 80) as title, p.user_id as author_id, u.nickname as author, p.created_at as created_at,"
                     . " p.moderation_hidden as hidden, p.moderation_removed_at as removed_at, NULL as kind, 0 as fit_blocked, 0 as recommend_excluded,"
                     . " (select count(*) from starttoo_post_likes x where x.post_id = p.id) as likes, 0 as fits, NULL as images,"
                     . " {$reports('post', 'p.id')} as reports, {$pending('post', 'p.id')} as pending");
+            if ($tab === '무빙') $q->whereExists($video('post', 'p.id'));
             $parts[] = [$q, 'p.content', 'p.id', true, 'p.user_id'];
         }
         if (in_array($tab, ['전체', '리뷰'], true)) {
@@ -241,6 +247,18 @@ class AdminModerationController extends AdminBaseController
         $postIds = $rows->where('ctype', 'post')->pluck('cid')->all();
         $thumbs = ($artworkIds ? $this->db()->table('starttoo_artwork_images')->whereIn('artwork_id', $artworkIds)->where('position', 0)->pluck('path', 'artwork_id')->all() : [])
             + ($postIds ? $this->db()->table('starttoo_post_images')->whereIn('post_id', $postIds)->where('position', 0)->pluck('path', 'post_id')->all() : []);
+        // 무빙: 영상이 붙은 작품 · 게시물(카드에 ▶ 길이 · 영상 보기)
+        $videos = [];
+        if ($artworkIds || $postIds) {
+            foreach ($this->db()->table('starttoo_videos')->where('status', 'published')
+                ->where(fn ($w) => $w->where(fn ($a) => $a->where('published_type', 'artwork')->whereIn('published_id', $artworkIds ?: ['']))
+                    ->orWhere(fn ($p) => $p->where('published_type', 'post')->whereIn('published_id', $postIds ?: [''])))
+                ->get(['id', 'published_type', 'published_id', 'duration_ms']) as $v) {
+                $s = (int) round($v->duration_ms / 1000);
+                $videos["{$v->published_type}:{$v->published_id}"] = ['href' => route('admin.videos.play', $v->id),
+                    'label' => intdiv($s, 60) . ':' . str_pad((string) ($s % 60), 2, '0', STR_PAD_LEFT)];
+            }
+        }
         $urls = app(MediaUrls::class);
         $tones = ['#D9D4CB', '#CFCAC1', '#E4E0D8', '#C9C4BA'];
         $kinds = ['노출' => 'green', '검토 중' => 'amber', '숨김' => 'gray', '삭제됨' => 'gray', '피팅 허용' => 'blue', '피팅 차단' => 'red', '추천 제외' => 'gray'];
@@ -257,8 +275,11 @@ class AdminModerationController extends AdminBaseController
                 default => '노출',
             };
             $kind = $x->ctype === 'artwork' ? ($x->kind === 'design' ? ($isFit ? '피팅 도안' : '도안') : '작품') : self::KIND_LABEL[$x->ctype];
+            $video = $videos["{$x->ctype}:{$x->cid}"] ?? null;
+            if ($video) $kind = '무빙 · ' . $kind;
             $title = trim(preg_replace('/\s+/u', ' ', (string) $x->title)) ?: '(내용 없음)';
             $items[] = [
+                'video' => $video,
                 'id' => "{$x->ctype}:{$x->cid}",
                 'code' => $x->ctype === 'artwork' || $x->ctype === 'post' ? '#' . substr($x->cid, 0, 8) : '#' . $x->cid,
                 'kind' => $kind, 'title' => mb_strimwidth($title, 0, 80, '…'),

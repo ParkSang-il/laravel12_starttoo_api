@@ -89,6 +89,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('ai/usage/limit/{key}/{dir}', [AdminAiController::class, 'stepLimit'])->name('ai-usage.limit');
         Route::post('ai/usage/guard/{id}', [AdminAiController::class, 'toggleGuard'])->name('ai-usage.guard');
         Route::get('ai/jobs', [AdminAiController::class, 'jobs'])->name('ai-jobs');
+        // 무빙(동영상): 작업 모니터 「영상 변환」 · 다시 변환 · 영상 재생(검수)
+        // 이름을 ai-jobs.* 로 두어 사이드바 「AI · 미디어 작업」이 켜진 채로 보인다
+        Route::get('ai/jobs/videos', [\App\Http\Controllers\Admin\AdminVideoController::class, 'jobs'])->name('ai-jobs.videos');
+        Route::post('videos/{id}/retry', [\App\Http\Controllers\Admin\AdminVideoController::class, 'retry'])->name('videos.retry');
+        Route::get('videos/{id}/play', [\App\Http\Controllers\Admin\AdminVideoController::class, 'play'])->name('videos.play');
         Route::post('ai/jobs/{id}/restore', [AdminAiController::class, 'restoreQuota'])->name('ai-jobs.restore');
         Route::get('virtual-models', [AdminAiController::class, 'virtualModels'])->name('virtual-models');
         Route::post('virtual-models/{id}/toggle', [AdminAiController::class, 'toggleModel'])->whereNumber('id')->name('virtual-models.toggle');
