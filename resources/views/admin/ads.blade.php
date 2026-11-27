@@ -9,6 +9,15 @@
         <p style="margin: 0; font-size: 14px; color: #66625B">스폰서 노출 슬롯과 프리미엄 아티스트 구독을 관리해요.</p>
       </div>
     </header>
+
+    {{-- 설정 항목별 탭(?tab=). 저장 후에는 같은 탭으로 돌아온다 --}}
+    <nav role="tablist" aria-label="광고 · 프리미엄 설정 항목" style="display: flex; flex-wrap: wrap; gap: 6px">
+      @foreach ($tabs as $t)
+        <a href="{{ $t['href'] }}" class="btn-a" role="tab" aria-selected="{{ $t['on'] ? 'true' : 'false' }}" style="{{ $t['style'] }}; display: inline-flex; align-items: center; gap: 6px">{{ $t['label'] }}@if ($t['count'])<span style="min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #FF5A36; color: #FFFFFF; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box">{{ $t['count'] }}</span>@endif</a>
+      @endforeach
+    </nav>
+
+    @if ($tab === '광고 목록')
     <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; overflow: hidden">
       <div style="padding: 18px 20px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px">
         <div style="display: flex; flex-direction: column; gap: 4px">
@@ -47,8 +56,10 @@
         </table>
       </div>
     </section>
+    @endif
 
     {{-- 작가 광고 심사: 앱 「스튜디오 → 광고」에서 작가가 신청 · 변경 요청한 광고. 승인하면 바로 노출(결제는 Phase 6) --}}
+    @if ($tab === '작가 광고 심사')
     <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; overflow: hidden">
       <div style="padding: 18px 20px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px">
         <div style="display: flex; flex-direction: column; gap: 4px">
@@ -100,8 +111,10 @@
         <div style="padding: 24px 20px; border-top: 1px solid #F0EDE7; font-size: 14px; color: #66625B; text-align: center">심사할 작가 광고가 없어요.</div>
       @endforelse
     </section>
+    @endif
 
     {{-- 작가 광고 상품: 앱 「광고 만들기 1/3」에 보이는 위치 · 단가 · 자리 수 --}}
+    @if ($tab === '작가 광고 상품')
     <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
       <div style="display: flex; flex-direction: column; gap: 4px">
         <h2 style="margin: 0; font-size: 17px; font-weight: 700">작가 광고 상품</h2>
@@ -132,8 +145,10 @@
         @endif
       </form>
     </section>
+    @endif
 
     {{-- 앱 「광고 안내」 페이지: 광고 만들기 · 광고 관리에서 여는 안내. 섹션(제목 + 본문)별로 고친다 --}}
+    @if ($tab === '광고 안내')
     @php
       $guideRows = old('sections', array_merge(
         array_map(fn ($s, $i) => $s + ['order' => $i + 1], $guide['sections'], array_keys($guide['sections'])),
@@ -167,8 +182,10 @@
         @endif
       </form>
     </section>
+    @endif
 
     {{-- 광고 운영 정책: 작가가 앱에서 심사를 요청할 때 동의하는 문서. 저장 시각이 새 버전이 된다 --}}
+    @if ($tab === '광고 운영 정책')
     @php
       $policyRows = old('policy', array_merge(
         array_map(fn ($s, $i) => $s + ['order' => $i + 1], $policy['sections'], array_keys($policy['sections'])),
@@ -203,8 +220,10 @@
         @endif
       </form>
     </section>
+    @endif
 
     {{-- 구글 광고(AdMob): 자체 광고가 없을 때 같은 자리를 채운다 --}}
+    @if ($tab === '구글 광고')
     <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
       <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px">
         <div style="display: flex; flex-direction: column; gap: 4px">
@@ -236,8 +255,9 @@
         </div>
       </form>
     </section>
+    @endif
 
-    @if ($showForm)
+    @if ($showForm && $tab === '광고 목록')
       {{-- 광고 등록 · 수정(공지 편집 패널과 같은 모양) --}}
       <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
         <div style="display: flex; justify-content: space-between; align-items: center"><h2 style="margin: 0; font-size: 17px; font-weight: 700">{{ $form['title'] }}</h2><a href="{{ $closeHref }}" style="font-size: 13px; color: #66625B">닫기</a></div>
@@ -277,6 +297,7 @@
       </section>
     @endif
 
+    @if ($tab === '프리미엄 구독')
     <section style="display: flex; flex-direction: column; gap: 14px">
       <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px">
         <h2 style="margin: 0; font-size: 17px; font-weight: 700">프리미엄 아티스트 구독</h2>
@@ -300,5 +321,6 @@
         </article>
       </div>
     </section>
+    @endif
   </div>
 @endsection

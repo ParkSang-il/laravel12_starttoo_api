@@ -306,6 +306,8 @@ class AdminController extends AdminBaseController
 
     // ================================================================ M-08 광고
 
+    private const AD_TABS = ['광고 목록', '작가 광고 심사', '작가 광고 상품', '광고 안내', '광고 운영 정책', '구글 광고', '프리미엄 구독'];
+
     private const SLOT_LABELS = ['community_top' => '커뮤니티 맨 위', 'feed_inline' => '홈 피드 · 불러온 묶음마다 1개 무작위 위치'];
 
     public function ads(Request $request): View
@@ -358,10 +360,19 @@ class AdminController extends AdminBaseController
         if ($edit && ($edit->product ?? null) !== null) $edit = null; // 작가 광고는 운영자가 고치지 않는다
         $fmt = fn ($at) => $at ? Carbon::parse($at)->format('Y-m-d') : '';
         $admob = app(Ads::class)->admobConfig();
+        $artistData = AdminArtistAdsController::viewData($canManage);
+        // 설정 항목별 탭(?tab=). 등록 · 수정 패널(?sel=)은 광고 목록 탭에서 연다
+        $tab = in_array($request->query('tab'), self::AD_TABS, true) ? $request->query('tab') : self::AD_TABS[0];
+        if ($request->query('sel') !== null) $tab = self::AD_TABS[0];
+        $tabs = array_map(fn ($t) => $t + [
+            'on' => $t['label'] === $tab,
+            'count' => $t['label'] === '작가 광고 심사' ? count($artistData['queue']) : null,
+        ], Ui::tabs(self::AD_TABS, $tab));
         return view('admin.ads', [
+            'tab' => $tab, 'tabs' => $tabs,
             'slots' => $slots,
             // 작가 광고 심사 · 상품 설정(AdminArtistAdsController)
-            ...AdminArtistAdsController::viewData($canManage),
+            ...$artistData,
             // 구글 광고(AdMob): 자체 광고가 없을 때 같은 자리를 채운다
             'admob' => $admob, 'admobOn' => $admob['enabled'],
             'admobTrack' => Ui::switchTrack($admob['enabled'], !$canManage), 'knob' => Ui::KNOB,
