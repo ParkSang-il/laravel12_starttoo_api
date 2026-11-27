@@ -96,7 +96,7 @@
     <div style="flex: 1 1 420px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #55524C; line-height: 1.7">
       <b style="font-size: 13px; color: #141413">집계 기준</b>
       <span>노출 · 클릭은 앱 광고 기록(하루 단위)을 그대로 더한 값이에요 · 전날까지 반영해요 · 보장 노출은 오늘 기록까지 세어 채우는 즉시 광고를 멈춰요</span>
-      <span>이 페이지는 로그인 없이 열리는 전용 링크예요. 링크가 퍼졌다면 담당자에게 다시 발급을 요청해주세요.</span>
+      <span>이 페이지는 광고주 계정으로 로그인해야 열려요. 담당자 외에는 링크를 공유하지 말아주세요.</span>
     </div>
     <div class="adv-noprint" style="display: flex; gap: 8px"><button type="button" onclick="window.print()" class="adv-btn is-ghost is-sm">PDF 저장 · 인쇄</button></div>
   </section>

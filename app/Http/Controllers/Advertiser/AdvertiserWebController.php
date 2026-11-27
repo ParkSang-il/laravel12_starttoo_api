@@ -112,28 +112,35 @@ class AdvertiserWebController extends Controller
     // ── AW-02 ──────────────────────────────────
 
     /**
-     * 견적서. 메일 링크의 비밀 토큰 = 받은 이메일 주인 인증.
-     *  계정(비밀번호) 없음 → 계정 만들기 화면 → 만들면 로그인되고 견적서가 열린다
-     *  계정 있음 · 로그인 안 함 → 로그인 화면(로그인하면 이 견적서로 돌아옴)
-     *  견적 주인으로 로그인 → 견적서
+     * 비밀 링크(견적서 q · 성과 보고 r) 앞 단계. 메일 링크의 비밀 토큰 = 받은 이메일 주인 인증.
+     *  계정(비밀번호) 없음 → 계정 만들기 화면 → 만들면 로그인되고 그 화면이 열린다
+     *  계정 있음 · 로그인 안 함 → 로그인 화면(로그인하면 이 링크로 돌아옴)
+     *  계약 주인으로 로그인 → null(통과)
      */
+    private function gate(Request $request, object $c, string $route, string $token): View|RedirectResponse|null
+    {
+        if (AdvertiserWeb::ownsContract($request, $c)) return null;
+        $owner = app(Advertisers::class)->find((int) $c->advertiser_id);
+        abort_unless($owner, 404);
+        $subject = $route === 'advertiser.report' ? '성과 보고' : '견적서';
+        if ($request->attributes->get('advertiser')) {
+            abort(403, "다른 광고주 계정으로 로그인돼 있어요. 로그아웃한 뒤 {$subject} 메일을 받은 이메일로 로그인해주세요.");
+        }
+        if (!$owner->password) {
+            return view('advertiser.link-account', ['action' => route($route . '.account', $token),
+                'email' => $owner->email, 'company' => $c->company, 'subject' => $subject]);
+        }
+        $request->session()->put('url.intended', route($route, $token));
+        return redirect()->route('advertiser.login')->withInput(['email' => $owner->email])
+            ->with('status', "광고주 계정으로 로그인하면 {$subject}를 볼 수 있어요.");
+    }
+
     public function quote(Request $request, string $token): View|RedirectResponse
     {
         $c = $this->sales()->byQuoteToken($token);
         abort_unless($c && $c->advertiser_id, 404);
+        if ($gate = $this->gate($request, $c, 'advertiser.quote', $token)) return $gate;
         $owner = app(Advertisers::class)->find((int) $c->advertiser_id);
-        abort_unless($owner, 404);
-        if (!AdvertiserWeb::quoteUnlocked($request, $c)) {
-            if ($request->attributes->get('advertiser')) {
-                abort(403, '다른 광고주 계정으로 로그인돼 있어요. 로그아웃한 뒤 견적서를 받은 이메일로 로그인해주세요.');
-            }
-            if (!$owner->password) {
-                return view('advertiser.quote-account', ['token' => $token, 'email' => $owner->email, 'company' => $c->company]);
-            }
-            $request->session()->put('url.intended', route('advertiser.quote', $token));
-            return redirect()->route('advertiser.login')->withInput(['email' => $owner->email])
-                ->with('status', '광고주 계정으로 로그인하면 견적서를 볼 수 있어요.');
-        }
         return view('advertiser.quote', [
             'c' => $c, 'stage' => $c->stage, 'expired' => $c->expired,
             'lines' => $this->sales()->quoteLines($c),
@@ -147,7 +154,7 @@ class AdvertiserWebController extends Controller
     /** 견적 주인으로 로그인하지 않은 세션의 수락 · 수정 요청 · 입금 알림은 견적서 주소(계정 만들기 · 로그인)로 돌려보낸다 */
     private function locked(Request $request, object $c, string $token): ?RedirectResponse
     {
-        return AdvertiserWeb::quoteUnlocked($request, $c) ? null : redirect()->route('advertiser.quote', $token);
+        return AdvertiserWeb::ownsContract($request, $c) ? null : redirect()->route('advertiser.quote', $token);
     }
 
     public function acceptQuote(Request $request, string $token): RedirectResponse
@@ -200,10 +207,11 @@ class AdvertiserWebController extends Controller
 
     // ── AW-03 ──────────────────────────────────
 
-    public function report(Request $request, string $token): View
+    public function report(Request $request, string $token): View|RedirectResponse
     {
         $c = $this->sales()->byReportToken($token);
-        abort_unless($c, 404);
+        abort_unless($c && $c->advertiser_id, 404);
+        if ($gate = $this->gate($request, $c, 'advertiser.report', $token)) return $gate;
         $metric = in_array($request->query('metric'), ['imp', 'clk', 'ctr'], true) ? $request->query('metric') : 'imp';
         $r = $this->sales()->report($c);
         $final = $c->status === 'ended' || $c->ends_at->lt(today());

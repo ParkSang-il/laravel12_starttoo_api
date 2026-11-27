@@ -89,7 +89,7 @@
       <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 14px">
         <span class="pd-kicker">REPORT</span>
         <h2 class="pd-h2">노출이 시작되면<br>성과 보고 링크를 드려요</h2>
-        <p style="margin: 0; font-size: 15px; color: #55524C; line-height: 1.75">로그인 없이 열리는 전용 링크로 매일 전날까지의 기록을 볼 수 있어요. PDF로 저장해 내부 보고에 바로 쓸 수 있고, 캠페인이 끝나면 최종 보고를 메일로 보내 드려요.</p>
+        <p style="margin: 0; font-size: 15px; color: #55524C; line-height: 1.75">메일로 받은 전용 링크에서 광고주 계정으로 로그인하면 매일 전날까지의 기록을 볼 수 있어요. PDF로 저장해 내부 보고에 바로 쓸 수 있고, 캠페인이 끝나면 최종 보고를 메일로 보내 드려요.</p>
         <ul class="pd-list"><li>일별 노출 · 클릭 · 클릭률 그래프</li><li>자리별 · 소재별 성과</li><li>보장 노출 달성률</li></ul>
       </div>
       <div class="pd-report-card" aria-hidden="true">

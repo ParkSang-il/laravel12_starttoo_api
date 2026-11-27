@@ -31,11 +31,14 @@ Route::prefix('ads')->name('advertiser.')->group(function () use ($token) {
 
     // AW-02 견적서 · AW-03 성과 보고 · 비밀번호 설정 — 비밀 토큰
     Route::middleware(['advertiser.web:private', 'throttle:60,1,ad-token'])->group(function () use ($token) {
-        Route::get('q/{token}', [W::class, 'quote'])->where('token', $token)->name('quote');        Route::post('q/{token}/accept', [W::class, 'acceptQuote'])->where('token', $token)->name('quote.accept');
+        // 견적서 · 성과 보고는 계약 주인 광고주로 로그인해야 열린다(계정이 없으면 링크에서 비밀번호를 만든다)
+        Route::get('q/{token}', [W::class, 'quote'])->where('token', $token)->name('quote');
+        Route::post('q/{token}/accept', [W::class, 'acceptQuote'])->where('token', $token)->name('quote.accept');
         Route::post('q/{token}/change', [W::class, 'requestChange'])->where('token', $token)->name('quote.change');
         Route::post('q/{token}/paid', [W::class, 'reportPayment'])->where('token', $token)->name('quote.paid');
         Route::post('q/{token}/account', [A::class, 'createFromQuote'])->where('token', $token)->name('quote.account');
         Route::get('r/{token}', [W::class, 'report'])->where('token', $token)->name('report');
+        Route::post('r/{token}/account', [A::class, 'createFromReport'])->where('token', $token)->name('report.account');
         Route::get('password/reset/{token}', [A::class, 'reset'])->where('token', $token)->name('password.reset');
         Route::post('password/reset/{token}', [A::class, 'saveReset'])->where('token', $token)->name('password.save');
     });

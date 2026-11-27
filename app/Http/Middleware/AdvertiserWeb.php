@@ -50,10 +50,10 @@ class AdvertiserWeb
     }
 
     /**
-     * 견적서(비밀 링크)를 볼 수 있는지: 견적 주인 광고주로 로그인했을 때만.
-     * 링크가 다른 사람에게 넘어가도 계정이 있으면 비밀번호 없이는 금액 · 계좌를 볼 수 없다.
+     * 견적서 · 성과 보고(비밀 링크)를 볼 수 있는지: 계약 주인 광고주로 로그인했을 때만.
+     * 링크가 다른 사람에게 넘어가도 계정이 있으면 비밀번호 없이는 금액 · 계좌 · 성과를 볼 수 없다.
      */
-    public static function quoteUnlocked(Request $request, object $contract): bool
+    public static function ownsContract(Request $request, object $contract): bool
     {
         $me = $request->attributes->get('advertiser');
         return $me && $contract->advertiser_id && (int) $me->id === (int) $contract->advertiser_id;

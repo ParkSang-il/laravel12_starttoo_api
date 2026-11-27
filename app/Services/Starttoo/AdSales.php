@@ -491,7 +491,7 @@ class AdSales
             $sent = $this->mail($c->email, "[STARTTOO 광고] 최종 성과 보고 · {$c->title}", [
                 "{$c->company} {$c->contact_name}님, 광고가 끝났어요.",
                 '', '노출 ' . number_format($r['totImp']) . '회 · 클릭 ' . number_format($r['totClk']) . '회', '',
-                '최종 성과 보고: ' . $this->reportUrl($c), '', '다시 집행을 원하시면 ' . self::link('advertiser.inquiry') . ' 에서 문의해주세요.',
+                '최종 성과 보고: ' . $this->reportUrl($c) . ' (광고주 계정으로 로그인하면 열려요)', '', '다시 집행을 원하시면 ' . self::link('advertiser.inquiry') . ' 에서 문의해주세요.',
             ]);
             if ($sent) $this->db()->table('starttoo_ad_contracts')->where('id', $id)->update(['final_mailed_at' => now()]);
         }
@@ -505,7 +505,8 @@ class AdSales
             "{$c->company} {$c->contact_name}님, 광고 노출이 시작됐어요.",
             '', '일별 노출 · 클릭은 아래 링크에서 볼 수 있어요(매일 전날까지 반영).', '',
             $this->reportUrl($c), '',
-            '이 링크는 로그인 없이 열리는 전용 링크예요. 링크가 퍼졌다면 담당자에게 다시 발급을 요청해주세요.',
+            '광고주 계정(' . $c->email . ')으로 로그인하면 열려요. 아직 비밀번호가 없으면 링크에서 만들 수 있어요.',
+            '이 링크는 이 메일을 받은 분을 확인하는 전용 링크예요. 다른 사람에게 공유하지 말아주세요.',
         ]);
         if ($sent) $this->db()->table('starttoo_ad_contracts')->where('id', $c->id)->update(['report_mailed_at' => now()]);
         return $sent;

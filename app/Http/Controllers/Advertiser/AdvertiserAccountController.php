@@ -87,23 +87,34 @@ class AdvertiserAccountController extends Controller
         return redirect()->route('advertiser.account')->with('status', '비밀번호를 설정했어요.');
     }
 
-    /**
-     * 견적서 비밀 링크에서 계정 만들기(메일 링크의 비밀 토큰 = 받은 이메일 주인 인증).
-     * 비밀번호가 아직 없을 때 한 번만 — 그 뒤로 이 링크는 로그인해야 열린다. 만들면 로그인되고 견적서로 간다.
-     */
+    /** 견적서 비밀 링크에서 계정 만들기 */
     public function createFromQuote(Request $request, string $token): RedirectResponse
     {
-        $c = app(AdSales::class)->byQuoteToken($token);
+        return $this->createFromLink($request, app(AdSales::class)->byQuoteToken($token), 'advertiser.quote', $token);
+    }
+
+    /** 성과 보고 비밀 링크에서 계정 만들기 */
+    public function createFromReport(Request $request, string $token): RedirectResponse
+    {
+        return $this->createFromLink($request, app(AdSales::class)->byReportToken($token), 'advertiser.report', $token);
+    }
+
+    /**
+     * 비밀 링크(메일 링크의 비밀 토큰 = 받은 이메일 주인 인증)에서 계정 만들기.
+     * 비밀번호가 아직 없을 때 한 번만 — 그 뒤로 링크는 로그인해야 열린다. 만들면 로그인되고 그 링크 화면으로 간다.
+     */
+    private function createFromLink(Request $request, ?object $c, string $route, string $token): RedirectResponse
+    {
         abort_unless($c && $c->advertiser_id, 404);
         $owner = $this->accounts()->find((int) $c->advertiser_id);
         abort_unless($owner, 404);
         if ($owner->password) {
-            return redirect()->route('advertiser.quote', $token);
+            return redirect()->route($route, $token);
         }
         $data = $request->validate(['password' => $this->passwordRule()], self::PASSWORD_MESSAGES);
         $this->accounts()->setPassword((int) $owner->id, $data['password']);
         AdvertiserWeb::login($request, $this->accounts()->find((int) $owner->id));
-        return redirect()->route('advertiser.quote', $token)
+        return redirect()->route($route, $token)
             ->with('status', '광고주 계정을 만들었어요. 앞으로 ' . $owner->email . ' 로 로그인해 견적 · 성과 보고를 볼 수 있어요.');
     }
 
