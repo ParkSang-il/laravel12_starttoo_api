@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Advertiser;
 
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\AdvertiserWeb;
 use App\Services\Starttoo\AdSales;
+use App\Services\Starttoo\Advertisers;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -113,6 +115,10 @@ class AdvertiserWebController extends Controller
     {
         $c = $this->sales()->byQuoteToken($token);
         abort_unless($c, 404);
+        // 받은 이메일을 확인하기 전에는 견적 내용 없이 이메일 입력만 보여 준다
+        if (!AdvertiserWeb::quoteUnlocked($request, $c)) {
+            return view('advertiser.quote-verify', ['token' => $token]);
+        }
         $owner = $c->advertiser_id ? app(\App\Services\Starttoo\Advertisers::class)->find((int) $c->advertiser_id) : null;
         $me = $request->attributes->get('advertiser');
         return view('advertiser.quote', [
@@ -133,10 +139,35 @@ class AdvertiserWebController extends Controller
         ]);
     }
 
-    public function acceptQuote(string $token): RedirectResponse
+    /** 견적서 열기: 견적을 받은 이메일(또는 문의할 때 적은 이메일)과 같으면 이 세션에서 견적서를 연다 */
+    public function verifyQuote(Request $request, string $token): RedirectResponse
     {
         $c = $this->sales()->byQuoteToken($token);
         abort_unless($c, 404);
+        $data = $request->validate(['email' => ['required', 'string', 'max:150']], ['email.required' => '이메일을 입력해주세요.']);
+        $typed = Advertisers::normEmail($data['email']);
+        $inq = $c->inquiry_id ? $this->sales()->inquiry((int) $c->inquiry_id) : null;
+        $allowed = array_filter([Advertisers::normEmail((string) $c->email), $inq ? Advertisers::normEmail((string) $inq->email) : null]);
+        $ok = false;
+        foreach ($allowed as $email) $ok = hash_equals($email, $typed) || $ok;
+        if (!$ok) {
+            return back()->withErrors(['email' => '견적서를 받은 이메일과 달라요. 광고 문의 때 적은 이메일을 입력해주세요.'])->withInput();
+        }
+        AdvertiserWeb::unlockQuote($request, $c);
+        return redirect()->route('advertiser.quote', $token);
+    }
+
+    /** 이메일을 확인하지 않은 세션의 수락 · 수정 요청 · 입금 알림은 이메일 입력 화면으로 돌려보낸다 */
+    private function locked(Request $request, object $c, string $token): ?RedirectResponse
+    {
+        return AdvertiserWeb::quoteUnlocked($request, $c) ? null : redirect()->route('advertiser.quote', $token);
+    }
+
+    public function acceptQuote(Request $request, string $token): RedirectResponse
+    {
+        $c = $this->sales()->byQuoteToken($token);
+        abort_unless($c, 404);
+        if ($r = $this->locked($request, $c, $token)) return $r;
         try {
             $this->sales()->accept($c);
         } catch (\InvalidArgumentException $e) {
@@ -149,6 +180,7 @@ class AdvertiserWebController extends Controller
     {
         $c = $this->sales()->byQuoteToken($token);
         abort_unless($c, 404);
+        if ($r = $this->locked($request, $c, $token)) return $r;
         $data = $request->validate(['change_request' => ['required', 'string', 'max:2000']], [
             'change_request.required' => '바꾸고 싶은 내용을 적어주세요.',
         ]);
@@ -164,6 +196,7 @@ class AdvertiserWebController extends Controller
     {
         $c = $this->sales()->byQuoteToken($token);
         abort_unless($c, 404);
+        if ($r = $this->locked($request, $c, $token)) return $r;
         $data = $request->validate([
             'biz_no' => ['required', 'regex:/^\d{3}-?\d{2}-?\d{5}$/'],
             'biz_name' => ['required', 'string', 'max:120'],

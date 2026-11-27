@@ -18,7 +18,7 @@
         <span style="font-size: 13px; color: #66625B">{{ $owner->company }} · {{ $owner->email }}</span>
       </div>
       <input type="hidden" name="email" value="{{ $owner->email }}" autocomplete="username">
-      <label style="display: flex; flex-direction: column; gap: 6px"><span class="adv-label">새 비밀번호 <span style="font-weight: 400; color: #77736B">· 영문 · 숫자 섞어 8자 이상</span></span><input type="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password" class="adv-input @error('password') is-invalid @enderror">@error('password')<span class="adv-err">{{ $message }}</span>@enderror</label>
+      <label style="display: flex; flex-direction: column; gap: 6px"><span class="adv-label">새 비밀번호 <span style="font-weight: 400; color: #77736B">· 영문 · 숫자 포함 8자 이상</span></span><input type="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password" class="adv-input @error('password') is-invalid @enderror">@error('password')<span class="adv-err">{{ $message }}</span>@enderror</label>
       <label style="display: flex; flex-direction: column; gap: 6px"><span class="adv-label">새 비밀번호 확인</span><input type="password" name="password_confirmation" required maxlength="72" autocomplete="new-password" class="adv-input"></label>
       <button type="submit" class="adv-btn">설정하고 로그인</button>
     </form>

@@ -143,7 +143,7 @@
         <span style="font-size: 13px; color: #66625B; line-height: 1.6">비밀번호만 정하면 <b style="color: #141413">{{ $ownerEmail }}</b> 로 로그인해 견적 · 계약 · 성과 보고를 한 곳에서 볼 수 있어요.</span>
         @error('account')<span class="adv-err">{{ $message }}</span>@enderror
         <input type="hidden" name="email" value="{{ $ownerEmail }}" autocomplete="username">
-        <label style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; color: #3A3731">비밀번호 <span style="color: #77736B">· 영문 · 숫자 섞어 8자 이상</span></span><input type="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password" class="adv-input" style="height: 44px">@error('password')<span class="adv-err">{{ $message }}</span>@enderror</label>
+        <label style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; color: #3A3731">비밀번호 <span style="color: #77736B">· 영문 · 숫자 포함 8자 이상</span></span><input type="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password" class="adv-input" style="height: 44px">@error('password')<span class="adv-err">{{ $message }}</span>@enderror</label>
         <label style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; color: #3A3731">비밀번호 확인</span><input type="password" name="password_confirmation" required maxlength="72" autocomplete="new-password" class="adv-input" style="height: 44px"></label>
         <button type="submit" class="adv-btn is-ghost is-sm">계정 만들기</button>
       </form>
@@ -157,7 +157,7 @@
     @endif
 
     <div style="display: flex; gap: 8px"><button type="button" onclick="window.print()" class="adv-btn is-ghost is-sm" style="flex: 1">PDF 저장 · 인쇄</button></div>
-    <span style="font-size: 12px; color: #77736B; line-height: 1.6">이 견적서는 로그인 없이 열리는 전용 링크예요. 담당자 외에는 공유하지 말아주세요. 문의: {{ $c->manager ? $c->manager.' · ' : '' }}{{ config('advertiser.ops_email') }}</span>
+    <span style="font-size: 12px; color: #77736B; line-height: 1.6">이 견적서는 받은 이메일을 확인한 뒤에만 열리는 전용 링크예요. 담당자 외에는 공유하지 말아주세요. 문의: {{ $c->manager ? $c->manager.' · ' : '' }}{{ config('advertiser.ops_email') }}</span>
   </aside>
 </main>
 @endsection

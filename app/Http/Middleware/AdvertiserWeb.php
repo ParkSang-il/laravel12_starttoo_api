@@ -49,6 +49,24 @@ class AdvertiserWeb
         return $response;
     }
 
+    /**
+     * 견적서(비밀 링크)를 볼 수 있는지: 받은 이메일을 이 세션에서 확인했거나, 견적 주인 광고주로 로그인했을 때.
+     * 링크가 다른 사람에게 넘어가도 이메일을 모르면 금액 · 계좌를 볼 수 없다.
+     */
+    public static function quoteUnlocked(Request $request, object $contract): bool
+    {
+        $me = $request->attributes->get('advertiser');
+        if ($me && $contract->advertiser_id && (int) $me->id === (int) $contract->advertiser_id) return true;
+        return in_array((int) $contract->id, array_map('intval', (array) $request->session()->get('advertiser_quotes', [])), true);
+    }
+
+    public static function unlockQuote(Request $request, object $contract): void
+    {
+        $ids = array_map('intval', (array) $request->session()->get('advertiser_quotes', []));
+        if (!in_array((int) $contract->id, $ids, true)) $ids[] = (int) $contract->id;
+        $request->session()->put('advertiser_quotes', array_slice($ids, -20));
+    }
+
     /** 로그인 세션 시작(세션 고정 공격 방지로 새 세션 id) */
     public static function login(Request $request, object $advertiser): void
     {

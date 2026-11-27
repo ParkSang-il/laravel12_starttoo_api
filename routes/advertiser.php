@@ -32,6 +32,8 @@ Route::prefix('ads')->name('advertiser.')->group(function () use ($token) {
     // AW-02 견적서 · AW-03 성과 보고 · 비밀번호 설정 — 비밀 토큰
     Route::middleware(['advertiser.web:private', 'throttle:60,1,ad-token'])->group(function () use ($token) {
         Route::get('q/{token}', [W::class, 'quote'])->where('token', $token)->name('quote');
+        // 견적서 열기 전 받은 이메일 확인(틀린 이메일 반복 입력 제한)
+        Route::post('q/{token}/verify', [W::class, 'verifyQuote'])->where('token', $token)->middleware('throttle:10,10,ad-quote-verify')->name('quote.verify');
         Route::post('q/{token}/accept', [W::class, 'acceptQuote'])->where('token', $token)->name('quote.accept');
         Route::post('q/{token}/change', [W::class, 'requestChange'])->where('token', $token)->name('quote.change');
         Route::post('q/{token}/paid', [W::class, 'reportPayment'])->where('token', $token)->name('quote.paid');

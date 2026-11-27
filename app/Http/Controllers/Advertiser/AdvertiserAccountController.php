@@ -21,7 +21,7 @@ class AdvertiserAccountController extends Controller
 
     private function passwordRule(): array
     {
-        // 영문 · 숫자를 섞어 8자 이상(한국어 문구를 직접 주려고 Password 규칙 대신 정규식)
+        // 영문 · 숫자를 포함 8자 이상(한국어 문구를 직접 주려고 Password 규칙 대신 정규식)
         return ['required', 'string', 'confirmed', 'min:8', 'max:72', 'regex:/^(?=.*[A-Za-z])(?=.*\d).+$/'];
     }
 
@@ -30,7 +30,7 @@ class AdvertiserAccountController extends Controller
         'password.confirmed' => '비밀번호 확인이 달라요.',
         'password.min' => '비밀번호는 8자 이상으로 만들어주세요.',
         'password.max' => '비밀번호는 72자까지 쓸 수 있어요.',
-        'password.regex' => '비밀번호는 영문과 숫자를 섞어 만들어주세요.',
+        'password.regex' => '비밀번호는 영문과 숫자를 포함하여 만들어주세요.',
     ];
 
     public function login(Request $request): View|RedirectResponse
@@ -92,6 +92,8 @@ class AdvertiserAccountController extends Controller
     {
         $c = app(AdSales::class)->byQuoteToken($token);
         abort_unless($c && $c->advertiser_id, 404);
+        // 견적서에서 받은 이메일을 확인한 세션만 계정을 만들 수 있다
+        if (!AdvertiserWeb::quoteUnlocked($request, $c)) return redirect()->route('advertiser.quote', $token);
         $owner = $this->accounts()->find((int) $c->advertiser_id);
         abort_unless($owner, 404);
         if ($owner->password) {

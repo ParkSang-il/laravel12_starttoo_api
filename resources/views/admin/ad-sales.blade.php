@@ -227,7 +227,7 @@
 
               {{-- 링크 --}}
               <div style="display: flex; flex-direction: column; gap: 8px">
-                <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">견적서 링크 <span style="font-weight: 400; color: #66625B">· 로그인 없이 열려요</span></span>
+                <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">견적서 링크 <span style="font-weight: 400; color: #66625B">· 받은 이메일을 입력하면 열려요</span></span>
                   <input readonly value="{{ $quoteUrl }}" onclick="this.select()" style="{{ $input }}; font-family: ui-monospace, Menlo, monospace; font-size: 12px"></label>
                 @if ($reportUrl)
                   <label style="display: flex; flex-direction: column; gap: 4px"><span style="{{ $label }}">성과 보고 링크 @if ($c->report_mailed_at)<span style="font-weight: 400; color: #66625B">· {{ $c->report_mailed_at->format('m.d H:i') }} 메일 보냄</span>@endif</span>
