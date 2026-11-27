@@ -201,7 +201,12 @@ class Videos
     /** 게시된 작품 · 게시물의 영상 재생 정보(없으면 null). 피드 카드 · 상세가 쓴다 */
     public function forTarget(string $type, string $id): ?array
     {
-        $row = $this->db()->table('starttoo_videos')->where('published_type', $type)->where('published_id', $id)->where('status', 'published')->first();
+        try {
+            $row = $this->db()->table('starttoo_videos')->where('published_type', $type)->where('published_id', $id)->where('status', 'published')->first();
+        } catch (\Illuminate\Database\QueryException $e) {
+            // 마이그레이션(000062) 전에 코드가 먼저 배포돼도 피드가 깨지지 않게
+            return null;
+        }
         return $row ? $this->playback($row) : null;
     }
 
@@ -302,8 +307,12 @@ class Videos
 
     public function isVideoTarget(string $type, string $targetId): bool
     {
-        return in_array($type, ['artwork', 'post'], true)
-            && $this->db()->table('starttoo_videos')->where('published_type', $type)->where('published_id', $targetId)->exists();
+        if (!in_array($type, ['artwork', 'post'], true)) return false;
+        try {
+            return $this->db()->table('starttoo_videos')->where('published_type', $type)->where('published_id', $targetId)->exists();
+        } catch (\Illuminate\Database\QueryException $e) {
+            return false;
+        }
     }
 
     public function event(string $videoId, string $status, ?array $detail): void
