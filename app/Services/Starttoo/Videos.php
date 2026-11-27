@@ -128,8 +128,25 @@ class Videos
         foreach ((array) ($in['parts'] ?? []) as $p) {
             $n = (int) ($p['n'] ?? 0);
             $etag = trim((string) ($p['etag'] ?? ''));
-            if ($n < 1 || $n > (int) $row->parts_total || $etag === '') $this->fail(422, 'INVALID_VIDEO_PARTS', '올린 조각 정보를 확인해주세요.');
+            if ($n < 1 || $n > (int) $row->parts_total || $etag === '') continue;
             $parts[$n] = ['PartNumber' => $n, 'ETag' => '"' . trim($etag, '"') . '"'];
+        }
+        // 앱이 백그라운드에 있는 동안 일부 조각의 ETag 를 받지 못했을 수 있다 → 저장소에 올라간 조각 목록으로 채운다
+        if (count($parts) !== (int) $row->parts_total) {
+            try {
+                $marker = null;
+                do {
+                    $res = $this->client()->listParts(['Bucket' => $this->bucket(), 'Key' => $row->source_key,
+                        'UploadId' => $row->upload_id] + ($marker ? ['PartNumberMarker' => $marker] : []));
+                    foreach ($res['Parts'] ?? [] as $p) {
+                        $n = (int) $p['PartNumber'];
+                        if ($n >= 1 && $n <= (int) $row->parts_total) $parts[$n] = ['PartNumber' => $n, 'ETag' => $p['ETag']];
+                    }
+                    $marker = !empty($res['IsTruncated']) ? ($res['NextPartNumberMarker'] ?? null) : null;
+                } while ($marker);
+            } catch (\Throwable $e) {
+                report($e);
+            }
         }
         if (count($parts) !== (int) $row->parts_total) $this->fail(422, 'INVALID_VIDEO_PARTS', '아직 다 올리지 못했어요.');
         ksort($parts);
