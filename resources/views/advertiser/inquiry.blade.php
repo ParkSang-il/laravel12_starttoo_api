@@ -135,7 +135,14 @@
       </label>
       @error('privacy')<span class="adv-err" style="margin-top: -18px">{{ $message }}</span>@enderror
 
-      <button type="submit" class="adv-btn is-accent" style="height: 56px">문의 보내기</button>
+      {{-- 보내는 중: 파일 올리는 진행률(영상은 오래 걸려 화면이 멈춘 것처럼 보이지 않게) --}}
+      <div data-upload-status role="status" aria-live="polite" style="border-radius: 12px; background: #F4F2EE; padding: 14px 16px; display: none; flex-direction: column; gap: 8px">
+        <span data-upload-text style="font-size: 14px; font-weight: 700">문의를 보내고 있어요</span>
+        <span style="height: 6px; border-radius: 3px; background: #E4E0D8; overflow: hidden; display: block"><span data-upload-bar style="display: block; height: 100%; width: 0%; background: #FF5A36; transition: width .2s"></span></span>
+        <span style="font-size: 12px; color: #77736B">파일이 크면 몇 분 걸릴 수 있어요. 끝날 때까지 이 페이지를 닫지 말아주세요.</span>
+      </div>
+      <span data-upload-error class="adv-err" role="alert" style="display: none"></span>
+      <button type="submit" data-submit class="adv-btn is-accent" style="height: 56px">문의 보내기</button>
     </form>
     @endif
   </section>
@@ -147,5 +154,84 @@
       out.textContent = Array.from(inp.files).map(function (f) { return f.name + ' · ' + (f.size / 1048576).toFixed(1) + 'MB'; }).join(', ');
     });
   });
+
+  // 보내기: 파일이 있으면 진행률을 보여 주며 올리고, 받은 결과 페이지(완료 · 오류)를 그대로 띄운다
+  (function () {
+    var form = document.querySelector('form[aria-label="광고 문의"]');
+    if (!form) return;
+    var btn = form.querySelector('[data-submit]');
+    var box = form.querySelector('[data-upload-status]');
+    var text = form.querySelector('[data-upload-text]');
+    var bar = form.querySelector('[data-upload-bar]');
+    var err = form.querySelector('[data-upload-error]');
+    var busy = false;
+    // 파일당 20MB(서버 규칙) · 한 번에 보내는 합계는 서버 요청 한도(64MB) 안쪽
+    var MAX = 20 * 1024 * 1024, MAX_FILES = 5, MAX_TOTAL = 60 * 1024 * 1024;
+
+    function fail(msg) {
+      busy = false;
+      box.style.display = 'none';
+      btn.disabled = false;
+      btn.textContent = '문의 보내기';
+      err.textContent = msg;
+      err.style.display = 'block';
+    }
+    function leaveGuard(e) { if (busy) { e.preventDefault(); e.returnValue = ''; } }
+    window.addEventListener('beforeunload', leaveGuard);
+
+    form.addEventListener('submit', function (e) {
+      if (busy) { e.preventDefault(); return; }
+      err.style.display = 'none';
+      var input = form.querySelector('input[type=file]');
+      var files = input ? Array.from(input.files) : [];
+      // 올리기 전에 미리 확인(큰 파일을 다 올린 뒤에 거절되지 않게)
+      if (files.length > MAX_FILES) { e.preventDefault(); fail('파일은 ' + MAX_FILES + '개까지 올릴 수 있어요.'); return; }
+      var big = files.filter(function (f) { return f.size > MAX; })[0];
+      if (big) { e.preventDefault(); fail(big.name + ' 파일이 20MB를 넘어요. 줄이거나 나중에 메일로 보내주세요.'); return; }
+      var sum = files.reduce(function (s, f) { return s + f.size; }, 0);
+      if (sum > MAX_TOTAL) { e.preventDefault(); fail('한 번에 60MB까지 보낼 수 있어요(지금 ' + (sum / 1048576).toFixed(1) + 'MB). 일부는 나중에 메일로 보내주세요.'); return; }
+
+      busy = true;
+      btn.disabled = true;
+      btn.textContent = '보내는 중…';
+      box.style.display = 'flex';
+      // 파일이 없으면 보통 보내기(금방 끝난다)
+      if (!files.length || !window.FormData || !window.XMLHttpRequest) { text.textContent = '문의를 보내고 있어요'; return; }
+
+      e.preventDefault();
+      var total = files.reduce(function (s, f) { return s + f.size; }, 0);
+      text.textContent = '파일 올리는 중 0% · ' + (total / 1048576).toFixed(1) + 'MB';
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', form.action);
+      xhr.setRequestHeader('Accept', 'text/html');
+      xhr.upload.addEventListener('progress', function (ev) {
+        if (!ev.lengthComputable) return;
+        var p = Math.min(100, Math.round(ev.loaded / ev.total * 100));
+        bar.style.width = p + '%';
+        text.textContent = p < 100 ? '파일 올리는 중 ' + p + '% · ' + (total / 1048576).toFixed(1) + 'MB' : '올리기 끝 · 문의를 접수하고 있어요';
+      });
+      xhr.addEventListener('load', function () {
+        if (xhr.status >= 200 && xhr.status < 400 && xhr.responseText) {
+          busy = false;
+          // 서버가 보낸 결과(접수 완료 또는 입력 오류) 페이지를 그대로 보여 준다
+          if (xhr.responseURL) history.replaceState(null, '', xhr.responseURL);
+          document.open();
+          document.write(xhr.responseText);
+          document.close();
+          window.scrollTo(0, 0);
+        } else if (xhr.status === 413) {
+          fail('파일이 너무 커서 보내지 못했어요. 줄이거나 나중에 메일로 보내주세요.');
+        } else if (xhr.status === 429) {
+          fail('잠시 후 다시 보내주세요. 짧은 시간에 너무 많이 보냈어요.');
+        } else if (xhr.status === 419) {
+          fail('페이지가 오래 열려 있었어요. 새로고침한 뒤 다시 보내주세요.');
+        } else {
+          fail('보내지 못했어요. 잠시 후 다시 시도해주세요.');
+        }
+      });
+      xhr.addEventListener('error', function () { fail('네트워크가 끊겨 보내지 못했어요. 연결을 확인하고 다시 보내주세요.'); });
+      xhr.send(new FormData(form));
+    });
+  })();
 </script>
 @endsection

@@ -341,8 +341,8 @@ class AdminController extends AdminBaseController
         return $out;
     }
 
-    private const SLOT_LABELS = ['community_top' => '커뮤니티 맨 위', 'feed_inline' => '홈 피드 · 불러온 묶음마다 1개 무작위 위치',
-        'moving_inline' => '무빙 피드 · 무빙 5개마다 전체 화면 1장(세로 이미지 9:16 권장)'];
+    private const SLOT_LABELS = ['community_top' => '커뮤니티 맨 위', 'feed_inline' => '홈 피드 · 게시물 사이',
+        'moving_inline' => '무빙 피드 · 영상 사이 전체 화면(세로 이미지 9:16 권장)'];
 
     public function ads(Request $request): View
     {

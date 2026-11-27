@@ -88,6 +88,9 @@ class AdvertiserWebController extends Controller
             'phone.regex' => '연락처를 숫자로 적어주세요.',
             'landing_url.url' => '연결 주소는 https:// 로 시작하는 주소로 적어주세요.',
             'files.*.max' => '파일은 20MB까지 올릴 수 있어요.',
+            // PHP 가 파일을 받기 전에 거절(서버 업로드 한도 초과 · 전송 중 끊김)
+            'files.*.uploaded' => '파일을 올리지 못했어요. 파일당 20MB 이하인지 확인하고 다시 보내주세요. 큰 영상은 나중에 메일로 보내도 돼요.',
+            'files.*.file' => '파일을 올리지 못했어요. 다시 골라 보내주세요.',
             'files.*.mimes' => 'JPG · PNG · WEBP · GIF · MP4 파일만 올릴 수 있어요.',
             'wish_start.after_or_equal' => '시작일은 오늘 이후로 골라주세요.',
         ], ['company' => '회사명', 'contact_name' => '담당자', 'email' => '이메일', 'phone' => '연락처', 'landing_url' => '연결 주소']);
