@@ -109,10 +109,12 @@
         <label class="adv-drop">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#55524C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4"/></svg>
           <span style="font-size: 14px; font-weight: 700">이미지 · 영상 올리기</span>
-          <span style="font-size: 12px; color: #77736B">세로 1080×1350 권장 · JPG · PNG · MP4 · 파일당 20MB · 5개까지 · 나중에 메일로 보내도 돼요</span>
-          <span data-file-names style="font-size: 13px; color: #3A3731; font-weight: 500"></span>
+          <span style="font-size: 12px; color: #77736B">세로 1080×1350 권장 · JPG · PNG · MP4 · 영상 50MB · 이미지 20MB · 5개까지 · 여러 번 나눠 골라도 돼요 · 나중에 메일로 보내도 돼요</span>
           <input type="file" name="files[]" multiple accept="image/jpeg,image/png,image/webp,image/gif,video/mp4" aria-labelledby="files-label">
         </label>
+        {{-- 고른 파일 목록(고를 때마다 쌓이고, 하나씩 뺄 수 있다) --}}
+        <ul data-file-list style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px"></ul>
+        <span data-file-error class="adv-err" role="alert" style="display: none"></span>
         @error('files.*')<span class="adv-err">{{ $message }}</span>@enderror
       </div>
 
@@ -148,12 +150,59 @@
   </section>
 </main>
 <script>
-  document.querySelectorAll('.adv-drop input[type=file]').forEach(function (inp) {
+  // 광고 소재: 파일을 고를 때마다 목록에 쌓는다(브라우저 기본은 다시 고르면 앞 선택이 바뀐다). 5개까지 · 하나씩 빼기
+  var MAX_FILES = 5, MAX_VIDEO = 50 * 1024 * 1024, MAX_IMAGE = 20 * 1024 * 1024;
+  function isVideo(f) { return /^video\//.test(f.type) || /\.mp4$/i.test(f.name); }
+  function sizeLimit(f) { return isVideo(f) ? MAX_VIDEO : MAX_IMAGE; }
+  (function () {
+    var inp = document.querySelector('.adv-drop input[type=file]');
+    if (!inp) return;
+    var list = document.querySelector('[data-file-list]');
+    var ferr = document.querySelector('[data-file-error]');
+    var picked = [];
+    var canSet = typeof DataTransfer !== 'undefined';
+
+    function sync() {
+      if (canSet) {
+        var dt = new DataTransfer();
+        picked.forEach(function (f) { dt.items.add(f); });
+        inp.files = dt.files;
+      }
+      list.innerHTML = '';
+      picked.forEach(function (f, i) {
+        var li = document.createElement('li');
+        li.style.cssText = 'display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: #F4F2EE; font-size: 13px';
+        var name = document.createElement('span');
+        name.style.cssText = 'flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #3A3731; font-weight: 500';
+        name.textContent = (isVideo(f) ? '영상 · ' : '이미지 · ') + f.name + ' · ' + (f.size / 1048576).toFixed(1) + 'MB';
+        var del = document.createElement('button');
+        del.type = 'button';
+        del.textContent = '빼기';
+        del.setAttribute('aria-label', f.name + ' 빼기');
+        del.style.cssText = 'border: 0; background: none; color: #A3301A; font-size: 13px; font-weight: 700; cursor: pointer; padding: 4px';
+        del.addEventListener('click', function () { picked.splice(i, 1); ferr.style.display = 'none'; sync(); });
+        li.appendChild(name);
+        li.appendChild(del);
+        list.appendChild(li);
+      });
+    }
+
     inp.addEventListener('change', function () {
-      var out = inp.closest('.adv-drop').querySelector('[data-file-names]');
-      out.textContent = Array.from(inp.files).map(function (f) { return f.name + ' · ' + (f.size / 1048576).toFixed(1) + 'MB'; }).join(', ');
+      var added = Array.from(inp.files);
+      // 오래된 브라우저(목록을 고칠 수 없음): 고른 것만 보여 준다
+      if (!canSet) { picked = added; sync(); return; }
+      var msgs = [];
+      added.forEach(function (f) {
+        if (picked.some(function (p) { return p.name === f.name && p.size === f.size; })) return;
+        if (f.size > sizeLimit(f)) { msgs.push(f.name + ': ' + (isVideo(f) ? '영상은 50MB' : '이미지는 20MB') + '까지예요'); return; }
+        if (picked.length >= MAX_FILES) { msgs.push('파일은 ' + MAX_FILES + '개까지 올릴 수 있어요'); return; }
+        picked.push(f);
+      });
+      ferr.textContent = msgs.filter(function (m, i) { return msgs.indexOf(m) === i; }).join(' · ');
+      ferr.style.display = msgs.length ? 'block' : 'none';
+      sync();
     });
-  });
+  })();
 
   // 보내기: 파일이 있으면 진행률을 보여 주며 올리고, 받은 결과 페이지(완료 · 오류)를 그대로 띄운다
   (function () {
@@ -165,8 +214,8 @@
     var bar = form.querySelector('[data-upload-bar]');
     var err = form.querySelector('[data-upload-error]');
     var busy = false;
-    // 파일당 20MB(서버 규칙) · 한 번에 보내는 합계는 서버 요청 한도(64MB) 안쪽
-    var MAX = 20 * 1024 * 1024, MAX_FILES = 5, MAX_TOTAL = 60 * 1024 * 1024;
+    // 영상 50MB · 이미지 20MB(서버 규칙) · 한 번에 보내는 합계는 서버 요청 한도(160MB) 안쪽
+    var MAX_TOTAL = 150 * 1024 * 1024;
 
     function fail(msg) {
       busy = false;
@@ -186,10 +235,10 @@
       var files = input ? Array.from(input.files) : [];
       // 올리기 전에 미리 확인(큰 파일을 다 올린 뒤에 거절되지 않게)
       if (files.length > MAX_FILES) { e.preventDefault(); fail('파일은 ' + MAX_FILES + '개까지 올릴 수 있어요.'); return; }
-      var big = files.filter(function (f) { return f.size > MAX; })[0];
-      if (big) { e.preventDefault(); fail(big.name + ' 파일이 20MB를 넘어요. 줄이거나 나중에 메일로 보내주세요.'); return; }
+      var big = files.filter(function (f) { return f.size > sizeLimit(f); })[0];
+      if (big) { e.preventDefault(); fail(big.name + ' 파일이 ' + (isVideo(big) ? '50MB' : '20MB') + '를 넘어요. 줄이거나 나중에 메일로 보내주세요.'); return; }
       var sum = files.reduce(function (s, f) { return s + f.size; }, 0);
-      if (sum > MAX_TOTAL) { e.preventDefault(); fail('한 번에 60MB까지 보낼 수 있어요(지금 ' + (sum / 1048576).toFixed(1) + 'MB). 일부는 나중에 메일로 보내주세요.'); return; }
+      if (sum > MAX_TOTAL) { e.preventDefault(); fail('한 번에 150MB까지 보낼 수 있어요(지금 ' + (sum / 1048576).toFixed(1) + 'MB). 일부는 나중에 메일로 보내주세요.'); return; }
 
       busy = true;
       btn.disabled = true;

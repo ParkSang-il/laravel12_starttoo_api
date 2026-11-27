@@ -78,7 +78,14 @@ class AdvertiserWebController extends Controller
             'budget' => ['nullable', Rule::in(config('advertiser.budgets'))],
             'landing_url' => ['nullable', 'url:https', 'max:500'],
             'files' => ['nullable', 'array', 'max:5'],
-            'files.*' => ['file', 'max:20480', 'mimes:jpg,jpeg,png,webp,gif,mp4'],
+            // 영상(MP4) 50MB · 이미지 20MB
+            'files.*' => ['file', 'max:51200', 'mimes:jpg,jpeg,png,webp,gif,mp4',
+                function (string $attr, $file, \Closure $fail) {
+                    if ($file instanceof \Illuminate\Http\UploadedFile && $file->getClientOriginalExtension() !== ''
+                        && strtolower($file->getClientOriginalExtension()) !== 'mp4' && $file->getSize() > 20 * 1024 * 1024) {
+                        $fail('이미지는 20MB까지 올릴 수 있어요.');
+                    }
+                }],
             'memo' => ['nullable', 'string', 'max:2000'],
             'privacy' => ['accepted'],
             'website' => ['prohibited'], // 숨은 칸(봇 방지)
@@ -87,9 +94,9 @@ class AdvertiserWebController extends Controller
             'privacy.accepted' => '개인정보 수집 · 이용에 동의해야 문의를 보낼 수 있어요.',
             'phone.regex' => '연락처를 숫자로 적어주세요.',
             'landing_url.url' => '연결 주소는 https:// 로 시작하는 주소로 적어주세요.',
-            'files.*.max' => '파일은 20MB까지 올릴 수 있어요.',
+            'files.*.max' => '영상은 50MB, 이미지는 20MB까지 올릴 수 있어요.',
             // PHP 가 파일을 받기 전에 거절(서버 업로드 한도 초과 · 전송 중 끊김)
-            'files.*.uploaded' => '파일을 올리지 못했어요. 파일당 20MB 이하인지 확인하고 다시 보내주세요. 큰 영상은 나중에 메일로 보내도 돼요.',
+            'files.*.uploaded' => '파일을 올리지 못했어요. 영상 50MB · 이미지 20MB 이하인지 확인하고 다시 보내주세요. 더 큰 영상은 나중에 메일로 보내도 돼요.',
             'files.*.file' => '파일을 올리지 못했어요. 다시 골라 보내주세요.',
             'files.*.mimes' => 'JPG · PNG · WEBP · GIF · MP4 파일만 올릴 수 있어요.',
             'wish_start.after_or_equal' => '시작일은 오늘 이후로 골라주세요.',

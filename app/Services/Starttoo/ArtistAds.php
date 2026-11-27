@@ -28,6 +28,9 @@ class ArtistAds
             'unit' => 'day', 'price' => 8000, 'capacity' => 0, 'keywords' => false, 'badge' => null],
         'region' => ['slot' => 'region_top', 'name' => '지역 탐색 상단', 'desc' => '내 상점 지역을 찾는 사람에게 먼저 보여요',
             'unit' => 'day', 'price' => 6000, 'capacity' => 0, 'keywords' => false, 'badge' => null],
+        // 무빙 피드: 작품 사진 대신 작가가 고른 자기 무빙(video_id)을 영상 사이 한 칸에서 재생한다(운영자 · 외부 광고와 섞여 나온다)
+        'moving' => ['slot' => 'moving_inline', 'name' => '무빙 피드', 'desc' => '무빙(세로 영상)을 넘겨 보는 사이에 내 무빙이 광고로 나와요',
+            'unit' => 'day', 'price' => 12000, 'capacity' => 0, 'keywords' => false, 'badge' => 'NEW', 'video' => true],
         'carousel' => ['slot' => 'popular_carousel', 'name' => '인기 작가 캐러셀', 'desc' => '발견 화면 인기 작가 줄 첫 자리 · 한 달 단위',
             'unit' => 'month', 'price' => 300000, 'capacity' => 3, 'keywords' => false, 'badge' => null],
     ];
@@ -246,6 +249,8 @@ class ArtistAds
                 // 지역별 단가 상품: 어느 지역 기준 단가인지(「서울 마포 기준」)
                 'price_note' => $p['region_prices'] && $regionLabel ? $regionLabel.' 기준' : null,
                 'uses_keywords' => $p['keywords'], 'badge' => $p['badge'], 'sold_out' => $sold,
+                // 무빙 피드: 작품 대신 내 무빙을 고른다
+                'uses_video' => (bool) ($p['video'] ?? false),
                 // 기록이 있을 때만 실제 평균을 보여 준다(예상치를 지어내지 않는다)
                 'reach' => $reach !== null ? '최근 하루 평균 노출 '.number_format($reach) : null,
                 'month_label' => $p['unit'] === 'month' ? $monthStart->month.'월 한 달' : null,
@@ -254,7 +259,7 @@ class ArtistAds
         $reviews = app(Reviews::class)->summary($artist, $artist);
         $consult = $this->db()->table('starttoo_shops')->where('user_id', $artist)->value('consult_status');
         return ['items' => $items, 'days' => self::DAYS, 'max_copy' => self::MAX_COPY, 'max_keywords' => self::MAX_KEYWORDS,
-            'vat_rate' => self::VAT_RATE, 'works' => $this->works($artist), 'keywords' => $this->keywordOptions($artist),
+            'vat_rate' => self::VAT_RATE, 'works' => $this->works($artist), 'videos' => $this->videos($artist), 'keywords' => $this->keywordOptions($artist),
             // 6-08 미리보기 카드: 광고에 나갈 상점 이름 · 평점 · 상담 가능
             'shop' => ['name' => $this->advertiser($artist), 'rating' => $reviews['average'], 'review_count' => $reviews['total'],
                 'avatar_url' => app(MediaUrls::class)->url($this->db()->table('starttoo_users')->where('id', $artist)->value('avatar_path'), 300),
@@ -273,6 +278,45 @@ class ArtistAds
             $out[] = ['id' => $r->id, 'title' => $r->title, 'image_url' => app(MediaUrls::class)->url($images[$r->id], 300)];
         }
         return $out;
+    }
+
+    /**
+     * 광고할 수 있는 내 무빙: 게시됐고 연결된 작품(공개) · 게시물이 숨김이 아닌 영상(최근 40개).
+     * 무빙 피드(Videos::shorts)에 나오는 조건과 같다.
+     */
+    private function videos(int $artist): array
+    {
+        try {
+            $rows = $this->playableVideos()->where('v.user_id', $artist)
+                ->orderByDesc('v.published_at')->limit(40)->get(['v.id', 'v.poster_path', 'v.duration_ms', 'v.published_type']);
+        } catch (\Illuminate\Database\QueryException $e) {
+            return []; // 무빙 마이그레이션(000062) 전
+        }
+        return $rows->map(fn ($r) => ['id' => $r->id, 'poster_url' => app(MediaUrls::class)->url($r->poster_path, 300),
+            'duration_ms' => (int) $r->duration_ms, 'kind' => $r->published_type])->values()->all();
+    }
+
+    /** 지금 무빙 피드에 나올 수 있는 영상(게시됨 · 작품 공개 또는 게시물 숨김 아님) */
+    private function playableVideos()
+    {
+        return $this->db()->table('starttoo_videos as v')->where('v.status', 'published')->whereNotNull('v.hls_path')
+            ->where(fn ($w) => $w
+                ->where(fn ($a) => $a->where('v.published_type', 'artwork')->whereExists(fn ($e) => $e->selectRaw('1')->from('starttoo_artworks as a')
+                    ->whereColumn('a.id', 'v.published_id')->where('a.visibility', 'public')->where('a.moderation_hidden', false)))
+                ->orWhere(fn ($p) => $p->where('v.published_type', 'post')->whereExists(fn ($e) => $e->selectRaw('1')->from('starttoo_posts as p')
+                    ->whereColumn('p.id', 'v.published_id')->where('p.moderation_hidden', false))));
+    }
+
+    /** 영상 id → 포스터 경로(지금 재생할 수 있는 영상만) */
+    private function posters(array $ids): array
+    {
+        $ids = array_values(array_filter(array_unique($ids)));
+        if (!$ids) return [];
+        try {
+            return $this->playableVideos()->whereIn('v.id', $ids)->pluck('v.poster_path', 'v.id')->all();
+        } catch (\Illuminate\Database\QueryException $e) {
+            return [];
+        }
     }
 
     private function firstImages(array $ids): array
@@ -326,16 +370,18 @@ class ArtistAds
         $week = $rows->isEmpty() ? null : $this->db()->table('starttoo_ad_daily')->whereIn('ad_id', $rows->pluck('id'))->where('day', '>=', $since)
             ->selectRaw('COALESCE(SUM(impressions),0) as imp, COALESCE(SUM(clicks),0) as clk, COALESCE(SUM(leads),0) as leads')->first();
         $images = $this->firstImages($rows->pluck('artwork_id')->filter()->unique()->all());
+        $posters = $this->posters($rows->pluck('video_id')->all());
         return [
-            'items' => $rows->map(fn ($ad) => $this->card($ad, $images))->values()->all(),
+            'items' => $rows->map(fn ($ad) => $this->card($ad, $images, $posters))->values()->all(),
             'week' => ['impressions' => (int) ($week->imp ?? 0), 'clicks' => (int) ($week->clk ?? 0), 'leads' => (int) ($week->leads ?? 0)],
             // 2-14 대시보드 광고 칸 주홍 점
             'running' => $rows->contains(fn ($ad) => $this->state($ad) === 'running'),
         ];
     }
 
-    private function card(object $ad, array $images): array
+    private function card(object $ad, array $images, array $posters = []): array
     {
+        $video = $ad->video_id ?? null;
         $p = self::PRODUCTS[$ad->product] ?? null;
         $state = $this->state($ad);
         $keywords = json_decode((string) $ad->keywords, true) ?: [];
@@ -347,9 +393,13 @@ class ArtistAds
             'id' => (int) $ad->id, 'product' => $ad->product, 'product_name' => $p['name'] ?? $ad->product, 'state' => $state,
             'title' => $ad->title, 'keywords' => $keywords, 'days' => $ad->days === null ? null : (int) $ad->days,
             'amount' => $ad->amount === null ? null : (int) $ad->amount, 'unit' => $p['unit'] ?? 'day', 'artwork_id' => $ad->artwork_id,
-            // 직접 올린 사진이 있으면 그 사진, 아니면 작품 첫 사진
-            'image_url' => $ad->image_path ? app(MediaUrls::class)->url($ad->image_path, 300)
-                : ($ad->artwork_id && isset($images[$ad->artwork_id]) ? app(MediaUrls::class)->url($images[$ad->artwork_id], 300) : null),
+            // 무빙 광고는 그 무빙의 포스터, 직접 올린 사진이 있으면 그 사진, 아니면 작품 첫 사진
+            'image_url' => $video ? (isset($posters[$video]) ? app(MediaUrls::class)->url($posters[$video], 300) : null)
+                : ($ad->image_path ? app(MediaUrls::class)->url($ad->image_path, 300)
+                : ($ad->artwork_id && isset($images[$ad->artwork_id]) ? app(MediaUrls::class)->url($images[$ad->artwork_id], 300) : null)),
+            'video_id' => $video,
+            // 고른 무빙이 지워졌거나 비공개라 지금 노출되지 않는 광고(무빙을 다시 골라야 한다)
+            'video_missing' => $video !== null && !isset($posters[$video]),
             'own_image' => (bool) $ad->image_path,
             'starts_at' => $start?->toIso8601String(), 'ends_at' => $end?->toIso8601String(),
             'requested_at' => $ad->requested_at ? Carbon::parse($ad->requested_at)->toIso8601String() : null,
@@ -377,7 +427,7 @@ class ArtistAds
             $days[] = ['day' => $d, 'impressions' => (int) ($r->impressions ?? 0), 'clicks' => (int) ($r->clicks ?? 0), 'leads' => (int) ($r->leads ?? 0)];
         }
         $p = $this->config()[$ad->product] ?? null;
-        return ['ad' => $this->card($ad, $images), 'daily' => $days, 'extend_days' => ($p['unit'] ?? '') === 'day' ? self::EXTEND_DAYS : [],
+        return ['ad' => $this->card($ad, $images, $this->posters([$ad->video_id ?? null])), 'daily' => $days, 'extend_days' => ($p['unit'] ?? '') === 'day' ? self::EXTEND_DAYS : [],
             'unit_price' => $p ? $this->price($ad->product, $artist) : 0];
     }
 
@@ -447,7 +497,7 @@ class ArtistAds
                 'title' => $values['title'], 'artwork_id' => $values['artwork_id'], 'keywords' => json_decode((string) $values['keywords'], true),
                 // 바꿀 사진(직접 올린 사진 경로, 작품으로 바꾸면 null)
                 'image_path' => $values['image_path'],
-            ], JSON_UNESCAPED_UNICODE), 'pending_reject_reason' => null, 'requested_at' => now(), 'updated_at' => now()] + $agreed);
+            ] + (array_key_exists('video_id', $values) ? ['video_id' => $values['video_id']] : []), JSON_UNESCAPED_UNICODE), 'pending_reject_reason' => null, 'requested_at' => now(), 'updated_at' => now()] + $agreed);
         }
         return $this->detail($artist, $id);
     }
@@ -462,6 +512,15 @@ class ArtistAds
      */
     private function content(int $artist, array $p, array $input, ?object $current = null): array
     {
+        if ($p['video'] ?? false) {
+            // 무빙 피드: 사진 대신 내 무빙 하나(video_id). 문구 규칙은 다른 상품과 같다
+            $copy = $this->copy($input);
+            $video = is_string($input['video_id'] ?? null) && \Illuminate\Support\Str::isUuid($input['video_id']) ? $input['video_id'] : null;
+            if (!$video || !$this->playableVideos()->where('v.id', $video)->where('v.user_id', $artist)->exists()) {
+                $this->fail(422, 'INVALID_AD', '공개된 내 무빙을 골라주세요.');
+            }
+            return ['title' => $copy, 'keywords' => null, 'artwork_id' => null, 'image_path' => null, 'video_id' => $video];
+        }
         $media = is_string($input['image_media_id'] ?? null) && $input['image_media_id'] !== '' ? $input['image_media_id'] : null;
         $keep = !$media && ($input['keep_image'] ?? false) === true && $current && $current->image_path;
         $own = $media !== null || $keep;
@@ -473,11 +532,7 @@ class ArtistAds
             'keywords.*' => ['string', 'min:1', 'max:20'],
         ]);
         if ($v->fails()) $this->fail(422, 'INVALID_AD', '광고 내용을 확인해주세요.');
-        // 두 줄 문구: 줄바꿈은 한 번까지. 줄마다 앞뒤 공백 · 빈 줄은 정리한다
-        $lines = array_values(array_filter(array_map('trim', preg_split('/\R/u', (string) $input['copy']) ?: []), fn ($l) => $l !== ''));
-        if (count($lines) > 2) $this->fail(422, 'INVALID_AD', '문구는 두 줄까지 쓸 수 있어요.');
-        $copy = implode("\n", $lines);
-        if ($copy === '') $this->fail(422, 'INVALID_AD', '두 줄 문구를 적어주세요.');
+        $copy = $this->copy($input);
         $keywords = array_values(array_unique(array_filter(array_map(fn ($k) => trim((string) $k), $input['keywords'] ?? []))));
         if ($p['keywords'] && !$keywords) $this->fail(422, 'INVALID_AD', '검색 키워드를 1개 이상 골라주세요.');
         $base = ['title' => $copy, 'keywords' => $p['keywords'] ? json_encode($keywords, JSON_UNESCAPED_UNICODE) : null];
@@ -490,6 +545,18 @@ class ArtistAds
             ->where('visibility', 'public')->where('moderation_hidden', false)->exists();
         if (!$art || !$this->firstImages([$input['artwork_id']])) $this->fail(422, 'INVALID_AD', '공개된 내 작품을 골라주세요.');
         return $base + ['artwork_id' => $input['artwork_id'], 'image_path' => null];
+    }
+
+    /** 두 줄 문구: 줄바꿈은 한 번까지. 줄마다 앞뒤 공백 · 빈 줄은 정리한다 */
+    private function copy(array $input): string
+    {
+        $raw = $input['copy'] ?? null;
+        if (!is_string($raw) || mb_strlen($raw) > self::MAX_COPY) $this->fail(422, 'INVALID_AD', '광고 내용을 확인해주세요.');
+        $lines = array_values(array_filter(array_map('trim', preg_split('/\R/u', $raw) ?: []), fn ($l) => $l !== ''));
+        if (count($lines) > 2) $this->fail(422, 'INVALID_AD', '문구는 두 줄까지 쓸 수 있어요.');
+        $copy = implode("\n", $lines);
+        if ($copy === '') $this->fail(422, 'INVALID_AD', '두 줄 문구를 적어주세요.');
+        return $copy;
     }
 
     private function days(mixed $days): int
@@ -660,6 +727,7 @@ class ArtistAds
                 // 사진을 바꾼 요청이면 작품 · 직접 올린 사진을 함께 바꾼다(예전 요청은 작품만)
                 'artwork_id' => array_key_exists('image_path', $p) ? ($p['artwork_id'] ?? null) : ($p['artwork_id'] ?? $ad->artwork_id),
                 'image_path' => array_key_exists('image_path', $p) ? $p['image_path'] : $ad->image_path,
+            ] + (array_key_exists('video_id', $p) ? ['video_id' => $p['video_id']] : []) + [
                 'keywords' => array_key_exists('keywords', $p) && $p['keywords'] !== null ? json_encode($p['keywords'], JSON_UNESCAPED_UNICODE) : $ad->keywords,
                 'pending' => null, 'pending_reject_reason' => null, 'reviewed_at' => now(), 'reviewed_by' => $adminId, 'updated_at' => now()]
                 // 게시 중지된 광고를 고친 요청이면 승인과 함께 다시 노출한다
@@ -724,9 +792,29 @@ class ArtistAds
             $artworks[] = $pending['artwork_id'] ?? $r->artwork_id;
         }
         $images = $this->firstImages(array_values(array_filter(array_unique($artworks))));
-        return $rows->map(function ($r) use ($images) {
+        $videoOf = fn ($r) => (($p = $r->pending ? json_decode((string) $r->pending, true) : null) && array_key_exists('video_id', $p))
+            ? $p['video_id'] : ($r->video_id ?? null);
+        $posters = $this->posters($rows->map($videoOf)->all());
+        return $rows->map(function ($r) use ($images, $posters, $videoOf) {
             $pending = $r->pending ? json_decode((string) $r->pending, true) : null;
             $art = $pending['artwork_id'] ?? $r->artwork_id;
+            // 무빙 피드 광고: 심사할 무빙의 포스터(누르면 무빙 재생 주소)
+            if ($video = $videoOf($r)) {
+                $p = self::PRODUCTS[$r->product] ?? ['name' => $r->product, 'unit' => 'day'];
+                $row = $this->db()->table('starttoo_videos')->where('id', $video)->first();
+                return [
+                    'id' => (int) $r->id, 'artist_id' => (int) $r->artist_id, 'artist' => $r->nickname, 'advertiser' => $r->advertiser,
+                    'product' => $p['name'], 'kind' => $pending ? 'change' : 'new',
+                    'suspended' => ($r->suspended_at ?? null) !== null, 'suspend_reason' => $r->suspend_reason ?? null,
+                    'title' => $pending['title'] ?? $r->title, 'before' => $pending ? $r->title : null, 'keywords' => [],
+                    'period' => ((int) $r->days).'일', 'amount' => (int) $r->amount, 'artwork_id' => null,
+                    'image' => isset($posters[$video]) ? app(MediaUrls::class)->url($posters[$video], 600) : null,
+                    'own_image' => false,
+                    'video_url' => $row && $row->hls_path ? app(Videos::class)->cdn($row->hls_path) : null,
+                    'video_missing' => !isset($posters[$video]),
+                    'requested_at' => $r->requested_at,
+                ];
+            }
             // 심사할 사진: 변경 요청의 사진 → 지금 광고에 올린 사진 → 작품 첫 사진
             $own = $pending && array_key_exists('image_path', $pending) ? $pending['image_path'] : $r->image_path;
             if ($own) $art = null;
@@ -783,10 +871,17 @@ class ArtistAds
     public function serveExtras(object $ad, ?int $viewer): array
     {
         $image = $ad->artwork_id ? ($this->firstImages([$ad->artwork_id])[$ad->artwork_id] ?? null) : null;
+        // 무빙 피드 광고: 지금도 재생할 수 있는 무빙이면 포스터 · 재생 정보. 아니면 이미지가 없어 노출하지 않는다
+        $video = null;
+        if ($ad->video_id ?? null) {
+            $row = $this->posters([$ad->video_id]) ? app(Videos::class)->row($ad->video_id) : null;
+            $video = $row ? app(Videos::class)->playback($row) : null;
+            $image = $video ? $row->poster_path : null;
+        }
         $shop = $this->db()->table('starttoo_shops')->where('user_id', $ad->artist_id)->first(['consult_status', 'region']);
         $reviews = app(Reviews::class)->summary((int) $ad->artist_id, $viewer);
         return ['image_path' => $image, 'artwork_id' => $ad->artwork_id, 'rating' => $reviews['average'], 'review_count' => $reviews['total'],
-            'consult_open' => ($shop->consult_status ?? null) === 'open', 'region' => $shop->region ?? null];
+            'consult_open' => ($shop->consult_status ?? null) === 'open', 'region' => $shop->region ?? null, 'video' => $video];
     }
 
     private function fail(int $status, string $code, string $message): never
