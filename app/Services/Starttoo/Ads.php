@@ -18,11 +18,14 @@ class Ads
      * community_top 커뮤니티 피드 맨 위 카드 · feed_inline 홈(추천) 피드 게시물 사이(사진 카드라 이미지 필수)
      * 작가 광고 전용(ArtistAds): search_top 검색 결과 상단(키워드) · region_top 지역 탐색 상단(상점 지역)
      * · popular_carousel 발견 인기 작가 줄 첫 자리
+     * moving_inline 무빙 피드(VID-06) 무빙 사이 전체 화면 한 칸(세로 이미지 필수)
      */
-    public const SLOTS = ['community_top', 'feed_inline', 'search_top', 'region_top', 'popular_carousel'];
-    /** 운영자가 직접 등록 · 구글 광고를 쓰는 자리 */
-    public const ADMIN_SLOTS = ['community_top', 'feed_inline'];
-    private const IMAGE_REQUIRED = ['feed_inline', 'search_top', 'region_top'];
+    public const SLOTS = ['community_top', 'feed_inline', 'search_top', 'region_top', 'popular_carousel', 'moving_inline'];
+    /** 운영자가 직접 등록하는 자리(운영 콘솔 · 외부 광고 계약) */
+    public const ADMIN_SLOTS = ['community_top', 'feed_inline', 'moving_inline'];
+    /** 구글 광고(AdMob)를 섞는 자리 — 무빙 전체 화면용 네이티브 화면은 아직 없어 자체 광고만 쓴다 */
+    public const ADMOB_SLOTS = ['community_top', 'feed_inline'];
+    private const IMAGE_REQUIRED = ['feed_inline', 'search_top', 'region_top', 'moving_inline'];
 
     private function db() { return app(ProjectDatabase::class)->database(); }
 
@@ -36,7 +39,7 @@ class Ads
     {
         $saved = app(Settings::class)->json('admob') ?? [];
         $slots = [];
-        foreach (self::ADMIN_SLOTS as $slot) {
+        foreach (self::ADMOB_SLOTS as $slot) {
             $s = $saved['slots'][$slot] ?? [];
             $slots[$slot] = ['on' => (bool) ($s['on'] ?? false), 'android' => (string) ($s['android'] ?? ''), 'ios' => (string) ($s['ios'] ?? ''),
                 // 구글 광고 비율(%): 자체 광고가 있어도 이 비율만큼은 구글 광고를 보여 준다(자체 광고가 없으면 항상 구글)
@@ -62,7 +65,7 @@ class Ads
      */
     public function pick(string $slot, int $viewer, ?string $platform = null, array $context = []): array
     {
-        $unit = in_array($slot, self::ADMIN_SLOTS, true) ? $this->admobUnit($slot, $platform) : null;
+        $unit = in_array($slot, self::ADMOB_SLOTS, true) ? $this->admobUnit($slot, $platform) : null;
         // 구글 광고 차례면 자체 광고를 고르지 않는다(자체 광고 노출 수도 세지 않는다)
         if ($unit !== null && random_int(1, 100) <= $this->admobConfig()['slots'][$slot]['share']) {
             return ['ad' => null, 'admob_unit' => $unit];

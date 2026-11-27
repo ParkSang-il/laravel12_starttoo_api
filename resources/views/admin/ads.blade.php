@@ -282,7 +282,7 @@
       <form method="POST" action="{{ $admobAction }}" style="display: flex; flex-direction: column; gap: 14px">
         @csrf
         <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700"><input type="hidden" name="enabled" value="0"><input type="checkbox" name="enabled" value="1" @checked(old('enabled', $admobOn)) @disabled(! $canManage) style="width: 18px; height: 18px; margin: 0; accent-color: #141413">구글 광고 사용</label>
-        @foreach ($slotOptions as $slot => $label)
+        @foreach ($admobSlotOptions ?? $slotOptions as $slot => $label)
           @php $s = $admob['slots'][$slot] ?? ['on' => false, 'android' => '', 'ios' => '', 'share' => 50]; @endphp
           <div style="padding: 14px; border-radius: 12px; background: #F7F5F1; display: flex; flex-direction: column; gap: 10px">
             <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700"><input type="hidden" name="slots[{{ $slot }}][on]" value="0"><input type="checkbox" name="slots[{{ $slot }}][on]" value="1" @checked(old("slots.$slot.on", $s['on'])) @disabled(! $canManage) style="width: 18px; height: 18px; margin: 0; accent-color: #141413">{{ $label }}</label>

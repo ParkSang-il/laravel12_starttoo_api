@@ -341,7 +341,8 @@ class AdminController extends AdminBaseController
         return $out;
     }
 
-    private const SLOT_LABELS = ['community_top' => '커뮤니티 맨 위', 'feed_inline' => '홈 피드 · 불러온 묶음마다 1개 무작위 위치'];
+    private const SLOT_LABELS = ['community_top' => '커뮤니티 맨 위', 'feed_inline' => '홈 피드 · 불러온 묶음마다 1개 무작위 위치',
+        'moving_inline' => '무빙 피드 · 무빙 5개마다 전체 화면 1장(세로 이미지 9:16 권장)'];
 
     public function ads(Request $request): View
     {
@@ -448,6 +449,8 @@ class AdminController extends AdminBaseController
             'newHref' => Ui::url(['sel' => 'new']),
             'closeHref' => Ui::url(['sel' => null]),
             'slotOptions' => self::SLOT_LABELS,
+            // 구글 광고 설정은 AdMob 을 섞는 자리만(무빙 피드는 자체 광고만)
+            'admobSlotOptions' => array_intersect_key(self::SLOT_LABELS, array_flip(Ads::ADMOB_SLOTS)),
             'form' => $edit ? [
                 'title' => "광고 #{$edit->id} 수정", 'action' => route('admin.ads.update', $edit->id), 'save' => '저장',
                 'slot' => $edit->slot, 'advertiser' => $edit->advertiser, 'text' => $edit->title,
@@ -466,7 +469,7 @@ class AdminController extends AdminBaseController
     {
         $this->need($request, 'ads.manage');
         $rules = ['enabled' => ['nullable', 'boolean']];
-        foreach (Ads::ADMIN_SLOTS as $slot) {
+        foreach (Ads::ADMOB_SLOTS as $slot) {
             $rules["slots.$slot.on"] = ['nullable', 'boolean'];
             $rules["slots.$slot.android"] = ['nullable', 'string', 'regex:' . Ads::ADMOB_UNIT];
             $rules["slots.$slot.ios"] = ['nullable', 'string', 'regex:' . Ads::ADMOB_UNIT];
@@ -476,7 +479,7 @@ class AdminController extends AdminBaseController
             'slots.*.*.regex' => '광고 단위 ID 모양을 확인해주세요(ca-app-pub-숫자16자리/숫자10자리).']);
         $before = app(Ads::class)->admobConfig();
         $value = ['enabled' => (bool) ($data['enabled'] ?? false), 'slots' => []];
-        foreach (Ads::ADMIN_SLOTS as $slot) {
+        foreach (Ads::ADMOB_SLOTS as $slot) {
             $s = $data['slots'][$slot] ?? [];
             $value['slots'][$slot] = ['on' => (bool) ($s['on'] ?? false), 'android' => trim((string) ($s['android'] ?? '')), 'ios' => trim((string) ($s['ios'] ?? '')),
                 'share' => (int) ($s['share'] ?? 50)];
