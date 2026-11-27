@@ -23,7 +23,7 @@ class AdminVideoController extends AdminBaseController
 {
     private const TABS = ['전체' => null, '처리 중' => ['uploading', 'processing'], '완료' => ['ready', 'published'], '실패' => ['upload_failed', 'encode_failed', 'rejected']];
     private const STATE = [
-        'uploading' => ['올리는 중', 'gray'], 'processing' => ['변환 중', 'blue'], 'ready' => ['게시 대기', 'amber'],
+        'uploading' => ['업로드 중', 'gray'], 'processing' => ['변환 중', 'blue'], 'ready' => ['게시 대기', 'amber'],
         'published' => ['게시됨', 'green'], 'upload_failed' => ['업로드 실패', 'red'], 'encode_failed' => ['변환 실패', 'red'], 'rejected' => ['반려', 'red'],
     ];
     private const STAGES = ['probe' => '확인 (ffprobe)', 'transcode' => '변환 (HLS)', 'thumbnail' => '포스터', 'done' => '저장'];
