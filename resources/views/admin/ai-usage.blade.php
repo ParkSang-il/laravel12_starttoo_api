@@ -19,7 +19,11 @@
         </div>
       @endforeach
     </section>
+
+    @include('admin.partials.sections', ['sectionsLabel' => 'AI 사용량 항목'])
+
     <section style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start">
+      @if ($section === '사용량')
       <div style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; flex: 3 1 560px; min-width: 0; overflow: hidden">
         <div style="padding: 18px 20px 6px; display: flex; flex-direction: column; gap: 4px">
           <h2 style="margin: 0; font-size: 17px; font-weight: 700">기능별 사용량 · 오늘</h2>
@@ -61,7 +65,9 @@
           @endif
         </div>
       </div>
-      <div style="flex: 2 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+      @endif
+      @if ($section === '사용 한도 정책')
+      <div style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
         <div style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
           <h2 style="margin: 0; font-size: 17px; font-weight: 700">사용 한도 정책</h2>
           @foreach ($limits as $l)
@@ -93,6 +99,7 @@
           </div>
         </div>
       </div>
+      @endif
     </section>
   </div>
 @endsection

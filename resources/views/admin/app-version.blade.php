@@ -10,6 +10,10 @@
       </div>
       <div style="display: flex; flex-wrap: wrap; gap: 8px"><span style="{{ $liveStyle }}">{{ $liveLabel }}</span></div>
     </header>
+
+    @include('admin.partials.sections', ['sectionsLabel' => '앱 버전 항목'])
+
+    @if ($section === '업데이트 설정')
     <section style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start">
       <div style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; flex: 3 1 600px; min-width: 0; overflow: hidden">
         <div role="tablist" style="padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid #E4E0D8">
@@ -87,19 +91,30 @@
           </div>
           <span style="font-size: 12px; color: #66625B; line-height: 1.5">{{ $pvNote }}</span>
         </div>
-        <div style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; overflow: hidden">
-          <div style="padding: 18px 20px 8px"><h2 style="margin: 0; font-size: 17px; font-weight: 700">변경 이력</h2></div>
-          @forelse ($history as $h)
-            <div style="padding: 10px 20px; border-top: 1px solid #F0EDE7; display: flex; flex-direction: column; gap: 2px">
-              <span style="display: flex; justify-content: space-between; gap: 8px"><span style="font-size: 13px; font-weight: 700">{{ $h['what'] }}</span><span style="font-size: 12px; color: #66625B">{{ $h['t'] }}</span></span>
-              <span style="font-size: 12px; color: #66625B">{{ $h['who'] }} · {{ $h['why'] }}</span>
-            </div>
-          @empty
-            <p style="margin: 0; padding: 14px 20px 18px; border-top: 1px solid #F0EDE7; font-size: 13px; color: #66625B">아직 바꾼 적이 없어요. 지금 값은 서버 .env 기본값이에요.</p>
-          @endforelse
-        </div>
       </div>
     </section>
+    @endif
+
+    @if ($section === '변경 이력')
+    <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; overflow: hidden">
+      <div style="padding: 14px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-bottom: 1px solid #E4E0D8">
+        <h2 style="margin: 0; font-size: 17px; font-weight: 700; flex: 1">변경 이력</h2>
+        <div role="tablist" style="display: flex; flex-wrap: wrap; gap: 6px">
+          @foreach ($platforms as $t)
+            <a href="{{ $t['href'] }}" class="btn-a" role="tab" style="{{ $t['style'] }}">{{ $t['label'] }}</a>
+          @endforeach
+        </div>
+      </div>
+      @forelse ($history as $h)
+        <div style="padding: 10px 20px; border-top: 1px solid #F0EDE7; display: flex; flex-direction: column; gap: 2px">
+          <span style="display: flex; justify-content: space-between; gap: 8px"><span style="font-size: 13px; font-weight: 700">{{ $h['what'] }}</span><span style="font-size: 12px; color: #66625B">{{ $h['t'] }}</span></span>
+          <span style="font-size: 12px; color: #66625B">{{ $h['who'] }} · {{ $h['why'] }}</span>
+        </div>
+      @empty
+        <p style="margin: 0; padding: 14px 20px 18px; font-size: 13px; color: #66625B">아직 바꾼 적이 없어요. 지금 값은 서버 .env 기본값이에요.</p>
+      @endforelse
+    </section>
+    @endif
   </div>
     <form id="f-save" method="POST" action="{{ $saveAction }}" hidden>@csrf</form>
 @endsection

@@ -19,6 +19,8 @@ use Illuminate\View\View;
  */
 class AdminAiController extends AdminBaseController
 {
+    private const USAGE_SECTIONS = ['사용량', '사용 한도 정책'];
+
     private const TYPES = ['blend' => '가상 피팅 합성', 'extract' => '도안 추출', 'fill' => '타투 필러 (3안)', 'coverup' => '커버업 생성'];
     /** 필러는 3안 = AI 3번 */
     private const UNIT_WEIGHT = ['fill' => 3];
@@ -138,7 +140,10 @@ class AdminAiController extends AdminBaseController
                 'on' => true, 'locked' => true, 'track' => Ui::switchTrack(true, true), 'action' => null, 'aria' => '실패 · 안전 차단 시 한도 복구'],
         ];
 
+        // 설정 항목별 탭(?section=)
+        [$section, $sections] = Ui::sections(self::USAGE_SECTIONS);
         return view('admin.ai-usage', [
+            'section' => $section, 'sections' => $sections,
             'today' => now()->format('Y.m.d') . ' (' . ['일', '월', '화', '수', '목', '금', '토'][now()->dayOfWeek] . ') 기준' . ($unit > 0 ? ' · 비용은 추정치' : ''),
             'kpis' => $kpis, 'features' => $features, 'bars' => $bars, 'barsTitle' => $unit > 0 ? '일별 비용' : '일별 AI 요청',
             'limits' => $limits, 'guards' => $guards, 'canManage' => $canManage, 'knob' => Ui::KNOB,

@@ -93,7 +93,10 @@ class AdminAppVersionController extends AdminBaseController
         $enforceAt = $p['enforce_at'] ? Carbon::parse($p['enforce_at']) : null;
         $dirty = $request->session()->has($this->draftKey($pf));
 
+        // 설정 항목별 탭(?section=). iOS · Android(?pf=)는 두 탭 모두에 적용
+        [$section, $sections] = Ui::sections(['업데이트 설정', '변경 이력']);
         return view('admin.app-version', [
+            'section' => $section, 'sections' => $sections,
             'vers' => $vers, 'invalid' => $invalid, 'dist' => $dist, 'opts' => $opts, 'knob' => Ui::KNOB, 'canSave' => $canSave,
             'platforms' => array_map(fn ($l) => ['label' => $l, 'style' => Ui::tab($l === $label), 'href' => Ui::url(['pf' => $l])], array_keys(self::PF)),
             'impact' => $total ? '강제 대상 ' . number_format($forced) . '회 (' . number_format($forced / $total * 100, 1) . '%) · 안내 대상 ' . number_format($soft) . '회' : '아직 기록이 없어요',

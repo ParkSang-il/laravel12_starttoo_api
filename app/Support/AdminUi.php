@@ -44,6 +44,23 @@ final class AdminUi
         ], $labels);
     }
 
+    /**
+     * 화면 안 설정 항목 탭(?section=): [현재 항목, 탭 목록]. 첫 항목이 기본.
+     * 목록 필터(?tab=)와 따로 움직이고, 항목을 바꾸면 선택 · 페이지만 초기화한다. 저장은 back() 이라 같은 항목으로 돌아온다.
+     * $counts: [항목 => 숫자] — 0보다 크면 탭에 숫자 배지(partials.sections)
+     */
+    public static function sections(array $labels, array $counts = [], ?string $force = null): array
+    {
+        $q = request()->query('section');
+        $current = $force ?? (in_array($q, $labels, true) ? $q : $labels[0]);
+        $tabs = array_map(fn (array $t) => $t + [
+            'on' => $t['label'] === $current,
+            'count' => (int) ($counts[$t['label']] ?? 0),
+        ], self::tabs($labels, $current, 'section'));
+
+        return [$current, $tabs];
+    }
+
     /** 현재 URL 에 쿼리만 바꾼 주소 (null 이면 제거) */
     public static function url(array $query): string
     {

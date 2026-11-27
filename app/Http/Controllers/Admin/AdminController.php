@@ -361,15 +361,11 @@ class AdminController extends AdminBaseController
         $fmt = fn ($at) => $at ? Carbon::parse($at)->format('Y-m-d') : '';
         $admob = app(Ads::class)->admobConfig();
         $artistData = AdminArtistAdsController::viewData($canManage);
-        // 설정 항목별 탭(?tab=). 등록 · 수정 패널(?sel=)은 광고 목록 탭에서 연다
-        $tab = in_array($request->query('tab'), self::AD_TABS, true) ? $request->query('tab') : self::AD_TABS[0];
-        if ($request->query('sel') !== null) $tab = self::AD_TABS[0];
-        $tabs = array_map(fn ($t) => $t + [
-            'on' => $t['label'] === $tab,
-            'count' => $t['label'] === '작가 광고 심사' ? count($artistData['queue']) : null,
-        ], Ui::tabs(self::AD_TABS, $tab));
+        // 설정 항목별 탭(?section=). 등록 · 수정 패널(?sel=)은 광고 목록 탭에서 연다
+        [$section, $sections] = Ui::sections(self::AD_TABS, ['작가 광고 심사' => count($artistData['queue'])],
+            $request->query('sel') !== null ? self::AD_TABS[0] : null);
         return view('admin.ads', [
-            'tab' => $tab, 'tabs' => $tabs,
+            'section' => $section, 'sections' => $sections,
             'slots' => $slots,
             // 작가 광고 심사 · 상품 설정(AdminArtistAdsController)
             ...$artistData,
@@ -497,6 +493,8 @@ class AdminController extends AdminBaseController
 
     // ================================================================ M-09 설정 · 감사 로그
 
+    private const SETTINGS_SECTIONS = ['관리자 계정 · 권한', '운영 정책', '감사 로그'];
+
     private const LOG_TABS = ['전체', '접속', '심사', '제재', '콘텐츠', '설정'];
 
     public function settings(Request $request): View
@@ -530,7 +528,10 @@ class AdminController extends AdminBaseController
         $logs = $q->offset(($page - 1) * self::PER_PAGE)->limit(self::PER_PAGE)->get()
             ->map(fn ($l) => $audit->row($l) + ['pill' => Ui::pill($kinds[$l->category] ?? 'gray')])->all();
 
+        // 설정 항목별 탭(?section=). 감사 로그 분류는 그 탭 안의 ?tab=
+        [$section, $sections] = Ui::sections(self::SETTINGS_SECTIONS);
         return view('admin.settings', [
+            'section' => $section, 'sections' => $sections,
             'admins' => $admins, 'policies' => $policies, 'logs' => $logs,
             'tabs' => Ui::tabs(self::LOG_TABS, $tab),
             'pages' => Ui::pages($page, false, (int) ceil($total / self::PER_PAGE)),

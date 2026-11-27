@@ -8,12 +8,15 @@
         <h1 style="margin: 0; font-size: 26px; font-weight: 900; letter-spacing: -0.5px">운영 설정 · 감사 로그</h1>
         <p style="margin: 0; font-size: 14px; color: #66625B">관리자 권한과 운영 정책을 설정하고, 모든 관리자 작업 이력을 확인해요.</p>
       </div>
-      @if ($canExport)
+      @if ($canExport && $section === '감사 로그')
         <div style="display: flex; flex-wrap: wrap; gap: 8px"><a href="{{ route('admin.settings.logs.export', request()->only('tab')) }}" class="btn-a" style="height: 40px; padding: 0 16px; border-radius: 10px; font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #D9D4CB; background: #FFFFFF; color: #141413">로그 내보내기</a></div>
       @endif
     </header>
-    <section style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start">
-      <div style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; flex: 1 1 420px; min-width: 0; overflow: hidden">
+
+    @include('admin.partials.sections', ['sectionsLabel' => '운영 설정 항목'])
+
+    @if ($section === '관리자 계정 · 권한')
+      <div style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; min-width: 0; overflow: hidden">
         <div style="padding: 18px 20px; display: flex; justify-content: space-between; align-items: center">
           <h2 style="margin: 0; font-size: 17px; font-weight: 700">관리자 계정 · 권한</h2>
         </div>
@@ -28,8 +31,10 @@
           </table>
         </div>
       </div>
+    @endif
 
-      <div style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; flex: 1 1 360px; min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 4px">
+    @if ($section === '운영 정책')
+      <div style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 4px">
         <h2 style="margin: 0 0 10px; font-size: 17px; font-weight: 700">운영 정책</h2>
         @foreach ($policies as $p)
           <div style="min-height: 60px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #F0EDE7">
@@ -42,8 +47,9 @@
           </div>
         @endforeach
       </div>
-    </section>
+    @endif
 
+    @if ($section === '감사 로그')
     <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; overflow: hidden">
       <div style="padding: 16px 20px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; border-bottom: 1px solid #E4E0D8">
         <h2 style="margin: 0; font-size: 17px; font-weight: 700">감사 로그</h2>
@@ -74,5 +80,6 @@
       </div>
       <div style="padding: 14px 20px; display: flex; justify-content: flex-end">@include('admin.partials.pages')</div>
     </section>
+    @endif
   </div>
 @endsection

@@ -18,6 +18,10 @@
         </div>
       @endforeach
     </section>
+
+    @include('admin.partials.sections', ['sectionsLabel' => '알림 · 푸시 항목'])
+
+    @if ($section === '새 푸시 보내기')
     <section style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start">
       <div style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; flex: 3 1 520px; min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 16px">
         <h2 style="margin: 0; font-size: 17px; font-weight: 700">새 푸시 보내기</h2>
@@ -64,17 +68,23 @@
             <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="display: flex; justify-content: space-between; font-size: 12px; color: #55524C"><b style="color: #141413">STARTTOO</b><span>지금</span></span><span data-preview-out="title" data-prefix="{{ $info ? '' : '(광고) ' }}" style="font-size: 13px; font-weight: 700">{{ $info ? '' : '(광고) ' }}{{ $title !== '' ? $title : '제목' }}</span><span data-preview-out="body" data-prefix="{{ $info ? '' : 'STARTTOO ' }}" style="font-size: 12px; color: #3A3731; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical">{{ $info ? '' : 'STARTTOO ' }}{{ $body !== '' ? $body : '내용' }}</span></span>
           </div>
         </div>
-        <div style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; overflow: hidden">
-          <div style="padding: 18px 20px 8px"><h2 style="margin: 0; font-size: 17px; font-weight: 700">서비스 자동 알림</h2><span style="font-size: 13px; color: #66625B">앱을 보고 있으면 소켓으로 바로, 나가 있으면 푸시로 보내요. 끄고 켜기는 서버 설정(.env STARTTOO_PUSH_ENABLED)이에요.</span></div>
-          @foreach ($autos as $a)
-            <div style="min-height: 54px; padding: 8px 20px; border-top: 1px solid #F0EDE7; display: flex; align-items: center; gap: 10px">
-              <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 700">{{ $a['label'] }}</span><span style="font-size: 12px; color: #66625B">{{ $a['ch'] }}</span></span>
-              <span role="switch" aria-checked="{{ $a['on'] ? 'true' : 'false' }}" aria-disabled="true" aria-label="{{ $a['aria'] }}" style="{{ $a['track'] }}"><span style="{{ $knob }}"></span></span>
-            </div>
-          @endforeach
-        </div>
       </div>
     </section>
+    @endif
+
+    @if ($section === '서비스 자동 알림')
+    <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; overflow: hidden">
+      <div style="padding: 18px 20px 8px"><h2 style="margin: 0; font-size: 17px; font-weight: 700">서비스 자동 알림</h2><span style="font-size: 13px; color: #66625B">앱을 보고 있으면 소켓으로 바로, 나가 있으면 푸시로 보내요. 끄고 켜기는 서버 설정(.env STARTTOO_PUSH_ENABLED)이에요.</span></div>
+      @foreach ($autos as $a)
+        <div style="min-height: 54px; padding: 8px 20px; border-top: 1px solid #F0EDE7; display: flex; align-items: center; gap: 10px">
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 700">{{ $a['label'] }}</span><span style="font-size: 12px; color: #66625B">{{ $a['ch'] }}</span></span>
+          <span role="switch" aria-checked="{{ $a['on'] ? 'true' : 'false' }}" aria-disabled="true" aria-label="{{ $a['aria'] }}" style="{{ $a['track'] }}"><span style="{{ $knob }}"></span></span>
+        </div>
+      @endforeach
+    </section>
+    @endif
+
+    @if ($section === '발송 내역')
     <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; overflow: hidden">
       <div style="padding: 18px 20px 6px"><h2 style="margin: 0; font-size: 17px; font-weight: 700">발송 내역</h2></div>
         <div style="overflow-x: auto">
@@ -109,6 +119,7 @@
           </table>
         </div>
     </section>
+    @endif
   </div>
     <form id="f-send" method="POST" action="{{ $sendAction }}" hidden>@csrf<input type="hidden" name="type" value="{{ $type }}"><input type="hidden" name="target" value="{{ $target }}"></form>
 @endsection

@@ -332,6 +332,8 @@ class AdminCommsController extends AdminBaseController
 
     private const TYPES = ['광고성' => 'marketing', '정보성' => 'info'];
 
+    private const PUSH_SECTIONS = ['새 푸시 보내기', '발송 내역', '서비스 자동 알림'];
+
     /**
      * 대상별 받을 회원(5분 캐시). 광고성: 앱 알림을 켠 회원 중 광고 수신 동의자 · 정보성: 앱 알림을 켠 모든 정상 회원.
      * ids: 지정 대상(아티스트)일 때 보낼 회원 번호, 전체면 null
@@ -418,7 +420,10 @@ class AdminCommsController extends AdminBaseController
         ]);
 
         $tooMany = $reach['ids'] !== null && count($reach['ids']) > self::MAX_USERS;
+        // 설정 항목별 탭(?section=). 유형 · 받는 사람 칩은 쿼리를 유지해서 탭이 그대로다
+        [$section, $sections] = Ui::sections(self::PUSH_SECTIONS);
         return view('admin.push', [
+            'section' => $section, 'sections' => $sections,
             'kpis' => $kpis, 'history' => $history, 'autos' => $autos, 'knob' => Ui::KNOB,
             'type' => $type, 'info' => $info, 'target' => $target, 'landing' => $landing,
             'types' => Ui::chips(array_keys(self::TYPES), $type, 'type'),
