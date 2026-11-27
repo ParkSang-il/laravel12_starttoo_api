@@ -167,7 +167,9 @@ class Shops
                 'body_part' => isset($r->body_part) ? ($parts[$r->body_part] ?? null) : null,
                 'size_text' => $r->size_text ?? null,
                 'like_count' => (int) ($likes[$r->id] ?? 0),
-                'image_url' => $first ? app(MediaUrls::class)->url($first->path, 500) : null];
+                'image_url' => $first ? app(MediaUrls::class)->url($first->path, 500) : null,
+                // 무빙: 그리드 카드에 ▶ · 길이, 누르면 작가 무빙 이어 보기(VID-06B)
+                'video' => app(Videos::class)->forTarget('artwork', (string) $r->id)];
         })->values()->all();
     }
 

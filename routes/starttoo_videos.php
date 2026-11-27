@@ -12,6 +12,8 @@ Route::prefix('v1/projects/starttoo/videos')->middleware([StarttooDatabase::clas
     Route::post('{video}/complete', [C::class, 'complete'])->whereUuid('video')->middleware('throttle:30,1,video-complete');
     // 게시 대기함 · 미니바(pending=1) · 한 개
     Route::get('mine', [C::class, 'mine'])->middleware('throttle:120,1,video-mine');
+    // VID-06 무빙 피드 · VID-06B 작가 무빙 이어 보기(?artist=&from=)
+    Route::get('feed', [C::class, 'feed'])->middleware('throttle:120,1,video-feed');
     Route::get('{video}', [C::class, 'show'])->whereUuid('video')->middleware('throttle:240,1,video-show');
     Route::post('{video}', [C::class, 'update'])->whereUuid('video');
     Route::post('{video}/publish', [C::class, 'publish'])->whereUuid('video');

@@ -259,6 +259,111 @@ class Videos
         return ['ok' => true];
     }
 
+    // ── 무빙 피드(VID-06 홈 무빙 탭 · VID-06B 작가 무빙 이어 보기) ─────────
+
+    /**
+     * 게시된 무빙을 최신순으로 10개씩. 작품 · 게시물 피드와 같은 공개 범위 · 차단 · 숨김 규칙(카드는 기존 피드 조회로 만든다).
+     * in: cursor · artist(회원 번호, 그 작가 무빙만) · from(영상 id, 작가 이어 보기 시작 위치)
+     * 응답: items(디자인 한 칸 모양) · next_cursor · (artist 일 때) total · index(from 의 순서)
+     */
+    public function shorts(?int $viewer, array $in): array
+    {
+        $db = $this->db();
+        $artist = isset($in['artist']) && ctype_digit((string) $in['artist']) ? (int) $in['artist'] : null;
+        $base = fn () => $db->table('starttoo_videos as v')->join('starttoo_users as u', 'u.id', '=', 'v.user_id')
+            ->where('v.status', 'published')->where('u.status', 'active')->where('u.moderation_hidden', false)
+            ->when($artist, fn ($q) => $q->where('v.user_id', $artist))
+            ->where(fn ($w) => $w
+                ->where(fn ($a) => $a->where('v.published_type', 'artwork')->whereExists(fn ($e) => $e->selectRaw('1')->from('starttoo_artworks as a')
+                    ->whereColumn('a.id', 'v.published_id')->where('a.visibility', 'public')->where('a.moderation_hidden', false)))
+                ->orWhere(fn ($p) => $p->where('v.published_type', 'post')->whereExists(fn ($e) => $e->selectRaw('1')->from('starttoo_posts as p')
+                    ->whereColumn('p.id', 'v.published_id')->where('p.moderation_hidden', false))));
+        $q = $base();
+        app(Blocks::class)->filter($q, 'v.user_id', $viewer);
+
+        $cursor = null;
+        if (!empty($in['cursor']) && is_string($in['cursor'])) {
+            $c = json_decode((string) base64_decode(strtr($in['cursor'], '-_', '+/'), true), true);
+            if (is_array($c) && isset($c['at'], $c['id']) && Str::isUuid((string) $c['id'])) $cursor = $c;
+        }
+        $index = null;
+        // 작가 이어 보기: 누른 무빙부터 시작(그보다 최신은 index 로 센다)
+        if (!$cursor && $artist && !empty($in['from']) && Str::isUuid((string) $in['from'])) {
+            $from = $db->table('starttoo_videos')->where('id', $in['from'])->where('user_id', $artist)->first(['id', 'published_at']);
+            if ($from) {
+                $cursor = ['at' => (string) $from->published_at, 'id' => $from->id, 'inclusive' => true];
+                $index = (clone $q)->where(fn ($w) => $w->where('v.published_at', '>', $from->published_at)
+                    ->orWhere(fn ($s) => $s->where('v.published_at', $from->published_at)->where('v.id', '>', $from->id)))->count();
+            }
+        }
+        if ($cursor) {
+            $op = !empty($cursor['inclusive']) ? '<=' : '<';
+            $q->where(fn ($w) => $w->where('v.published_at', '<', $cursor['at'])
+                ->orWhere(fn ($s) => $s->where('v.published_at', $cursor['at'])->where('v.id', $op, $cursor['id'])));
+        }
+        $rows = $q->orderByDesc('v.published_at')->orderByDesc('v.id')->limit(11)
+            ->get(['v.*', 'u.nickname', 'u.avatar_path', 'u.interest_region']);
+        $more = $rows->count() > 10;
+        $rows = $rows->take(10)->values();
+
+        // 카드: 기존 작품 · 게시물 피드 조회를 그대로 써서 좋아요 · 저장 · 팔로우 · 댓글 수를 맞춘다
+        $artworkIds = $rows->where('published_type', 'artwork')->pluck('published_id')->all();
+        $postIds = $rows->where('published_type', 'post')->pluck('published_id')->all();
+        $cards = [];
+        if ($artworkIds) foreach (app(Artworks::class)->feed(['scope' => 'public'], $viewer, null, $artworkIds)['items'] as $c) $cards['artwork:' . $c['id']] = $c;
+        if ($postIds) foreach (app(Posts::class)->feedItems($postIds, $viewer, 'public') as $c) $cards['post:' . $c['id']] = $c;
+        $saves = ($artworkIds ? $db->table('starttoo_artwork_interactions')->whereIn('artwork_id', $artworkIds)->where('kind', 'save')
+                ->groupBy('artwork_id')->selectRaw('artwork_id as id, count(*) as n')->pluck('n', 'id')->all() : [])
+            + ($postIds ? $db->table('starttoo_post_saves')->whereIn('post_id', $postIds)->groupBy('post_id')
+                ->selectRaw('post_id as id, count(*) as n')->pluck('n', 'id')->all() : []);
+        $studios = $db->table('starttoo_shops')->whereIn('user_id', $rows->pluck('user_id')->unique()->all())->pluck('studio_name', 'user_id')->all();
+        $regions = collect(app(Profiles::class)->options()['regions'])->pluck('label', 'id')->all();
+
+        $items = [];
+        foreach ($rows as $r) {
+            $card = $cards[$r->published_type . ':' . $r->published_id] ?? null;
+            if (!$card) continue; // 이 회원에게 숨긴 게시물 등
+            $isArtwork = $r->published_type === 'artwork';
+            $kind = $isArtwork ? ($card['kind'] === 'design' ? 'flash' : 'work') : 'post';
+            $studio = trim((string) ($studios[$r->user_id] ?? ''));
+            $style = $isArtwork ? ($card['styles'][0]['label'] ?? null) : null;
+            $items[] = [
+                'id' => $r->id, 'target_type' => $r->published_type, 'target_id' => $r->published_id,
+                'artist_id' => (int) $r->user_id,
+                'author' => $studio !== '' ? "{$studio} · {$r->nickname}" : (string) $r->nickname,
+                'meta' => implode(' · ', array_filter([$regions[$r->interest_region] ?? null, $style])),
+                'type' => $kind,
+                'caption' => (string) ($isArtwork ? ($card['description'] ?? '') : ($card['content'] ?? '')),
+                'tags' => array_map(fn ($t) => '#' . $t, array_slice((array) ($card['tags'] ?? []), 0, 5)),
+                'hls_url' => $this->cdn($r->hls_path),
+                'poster_url' => app(MediaUrls::class)->url($r->poster_path, 1080),
+                'duration_ms' => (int) $r->duration_ms, 'muted' => (bool) $r->muted,
+                'width' => $r->width === null ? null : (int) $r->width, 'height' => $r->height === null ? null : (int) $r->height,
+                // 연결 버튼: 작품 → 상담 요청, 도안 → 내 몸에 피팅 (대상 = 그 작품 · 도안)
+                'linked_id' => $isArtwork ? $r->published_id : null,
+                'likes' => (int) ($card['interaction']['like_count'] ?? 0),
+                'comments' => (int) ($card['comment_count'] ?? 0),
+                'saves' => (int) ($saves[$r->published_id] ?? 0),
+                'liked' => (bool) ($card['interaction']['liked'] ?? false),
+                'saved' => (bool) ($card['interaction']['saved'] ?? false),
+                'following' => (bool) ($card['author']['following'] ?? false),
+                'is_mine' => $viewer !== null && (int) $r->user_id === $viewer,
+                'avatar_url' => app(MediaUrls::class)->url($r->avatar_path, 300),
+            ];
+        }
+        $last = $rows->last();
+        $next = $more && $last ? rtrim(strtr(base64_encode(json_encode(['at' => (string) $last->published_at, 'id' => $last->id])), '+/', '-_'), '=') : null;
+        $out = ['items' => $items, 'next_cursor' => $next];
+        if ($artist) {
+            $countQ = $base();
+            app(Blocks::class)->filter($countQ, 'v.user_id', $viewer);
+            $out['total'] = $countQ->count();
+            $out['index'] = $index ?? 0;
+            $out['artist_name'] = (string) $db->table('starttoo_users')->where('id', $artist)->value('nickname');
+        }
+        return $out;
+    }
+
     // ── 변환 · 게시(작업이 부른다) ──────────────────────
 
     /** 포스터를 첫 사진으로 작품 · 게시물을 만든다. 실패하면 encode_failed(PUBLISH_FAILED) */

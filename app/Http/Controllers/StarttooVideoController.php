@@ -18,6 +18,9 @@ class StarttooVideoController extends Controller
     public function delete(Request $r, string $video, Videos $v, AuthSessions $s, Artworks $a) { return $this->json($v->delete($this->viewer($r, $s, $a), $video)); }
     public function show(Request $r, string $video, Videos $v, AuthSessions $s, Artworks $a) { return $this->json($v->show($this->viewer($r, $s, $a), $video)); }
     public function mine(Request $r, Videos $v, AuthSessions $s, Artworks $a) { return $this->json($v->listMine($this->viewer($r, $s, $a), $r->query('pending') === '1')); }
+    /** 무빙 피드(홈 무빙 탭 · ?artist=&from= 작가 이어 보기) */
+    public function feed(Request $r, Videos $v, AuthSessions $s, Artworks $a) { return $this->json($v->shorts($this->viewer($r, $s, $a), $r->query())); }
+
     public function views(Request $r, Videos $v, AuthSessions $s, Artworks $a) { return $this->json($v->views($this->viewer($r, $s, $a), $r->all())); }
 
     private function viewer(Request $request, AuthSessions $sessions, Artworks $artworks): int
