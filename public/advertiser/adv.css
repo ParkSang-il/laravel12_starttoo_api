@@ -90,6 +90,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .pp-cta { min-height: 36px; padding: 0 12px; background: #161618; display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; font-weight: 700; }
 .pp-cta svg { width: 14px; height: 14px; fill: none; stroke: var(--ivory); stroke-width: 2; }
 .pp-cap { padding: 7px 12px 10px; font-size: 11.5px; line-height: 1.5; color: var(--ivory); } .pp-cap b { font-weight: 700; }
+/* 실제 앱 광고 카드 캡처 */
+.pp-shot-feed img { display: block; width: 100%; height: auto; }
+.pp-shot-card { border-radius: 16px; } .pp-shot-card img { display: block; width: 100%; aspect-ratio: 1400 / 568; object-fit: cover; border-radius: 16px; }
 .pp-next { flex: 1; margin-top: 8px; background: linear-gradient(160deg, #2A2A2E, #1A1A1C); }
 /* 커뮤니티 맨 위 광고(CommunityAdCard): 16 모서리 · 어둡게 덮은 사진 · 광고 배지 · 두 줄 문구 · 브랜드 */
 .pp-cad { height: 150px; border-radius: 16px; overflow: visible; }
