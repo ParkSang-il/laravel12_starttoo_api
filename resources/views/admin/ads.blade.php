@@ -30,7 +30,7 @@
           <tbody>
             @forelse ($slots as $s)
               <tr style="{{ $s['rowStyle'] }}">
-                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-weight: 700">{{ $s['where'] }}<span style="display: block; font-size: 12px; font-weight: 400; color: #66625B">{{ $s['title'] }}@if ($s['editHref']) · <a href="{{ $s['editHref'] }}" style="color: #1F4F99; font-weight: 700">수정</a>@endif</span></td>
+                <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-weight: 700">{{ $s['where'] }}<span style="display: block; font-size: 12px; font-weight: 400; color: #66625B">{{ $s['title'] }}@if ($s['editHref']) · <a href="{{ $s['editHref'] }}" style="color: #1F4F99; font-weight: 700">수정</a>@endif @if ($s['refundHref']) · <a href="{{ $s['refundHref'] }}" style="color: #1F4F99; font-weight: 700">환불 계산</a>@endif</span></td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap">@if ($s['whoHref'])<a href="{{ $s['whoHref'] }}" target="_blank" rel="noopener" title="상점 공개 페이지" style="color: #141413; text-decoration: underline; text-underline-offset: 3px">{{ $s['who'] }}</a>@else{{ $s['who'] }}@endif</td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; color: #66625B">{{ $s['period'] }}</td>
                 <td style="padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #F0EDE7; white-space: nowrap; font-variant-numeric: tabular-nums">{{ $s['imp'] }}</td>
@@ -140,6 +140,49 @@
           <div style="display: flex; justify-content: flex-end"><button type="submit" style="height: 40px; padding: 0 20px; border-radius: 10px; font-size: 14px; font-weight: 700; border: 0; background: #141413; color: #FFFFFF">저장</button></div>
         @endif
       </form>
+    </section>
+    @endif
+
+    {{-- 환불 계산: 광고 운영 정책 「12. 환불」 · 「13. 서비스 장애 보상」 기준. 계산만 하고 돈은 움직이지 않는다(결제는 Phase 6) --}}
+    @if ($section === '환불 계산')
+    <section style="background: #FFFFFF; border: 1px solid #E4E0D8; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <h2 style="margin: 0; font-size: 17px; font-weight: 700">환불 계산</h2>
+        <span style="font-size: 13px; color: #66625B">광고 운영 정책의 환불 기준으로 금액을 계산해요. 계산만 하고 실제 환불은 하지 않아요(결제 기능은 아직 없어요). 결제 금액은 광고비 + 부가세 10%로 봐요.</span>
+      </div>
+      <form method="GET" action="{{ $refundAction }}" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end">
+        <input type="hidden" name="section" value="환불 계산">
+        <label style="flex: 0 1 140px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">광고 번호</span><input name="ad" required inputmode="numeric" value="{{ $refundIn['ad'] }}" placeholder="예: 12" style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+        <label style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">환불 사유</span>
+          <select name="reason" style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%">
+            @foreach ($refundReasons as $value => $label)<option value="{{ $value }}" @selected($refundIn['reason'] === $value)>{{ $label }}</option>@endforeach
+          </select>
+        </label>
+        <label style="flex: 0 1 210px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">끝내는 시각 <span style="font-weight: 400; color: #66625B">· 비우면 지금</span></span><input type="datetime-local" name="at" value="{{ $refundIn['at'] }}" style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+        <label style="flex: 0 1 150px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; font-weight: 700; color: #3A3731">노출 안 된 일수 <span style="font-weight: 400; color: #66625B">· 장애만</span></span><input type="number" name="outage" min="0" max="{{ $refundMaxOutage }}" value="{{ $refundIn['outage'] }}" style="height: 40px; border-radius: 10px; border: 1px solid #D9D4CB; padding: 0 12px; font-size: 14px; color: #141413; background: #FFFFFF; box-sizing: border-box; width: 100%"></label>
+        <button type="submit" style="height: 40px; padding: 0 20px; border-radius: 10px; font-size: 14px; font-weight: 700; border: 0; background: #141413; color: #FFFFFF">계산</button>
+      </form>
+      @if ($refundError)
+        <div style="padding: 12px 14px; border-radius: 10px; background: #FDE4DE; font-size: 13px; color: #A3301A">{{ $refundError }}</div>
+      @elseif ($refund)
+        <div style="border-radius: 12px; background: #F7F5F1; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+          <dl style="margin: 0; display: grid; grid-template-columns: minmax(96px, max-content) 1fr; gap: 8px 16px; font-size: 13px">
+            @foreach ($refund['rows'] as $row)
+              <dt style="color: #66625B">{{ $row[0] }}</dt><dd style="margin: 0; color: #141413; font-variant-numeric: tabular-nums">{{ $row[1] }}</dd>
+            @endforeach
+          </dl>
+          <div style="height: 1px; background: #E4E0D8"></div>
+          <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px">
+            <span style="font-size: 14px; font-weight: 700">환불 금액 <span style="font-weight: 400; color: #66625B">· 부가세 포함, 원 미만 버림</span></span>
+            <strong style="font-family: Unbounded, 'Arial Black', sans-serif; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums">₩{{ number_format($refund['refund']) }}</strong>
+          </div>
+          <span style="font-size: 13px; color: #3A3731; line-height: 1.5">{{ $refund['rule'] }}</span>
+          @foreach ($refund['notes'] as $n)
+            <span style="font-size: 12px; color: #8A5A00; line-height: 1.5">※ {{ $n }}</span>
+          @endforeach
+        </div>
+      @endif
+      <span style="font-size: 12px; color: #66625B; line-height: 1.5">기준: 하루 단위는 남은 일수 × 하루 금액(끝낸 날은 쓴 날), 한 달 단위는 시작일 {{ \App\Services\Starttoo\ArtistAdRefunds::FULL_CANCEL_DAYS }}일 전까지 전액 · 그 뒤 시작 전 {{ (int) round(\App\Services\Starttoo\ArtistAdRefunds::LATE_CANCEL_RATE * 100) }}% · 노출 중이면 남은 일수 ÷ 그 달 날수. 위반으로 내린 광고는 0원, 멈춘 기간은 환불 대신 기간 연장. 정책 숫자를 바꾸면 서버 ArtistAdRefunds 상수도 같이 바꿔요.</span>
     </section>
     @endif
 

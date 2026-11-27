@@ -306,7 +306,37 @@ class AdminController extends AdminBaseController
 
     // ================================================================ M-08 광고
 
-    private const AD_TABS = ['광고 목록', '작가 광고 심사', '작가 광고 상품', '광고 안내', '광고 운영 정책', '구글 광고', '프리미엄 구독'];
+    private const AD_TABS = ['광고 목록', '작가 광고 심사', '작가 광고 상품', '환불 계산', '광고 안내', '광고 운영 정책', '구글 광고', '프리미엄 구독'];
+
+    /** 환불 계산 탭(GET, 계산만 한다): ?ad=광고번호&reason=&at=&outage= */
+    private function refundCalc(Request $request): array
+    {
+        $reasons = \App\Services\Starttoo\ArtistAdRefunds::REASONS;
+        $in = [
+            'ad' => preg_replace('/\D/', '', (string) $request->query('ad', '')),
+            'reason' => array_key_exists((string) $request->query('reason'), $reasons) ? (string) $request->query('reason') : 'artist',
+            'at' => (string) $request->query('at', ''),
+            'outage' => (string) $request->query('outage', ''),
+        ];
+        $out = ['refundIn' => $in, 'refundReasons' => $reasons, 'refund' => null, 'refundError' => null,
+            'refundAction' => route('admin.ads'), 'refundMaxOutage' => \App\Services\Starttoo\ArtistAdRefunds::MAX_OUTAGE_DAYS];
+        if ($in['ad'] === '') return $out;
+        try {
+            $at = null;
+            if ($in['at'] !== '') {
+                try {
+                    $at = Carbon::parse($in['at']);
+                } catch (\Throwable) {
+                    throw new \InvalidArgumentException('기준 시각을 확인해주세요.');
+                }
+            }
+            $outage = max(0, min(\App\Services\Starttoo\ArtistAdRefunds::MAX_OUTAGE_DAYS, (int) $in['outage']));
+            $out['refund'] = app(\App\Services\Starttoo\ArtistAdRefunds::class)->calculate((int) $in['ad'], $in['reason'], $at, $outage);
+        } catch (\InvalidArgumentException $e) {
+            $out['refundError'] = $e->getMessage();
+        }
+        return $out;
+    }
 
     private const SLOT_LABELS = ['community_top' => '커뮤니티 맨 위', 'feed_inline' => '홈 피드 · 불러온 묶음마다 1개 무작위 위치'];
 
@@ -347,6 +377,8 @@ class AdminController extends AdminBaseController
                 'aria' => "{$where} · {$ad->title} 노출", 'canToggle' => $canSwitch,
                 'action' => route('admin.ads.toggle', $ad->id),
                 'editHref' => $canManage && !$artistAd ? Ui::url(['sel' => $ad->id]) : null,
+                // 작가 광고: 환불 계산 탭으로(그 광고 번호를 넣어 연다)
+                'refundHref' => $artistAd && !in_array($ad->status, ['reviewing', 'rejected'], true) ? route('admin.ads', ['section' => '환불 계산', 'ad' => $ad->id]) : null,
                 'rowStyle' => Ui::rowBg((string) request()->query('sel') === (string) $ad->id),
                 'track' => Ui::switchTrack((bool) $ad->active, !$canSwitch),
                 'knob' => 'width: 20px; height: 20px; border-radius: 50%; background: #FFFFFF; display: block',
@@ -366,6 +398,7 @@ class AdminController extends AdminBaseController
             $request->query('sel') !== null ? self::AD_TABS[0] : null);
         return view('admin.ads', [
             'section' => $section, 'sections' => $sections,
+            ...($section === '환불 계산' ? $this->refundCalc($request) : []),
             'slots' => $slots,
             // 작가 광고 심사 · 상품 설정(AdminArtistAdsController)
             ...$artistData,
