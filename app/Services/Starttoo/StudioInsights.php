@@ -66,12 +66,25 @@ class StudioInsights
                 sum(case when b.status = 'completed' then coalesce(q.total, 0) else 0 end) as revenue,
                 sum(case when b.status = 'completed' then coalesce(q.deposit, 0) else 0 end) as deposit")
             ->groupBy('ym')->get()->keyBy('ym');
+        // 광고비: 승인된 작가 광고(심사 중 · 반려 제외)의 결제 금액(광고비 + 부가세)을 노출 시작한 달에 넣는다.
+        // 결제(Phase 6) 전이라 실제 결제 · 환불 기록이 아니라 광고 신청 금액 기준.
+        $ads = $this->db()->table('starttoo_ads')->where('artist_id', $artist)->whereNotNull('product')
+            ->whereNotIn('status', ['reviewing', 'rejected'])->whereNotNull('starts_at')
+            ->where('starts_at', '>=', $from)->where('starts_at', '<', $from->copy()->addMonths(6))
+            ->get(['amount', 'starts_at']);
+        $adCost = [];
+        foreach ($ads as $ad) {
+            $ym = Carbon::parse($ad->starts_at)->format('Y-m');
+            $amount = (int) $ad->amount;
+            $adCost[$ym] = ($adCost[$ym] ?? 0) + $amount + (int) floor($amount * ArtistAds::VAT_RATE);
+        }
         $months = [];
         for ($i = 0; $i < 6; $i++) {
             $ym = $from->copy()->addMonths($i)->format('Y-m');
             $r = $rows[$ym] ?? null;
             $months[] = ['month' => $ym, 'bookings' => (int) ($r->bookings ?? 0), 'completed' => (int) ($r->completed ?? 0),
-                'cancelled' => (int) ($r->cancelled ?? 0), 'revenue' => (int) ($r->revenue ?? 0), 'deposit' => (int) ($r->deposit ?? 0)];
+                'cancelled' => (int) ($r->cancelled ?? 0), 'revenue' => (int) ($r->revenue ?? 0), 'deposit' => (int) ($r->deposit ?? 0),
+                'ad_cost' => $adCost[$ym] ?? 0];
         }
         $customers = $this->db()->table('starttoo_bookings')->where('artist_id', $artist)->where('status', 'completed')
             ->groupBy('customer_id')->selectRaw('customer_id, count(*) n')->get();
